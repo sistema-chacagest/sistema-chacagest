@@ -6,6 +6,7 @@ from streamlit_option_menu import option_menu
 from fpdf import FPDF
 import gspread
 from google.oauth2.service_account import Credentials
+from streamlit_calendar import calendar  # LIBRERÍA NUEVA PARA EL CALENDARIO
 
 # --- 1. CONFIGURACIÓN Y CONEXIÓN ---
 st.set_page_config(page_title="CHACAGEST - GESTIÓN TOTAL", page_icon="🚛", layout="wide")
@@ -82,15 +83,15 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 5. SIDEBAR (TU MENÚ ORIGINAL) ---
+# --- 5. SIDEBAR ---
 with st.sidebar:
     try: st.image("logo_path.png", use_container_width=True)
     except: pass
     st.markdown("---")
     sel = option_menu(
         menu_title=None,
-        options=["CLIENTES", "CARGA VIAJE", "AJUSTES (NC/ND)", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"],
-        icons=["people", "truck", "file-earmark-minus", "person-vcard", "globe", "file-text"],
+        options=["CLIENTES", "CARGA VIAJE", "CALENDARIO", "AJUSTES (NC/ND)", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"],
+        icons=["people", "truck", "calendar3", "file-earmark-minus", "person-vcard", "globe", "file-text"],
         default_index=0,
         styles={
             "container": {"background-color": "#f0f2f6"},
@@ -151,11 +152,44 @@ elif sel == "CARGA VIAJE":
         imp = st.number_input("Importe Neto $", min_value=0.0)
         cond = st.selectbox("Tipo de Pago", ["Cuenta Corriente", "Contado"])
         if st.form_submit_button("GUARDAR VIAJE"):
-            # Fecha Carga es hoy, Fecha Viaje la seleccionada
             nv = pd.DataFrame([[date.today(), cli, f_v, orig, dest, pat, imp, f"Factura ({cond})", "-"]], columns=st.session_state.viajes.columns)
             st.session_state.viajes = pd.concat([st.session_state.viajes, nv], ignore_index=True)
             guardar_datos("viajes", st.session_state.viajes)
             st.success("Viaje registrado correctamente"); st.rerun()
+
+elif sel == "CALENDARIO":
+    st.header("📅 Agenda de Viajes Disponibles")
+    
+    # Preparar eventos para el calendario
+    eventos = []
+    # Filtrar solo lo que sea 'Factura' para no mezclar con NC/ND en el calendario visual
+    df_eventos = st.session_state.viajes[st.session_state.viajes['Tipo Comp'].str.contains("Factura", na=False)]
+    
+    for i, row in df_eventos.iterrows():
+        eventos.append({
+            "title": f"🚛 {row['Cliente']} | {row['Origen']}-{row['Destino']}",
+            "start": str(row['Fecha Viaje']),
+            "end": str(row['Fecha Viaje']),
+            "resourceId": i,
+            "color": "#5e2d61",
+        })
+
+    cal_options = {
+        "editable": False,
+        "selectable": True,
+        "headerToolbar": {
+            "left": "prev,next today",
+            "center": "title",
+            "right": "dayGridMonth,dayGridWeek,listWeek",
+        },
+        "initialView": "dayGridMonth",
+        "locale": "es",
+    }
+    
+    state = calendar(events=eventos, options=cal_options, key="viajes_cal")
+    
+    if state.get("eventClick"):
+        st.info(f"Detalle del Viaje: {state['eventClick']['event']['title']}")
 
 elif sel == "AJUSTES (NC/ND)":
     st.header("💳 Notas de Crédito / Débito")
@@ -198,4 +232,3 @@ elif sel == "COMPROBANTES":
             guardar_datos("viajes", st.session_state.viajes)
             st.rerun()
         st.divider()
-
