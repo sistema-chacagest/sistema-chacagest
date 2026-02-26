@@ -5,7 +5,7 @@ from datetime import date
 import gspread
 from google.oauth2.service_account import Credentials
 from streamlit_option_menu import option_menu
-from streamlit_calendar import calendar  # <--- Nueva librería
+from streamlit_calendar import calendar
 
 # --- 1. CONFIGURACIÓN Y CONEXIÓN ---
 st.set_page_config(page_title="CHACAGEST - GESTIÓN TOTAL", page_icon="🚛", layout="wide")
@@ -82,7 +82,7 @@ if 'clientes' not in st.session_state or 'viajes' not in st.session_state:
     st.session_state.clientes = c if c is not None else pd.DataFrame(columns=["Razón Social", "CUIT / CUIL / DNI *", "Email", "Teléfono", "Dirección Fiscal", "Localidad", "Provincia", "Condición IVA", "Condición de Venta"])
     st.session_state.viajes = v if v is not None else pd.DataFrame(columns=["Fecha Carga", "Cliente", "Fecha Viaje", "Origen", "Destino", "Patente / Móvil", "Importe", "Tipo Comp", "Nro Comp Asoc"])
 
-# --- 4. DISEÑO ORIGINAL (VIOLETA Y NARANJA) ---
+# --- 4. DISEÑO ORIGINAL Y AJUSTES DE CALENDARIO ---
 st.markdown("""
     <style>
     [data-testid="stSidebarNav"] { display: none; }
@@ -93,6 +93,11 @@ st.markdown("""
         color: white !important; border-radius: 8px !important; border: none !important; font-weight: bold !important;
     }
     .stDataFrame { border: 1px solid #5e2d61; border-radius: 5px; }
+    
+    /* Ajuste de tamaño del calendario */
+    .fc { max-height: 600px !important; overflow: hidden; font-size: 0.85rem; }
+    .fc-toolbar-title { font-size: 1.2rem !important; color: #5e2d61 !important; }
+    .fc-button-primary { background-color: #5e2d61 !important; border: none !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -125,7 +130,42 @@ with st.sidebar:
 
 # --- 6. MÓDULOS ---
 
-if sel == "CLIENTES":
+if sel == "CALENDARIO":
+    st.header("📅 Calendario de Viajes")
+    
+    # Preparar eventos
+    eventos = []
+    for _, row in st.session_state.viajes.iterrows():
+        if row['Origen'] != "AJUSTE" and row['Fecha Viaje'] != "-":
+            color_ev = "#f39c12" if "Contado" in str(row['Tipo Comp']) else "#5e2d61"
+            
+            # Al pasar el mouse, FullCalendar usa el atributo 'title' como tooltip por defecto
+            info_completa = f"Origen: {row['Origen']} | Destino: {row['Destino']} | Patente: {row['Patente / Móvil']} | Importe: ${row['Importe']}"
+            
+            eventos.append({
+                "title": f"🚛 {row['Cliente']}",
+                "start": str(row['Fecha Viaje']),
+                "end": str(row['Fecha Viaje']),
+                "backgroundColor": color_ev,
+                "borderColor": color_ev,
+                "allDay": True,
+                "description": info_completa, # Atributo para info extra
+                "display": "block"
+            })
+
+    cal_options = {
+        "headerToolbar": {"left": "prev,next today", "center": "title", "right": "dayGridMonth,listWeek"},
+        "initialView": "dayGridMonth",
+        "locale": "es",
+        "height": 550, # Altura reducida para que sea más pequeño
+        "eventMouseEnter": "function(info) { info.el.title = info.event.extendedProps.description; }" # Tooltip simple
+    }
+
+    # Renderizar el calendario arriba
+    calendar(events=eventos, options=cal_options, key="calendar_top")
+    st.divider()
+
+elif sel == "CLIENTES":
     st.header("👤 Gestión de Clientes")
     with st.expander("➕ ALTA DE NUEVO CLIENTE", expanded=False):
         with st.form("f_cli", clear_on_submit=True):
@@ -169,54 +209,6 @@ elif sel == "CARGA VIAJE":
             st.session_state.viajes = pd.concat([st.session_state.viajes, nv], ignore_index=True)
             guardar_datos("viajes", st.session_state.viajes)
             st.success("Viaje registrado"); st.rerun()
-
-elif sel == "CALENDARIO":
-    st.header("📅 Calendario de Viajes")
-    
-    # 1. Preparar eventos para el calendario
-    eventos = []
-    for _, row in st.session_state.viajes.iterrows():
-        # Filtramos para mostrar solo viajes reales, no ajustes de NC/ND en la vista principal
-        if row['Origen'] != "AJUSTE" and row['Fecha Viaje'] != "-":
-            # Color distintivo: Naranja si es contado, Violeta si es CTA CTE
-            color_ev = "#f39c12" if "Contado" in str(row['Tipo Comp']) else "#5e2d61"
-            
-            eventos.append({
-                "title": f"🚛 {row['Cliente']} | {row['Destino']}",
-                "start": str(row['Fecha Viaje']),
-                "end": str(row['Fecha Viaje']),
-                "backgroundColor": color_ev,
-                "borderColor": color_ev,
-                "allDay": True,
-                "extendedProps": {
-                    "Origen": row['Origen'],
-                    "Importe": f"${row['Importe']}",
-                    "Patente": row['Patente / Móvil']
-                }
-            })
-
-    # 2. Configuración de FullCalendar
-    cal_options = {
-        "headerToolbar": {
-            "left": "prev,next today",
-            "center": "title",
-            "right": "dayGridMonth,dayGridWeek"
-        },
-        "initialView": "dayGridMonth",
-        "locale": "es",
-    }
-
-    # 3. Mostrar Calendario
-    state = calendar(events=eventos, options=cal_options, key="calendar_viajes")
-
-    # 4. Detalle al clickear (opcional)
-    if state.get("eventClick"):
-        st.write("---")
-        ev = state["eventClick"]["event"]
-        st.success(f"**Detalle del Viaje:** {ev['title']}")
-        c1, c2 = st.columns(2)
-        c1.write(f"**Origen:** {ev['extendedProps']['Origen']}")
-        c2.write(f"**Monto:** {ev['extendedProps']['Importe']}")
 
 elif sel == "AJUSTES (NC/ND)":
     st.header("💳 Notas de Crédito / Débito")
