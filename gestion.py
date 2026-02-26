@@ -82,7 +82,7 @@ if 'clientes' not in st.session_state or 'viajes' not in st.session_state:
     st.session_state.clientes = c if c is not None else pd.DataFrame(columns=["Razón Social", "CUIT / CUIL / DNI *", "Email", "Teléfono", "Dirección Fiscal", "Localidad", "Provincia", "Condición IVA", "Condición de Venta"])
     st.session_state.viajes = v if v is not None else pd.DataFrame(columns=["Fecha Carga", "Cliente", "Fecha Viaje", "Origen", "Destino", "Patente / Móvil", "Importe", "Tipo Comp", "Nro Comp Asoc"])
 
-# --- 4. DISEÑO ORIGINAL (CSS AJUSTADO PARA EL CALENDARIO) ---
+# --- 4. DISEÑO ORIGINAL (CSS REFINADO) ---
 st.markdown("""
     <style>
     [data-testid="stSidebarNav"] { display: none; }
@@ -94,11 +94,60 @@ st.markdown("""
     }
     .stDataFrame { border: 1px solid #5e2d61; border-radius: 5px; }
 
-    /* ESTILOS CALENDARIO PARA QUE COMBINE CON EL MENU */
-    .fc { background-color: white; padding: 10px; border-radius: 10px; border: 2px solid #5e2d61; }
-    .fc-toolbar-title { color: #5e2d61 !important; }
-    .fc-button-primary { background-color: #5e2d61 !important; border: none !important; }
-    .fc-event { background-color: #f39c12 !important; border: none !important; cursor: pointer; }
+    /* --- MEJORAS ESTÉTICAS DEL CALENDARIO --- */
+    /* Fondo y borde general */
+    .fc { 
+        background-color: white !important; 
+        padding: 20px !important; 
+        border-radius: 15px !important; 
+        border: 3px solid #5e2d61 !important;
+        box-shadow: 0px 4px 15px rgba(0,0,0,0.1);
+    }
+    
+    /* Título del mes */
+    .fc-toolbar-title { 
+        color: #5e2d61 !important; 
+        font-weight: bold !important; 
+        text-transform: capitalize !important;
+    }
+    
+    /* Botones de navegación (Hoy, <, >) */
+    .fc-button-primary { 
+        background-color: #5e2d61 !important; 
+        border: none !important; 
+        color: white !important;
+        font-weight: bold !important;
+        text-transform: capitalize !important;
+    }
+    .fc-button-primary:hover { 
+        background-color: #f39c12 !important; 
+    }
+    .fc-button-active {
+        background-color: #f39c12 !important;
+    }
+
+    /* Eventos (Viajes) */
+    .fc-event { 
+        background-color: #f39c12 !important; 
+        border: none !important; 
+        color: white !important; 
+        font-weight: bold !important;
+        padding: 3px 6px !important;
+        border-radius: 4px !important;
+        cursor: pointer !important;
+    }
+    
+    /* Días del calendario y números */
+    .fc-col-header-cell-cushion, .fc-daygrid-day-number { 
+        color: #5e2d61 !important; 
+        text-decoration: none !important;
+        font-weight: bold !important;
+    }
+    
+    /* Resaltar día actual */
+    .fc-day-today { 
+        background-color: rgba(94, 45, 97, 0.08) !important; 
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -134,7 +183,6 @@ with st.sidebar:
 if sel == "CALENDARIO":
     st.header("📅 Agenda de Viajes")
     
-    # REPARACIÓN: Inicializar variable de estado para que la info no se borre
     if "viaje_ver" not in st.session_state:
         st.session_state.viaje_ver = None
     
@@ -143,7 +191,7 @@ if sel == "CALENDARIO":
         if str(row['Fecha Viaje']) != "-" and row['Origen'] != "AJUSTE":
             eventos.append({
                 "id": str(i),
-                "title": f"{row['Cliente']}",
+                "title": f"🚛 {row['Cliente']}", # Icono agregado aquí
                 "start": str(row['Fecha Viaje']),
                 "allDay": True,
             })
@@ -151,34 +199,33 @@ if sel == "CALENDARIO":
     cal_options = {
         "headerToolbar": {"left": "prev,next today", "center": "title", "right": "dayGridMonth"},
         "locale": "es",
-        "height": 550,
+        "height": 600,
+        "buttonText": {"today": "Hoy", "month": "Mes"} # Forzamos idioma botones
     }
 
-    res_cal = calendar(events=eventos, options=cal_options, key="cal_chaca")
+    # Usamos una key única para asegurar que los cambios se apliquen
+    res_cal = calendar(events=eventos, options=cal_options, key="cal_chaca_v3")
 
-    # REPARACIÓN: Capturar el ID en el estado de sesión
     if res_cal.get("eventClick"):
         st.session_state.viaje_ver = int(res_cal["eventClick"]["event"]["id"])
 
-    # REPARACIÓN: Mostrar la información basada en el estado de sesión
     if st.session_state.viaje_ver is not None:
         idx = st.session_state.viaje_ver
         if idx in st.session_state.viajes.index:
             v_det = st.session_state.viajes.loc[idx]
             
-            # Botón opcional para cerrar el detalle si querés limpiar la pantalla
             if st.button("❌ Cerrar Información"):
                 st.session_state.viaje_ver = None
                 st.rerun()
 
             st.markdown(f"""
-            <div style="background-color: #f0f2f6; padding: 15px; border-left: 5px solid #f39c12; border-radius: 5px; margin-top: 20px;">
-                <h4 style="color: #5e2d61; margin: 0;">Detalles del Viaje Seleccionado</h4>
-                <p style="margin: 5px 0;"><b>Cliente:</b> {v_det['Cliente']}</p>
-                <p style="margin: 5px 0;"><b>Ruta:</b> {v_det['Origen']} ➔ {v_det['Destino']}</p>
-                <p style="margin: 5px 0;"><b>Móvil:</b> {v_det['Patente / Móvil']}</p>
-                <p style="margin: 5px 0;"><b>Importe:</b> $ {v_det['Importe']}</p>
-                <p style="margin: 5px 0;"><b>Tipo:</b> {v_det['Tipo Comp']}</p>
+            <div style="background-color: #ffffff; padding: 20px; border-left: 8px solid #f39c12; border-radius: 10px; margin-top: 15px; box-shadow: 0px 4px 15px rgba(0,0,0,0.1); border: 1px solid #5e2d61;">
+                <h4 style="color: #5e2d61; margin-top: 0;">🚛 Información del Viaje</h4>
+                <p style="margin: 8px 0;"><b>Cliente:</b> {v_det['Cliente']}</p>
+                <p style="margin: 8px 0;"><b>Recorrido:</b> {v_det['Origen']} ➔ {v_det['Destino']}</p>
+                <p style="margin: 8px 0;"><b>Unidad:</b> {v_det['Patente / Móvil']}</p>
+                <p style="margin: 8px 0; font-size: 1.1em; color: #d35400;"><b>Monto:</b> $ {v_det['Importe']}</p>
+                <p style="margin: 8px 0; font-size: 0.9em; color: gray;"><i>Tipo: {v_det['Tipo Comp']}</i></p>
             </div>
             """, unsafe_allow_html=True)
 
@@ -273,4 +320,3 @@ elif sel == "COMPROBANTES":
                 guardar_datos("viajes", st.session_state.viajes)
                 st.rerun()
             st.divider()
-
