@@ -4,3 +4,4 @@ streamlit-option_menu
 gspread
 google-auth
 plotly
+fpdf2
