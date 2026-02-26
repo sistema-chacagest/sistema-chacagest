@@ -127,8 +127,6 @@ st.markdown("""
         color: white !important; border-radius: 8px !important; border: none !important; font-weight: bold !important;
     }
     .stDataFrame { border: 1px solid #5e2d61; border-radius: 5px; }
-    /* Ajuste para el acordeón en el sidebar */
-    .stExpander { border: none !important; background-color: transparent !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -137,46 +135,17 @@ with st.sidebar:
     try: st.image("logo_path.png", use_container_width=True)
     except: pass
     st.markdown("---")
-    
-    # CALENDARIO FUERA DEL ACORDEÓN
-    sel_fijo = option_menu(
+    sel = option_menu(
         menu_title=None,
-        options=["CALENDARIO"],
-        icons=["calendar3"],
+        options=["CALENDARIO", "CLIENTES", "CARGA VIAJE", "AJUSTES (NC/ND)", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"],
+        icons=["calendar3", "people", "truck", "file-earmark-minus", "person-vcard", "globe", "file-text"],
         default_index=0,
         styles={
-            "container": {"background-color": "#f0f2f6", "padding": "0px"},
+            "container": {"background-color": "#f0f2f6"},
             "nav-link": {"font-size": "14px", "text-align": "left", "margin":"0px"},
             "nav-link-selected": {"background-color": "#5e2d61"},
         }
     )
-
-    # ACORDEÓN VENTAS
-    with st.expander("💰 VENTAS", expanded=True):
-        sel_ventas = option_menu(
-            menu_title=None,
-            options=["CLIENTES", "CARGA VIAJE", "AJUSTES (NC/ND)", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"],
-            icons=["people", "truck", "file-earmark-minus", "person-vcard", "globe", "file-text"],
-            default_index=0,
-            styles={
-                "container": {"background-color": "transparent", "padding": "0px"},
-                "nav-link": {"font-size": "13px", "text-align": "left", "margin":"0px"},
-                "nav-link-selected": {"background-color": "#5e2d61"},
-            }
-        )
-    
-    # Lógica de selección
-    # Si el usuario interactúa con el menú de ventas, esa es la selección activa.
-    # Usamos session_state para persistir cuál fue el último clic real.
-    if "last_sel" not in st.session_state:
-        st.session_state.last_sel = "CALENDARIO"
-    
-    # Esto detecta cambios manuales en los menús
-    if sel_fijo == "CALENDARIO":
-        # Nota: Como option_menu siempre devuelve un valor, necesitamos una lógica para saber cuál manda.
-        # En este caso, si expander está abierto y se toca algo, manda ventas.
-        sel = sel_ventas
-    
     st.markdown("---")
     if st.button("🔄 Sincronizar"):
         with st.spinner("Sincronizando..."):
@@ -189,7 +158,7 @@ with st.sidebar:
         st.rerun()
 
 # --- 6. MÓDULOS ---
-# (El resto del código de los módulos permanece igual a tu original)
+
 if sel == "CALENDARIO":
     st.header("📅 Agenda de Viajes")
     
@@ -215,10 +184,22 @@ if sel == "CALENDARIO":
     }
 
     custom_css = """
-        .fc-button-primary { background-color: #5e2d61 !important; border-color: #5e2d61 !important; color: white !important; }
-        .fc-button-primary:hover { background-color: #f39c12 !important; border-color: #f39c12 !important; }
-        .fc-event { background-color: #f39c12 !important; border: none !important; }
-        .fc-toolbar-title { color: #5e2d61 !important; }
+        .fc-button-primary {
+            background-color: #5e2d61 !important;
+            border-color: #5e2d61 !important;
+            color: white !important;
+        }
+        .fc-button-primary:hover {
+            background-color: #f39c12 !important;
+            border-color: #f39c12 !important;
+        }
+        .fc-event {
+            background-color: #f39c12 !important;
+            border: none !important;
+        }
+        .fc-toolbar-title {
+            color: #5e2d61 !important;
+        }
     """
 
     res_cal = calendar(events=eventos, options=cal_options, custom_css=custom_css, key="cal_final")
@@ -318,8 +299,14 @@ elif sel == "CTA CTE INDIVIDUAL":
         saldo_total = df_ind['Importe'].sum()
         st.metric("SALDO TOTAL", f"$ {saldo_total:,.2f}")
         
+        # --- BOTÓN DE IMPRESIÓN / PDF ---
         html_reporte = generar_html_resumen(cl, df_ind, saldo_total)
-        st.download_button(label="📄 DESCARGAR RESUMEN (PARA IMPRIMIR)", data=html_reporte, file_name=f"Resumen_{cl}_{date.today()}.html", mime="text/html")
+        st.download_button(
+            label="📄 DESCARGAR RESUMEN (PARA IMPRIMIR)",
+            data=html_reporte,
+            file_name=f"Resumen_{cl}_{date.today()}.html",
+            mime="text/html",
+        )
         st.info("💡 Para imprimir: Abra el archivo descargado y presione Ctrl+P")
         
         st.dataframe(df_ind, use_container_width=True)
@@ -332,6 +319,7 @@ elif sel == "CTA CTE GENERAL":
 
 elif sel == "COMPROBANTES":
     st.header("📜 Historial de Comprobantes")
+    st.info("Desde aquí puede revisar y eliminar cargas erróneas.")
     if not st.session_state.viajes.empty:
         for i in reversed(st.session_state.viajes.index):
             row = st.session_state.viajes.loc[i]
