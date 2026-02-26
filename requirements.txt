@@ -1,6 +1,6 @@
 streamlit
 pandas
+streamlit-option_menu
 gspread
 google-auth
-fpdf
-streamlit-option-menu
+plotly
