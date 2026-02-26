@@ -5,3 +5,4 @@ fpdf
 gspread
 streamlit-option-menu
 google-auth
+streamlit-calendar
