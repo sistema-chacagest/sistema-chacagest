@@ -5,6 +5,7 @@ from datetime import date
 import gspread
 from google.oauth2.service_account import Credentials
 from streamlit_option_menu import option_menu
+from streamlit_calendar import calendar  # <--- Nueva librería
 
 # --- 1. CONFIGURACIÓN Y CONEXIÓN ---
 st.set_page_config(page_title="CHACAGEST - GESTIÓN TOTAL", page_icon="🚛", layout="wide")
@@ -102,8 +103,8 @@ with st.sidebar:
     st.markdown("---")
     sel = option_menu(
         menu_title=None,
-        options=["CLIENTES", "CARGA VIAJE", "AJUSTES (NC/ND)", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"],
-        icons=["people", "truck", "file-earmark-minus", "person-vcard", "globe", "file-text"],
+        options=["CLIENTES", "CARGA VIAJE", "CALENDARIO", "AJUSTES (NC/ND)", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"],
+        icons=["people", "truck", "calendar3", "file-earmark-minus", "person-vcard", "globe", "file-text"],
         default_index=0,
         styles={
             "container": {"background-color": "#f0f2f6"},
@@ -169,6 +170,54 @@ elif sel == "CARGA VIAJE":
             guardar_datos("viajes", st.session_state.viajes)
             st.success("Viaje registrado"); st.rerun()
 
+elif sel == "CALENDARIO":
+    st.header("📅 Calendario de Viajes")
+    
+    # 1. Preparar eventos para el calendario
+    eventos = []
+    for _, row in st.session_state.viajes.iterrows():
+        # Filtramos para mostrar solo viajes reales, no ajustes de NC/ND en la vista principal
+        if row['Origen'] != "AJUSTE" and row['Fecha Viaje'] != "-":
+            # Color distintivo: Naranja si es contado, Violeta si es CTA CTE
+            color_ev = "#f39c12" if "Contado" in str(row['Tipo Comp']) else "#5e2d61"
+            
+            eventos.append({
+                "title": f"🚛 {row['Cliente']} | {row['Destino']}",
+                "start": str(row['Fecha Viaje']),
+                "end": str(row['Fecha Viaje']),
+                "backgroundColor": color_ev,
+                "borderColor": color_ev,
+                "allDay": True,
+                "extendedProps": {
+                    "Origen": row['Origen'],
+                    "Importe": f"${row['Importe']}",
+                    "Patente": row['Patente / Móvil']
+                }
+            })
+
+    # 2. Configuración de FullCalendar
+    cal_options = {
+        "headerToolbar": {
+            "left": "prev,next today",
+            "center": "title",
+            "right": "dayGridMonth,dayGridWeek"
+        },
+        "initialView": "dayGridMonth",
+        "locale": "es",
+    }
+
+    # 3. Mostrar Calendario
+    state = calendar(events=eventos, options=cal_options, key="calendar_viajes")
+
+    # 4. Detalle al clickear (opcional)
+    if state.get("eventClick"):
+        st.write("---")
+        ev = state["eventClick"]["event"]
+        st.success(f"**Detalle del Viaje:** {ev['title']}")
+        c1, c2 = st.columns(2)
+        c1.write(f"**Origen:** {ev['extendedProps']['Origen']}")
+        c2.write(f"**Monto:** {ev['extendedProps']['Importe']}")
+
 elif sel == "AJUSTES (NC/ND)":
     st.header("💳 Notas de Crédito / Débito")
     st.info("Nota: Las Notas de Crédito y Débito deben estar asociadas a un comprobante AFIP.")
@@ -205,7 +254,6 @@ elif sel == "COMPROBANTES":
     st.header("📜 Historial de Comprobantes")
     st.info("Desde aquí puede revisar y eliminar cargas erróneas.")
     if not st.session_state.viajes.empty:
-        # Recorremos el dataframe original para poder usar el índice real para el drop
         for i in reversed(st.session_state.viajes.index):
             row = st.session_state.viajes.loc[i]
             c1, c2, c3 = st.columns([0.2, 0.6, 0.1])
