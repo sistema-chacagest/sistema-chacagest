@@ -82,50 +82,23 @@ if 'clientes' not in st.session_state or 'viajes' not in st.session_state:
     st.session_state.clientes = c if c is not None else pd.DataFrame(columns=["Razón Social", "CUIT / CUIL / DNI *", "Email", "Teléfono", "Dirección Fiscal", "Localidad", "Provincia", "Condición IVA", "Condición de Venta"])
     st.session_state.viajes = v if v is not None else pd.DataFrame(columns=["Fecha Carga", "Cliente", "Fecha Viaje", "Origen", "Destino", "Patente / Móvil", "Importe", "Tipo Comp", "Nro Comp Asoc"])
 
-# --- 4. DISEÑO ORIGINAL (ESTÉTICA MEJORADA CON !IMPORTANT) ---
+# --- 4. DISEÑO ORIGINAL (CSS AJUSTADO PARA EL CALENDARIO) ---
 st.markdown("""
     <style>
     [data-testid="stSidebarNav"] { display: none; }
     header { visibility: hidden; } 
     h1, h2, h3 { color: #5e2d61 !important; }
-    
     div.stButton > button {
         background: linear-gradient(to right, #f39c12, #d35400) !important;
         color: white !important; border-radius: 8px !important; border: none !important; font-weight: bold !important;
     }
+    .stDataFrame { border: 1px solid #5e2d61; border-radius: 5px; }
 
-    /* FORZAR ESTILOS EN EL CALENDARIO */
-    .fc { 
-        background-color: white !important; 
-        padding: 15px !important; 
-        border-radius: 12px !important; 
-        border: 3px solid #5e2d61 !important; 
-    }
-    .fc-toolbar-title { 
-        color: #5e2d61 !important; 
-        font-weight: bold !important; 
-        font-size: 1.5rem !important;
-    }
-    .fc-button-primary { 
-        background-color: #5e2d61 !important; 
-        border: 1px solid white !important;
-    }
-    .fc-button-primary:hover { 
-        background-color: #f39c12 !important; 
-    }
-    /* Eventos en Naranja */
-    .fc-event { 
-        background-color: #f39c12 !important; 
-        border: none !important; 
-        padding: 3px !important;
-        font-size: 0.85rem !important;
-    }
-    /* Días del calendario */
-    .fc-daygrid-day-number { 
-        color: #5e2d61 !important; 
-        font-weight: bold !important; 
-        text-decoration: none !important;
-    }
+    /* ESTILOS CALENDARIO PARA QUE COMBINE CON EL MENU */
+    .fc { background-color: white; padding: 10px; border-radius: 10px; border: 2px solid #5e2d61; }
+    .fc-toolbar-title { color: #5e2d61 !important; }
+    .fc-button-primary { background-color: #5e2d61 !important; border: none !important; }
+    .fc-event { background-color: #f39c12 !important; border: none !important; cursor: pointer; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -161,6 +134,7 @@ with st.sidebar:
 if sel == "CALENDARIO":
     st.header("📅 Agenda de Viajes")
     
+    # REPARACIÓN: Inicializar variable de estado para que la info no se borre
     if "viaje_ver" not in st.session_state:
         st.session_state.viaje_ver = None
     
@@ -169,42 +143,42 @@ if sel == "CALENDARIO":
         if str(row['Fecha Viaje']) != "-" and row['Origen'] != "AJUSTE":
             eventos.append({
                 "id": str(i),
-                "title": f"🚛 {row['Cliente']}",
+                "title": f"{row['Cliente']}",
                 "start": str(row['Fecha Viaje']),
                 "allDay": True,
             })
 
     cal_options = {
-        "headerToolbar": {"left": "prev,next today", "center": "title", "right": "dayGridMonth,dayGridWeek"},
+        "headerToolbar": {"left": "prev,next today", "center": "title", "right": "dayGridMonth"},
         "locale": "es",
-        "height": 600,
-        "buttonText": {"today": "Hoy", "month": "Mes", "week": "Semana"}
+        "height": 550,
     }
 
-    # CAMBIO DE KEY PARA FORZAR RE-RENDERIZADO VISUAL
-    res_cal = calendar(events=eventos, options=cal_options, key="cal_chaca_v2")
+    res_cal = calendar(events=eventos, options=cal_options, key="cal_chaca")
 
+    # REPARACIÓN: Capturar el ID en el estado de sesión
     if res_cal.get("eventClick"):
         st.session_state.viaje_ver = int(res_cal["eventClick"]["event"]["id"])
 
+    # REPARACIÓN: Mostrar la información basada en el estado de sesión
     if st.session_state.viaje_ver is not None:
         idx = st.session_state.viaje_ver
         if idx in st.session_state.viajes.index:
             v_det = st.session_state.viajes.loc[idx]
             
+            # Botón opcional para cerrar el detalle si querés limpiar la pantalla
             if st.button("❌ Cerrar Información"):
                 st.session_state.viaje_ver = None
                 st.rerun()
 
             st.markdown(f"""
-            <div style="background-color: #ffffff; padding: 20px; border-left: 10px solid #f39c12; border-radius: 10px; margin-top: 15px; box-shadow: 0px 4px 15px rgba(0,0,0,0.2); border: 1px solid #5e2d61;">
-                <h3 style="color: #5e2d61; margin-top: 0;">🚛 Detalle del Viaje</h3>
-                <hr>
-                <p style="font-size: 16px;"><b>Cliente:</b> {v_det['Cliente']}</p>
-                <p style="font-size: 16px;"><b>Ruta:</b> {v_det['Origen']} ➔ {v_det['Destino']}</p>
-                <p style="font-size: 16px;"><b>Patente:</b> {v_det['Patente / Móvil']}</p>
-                <p style="font-size: 20px; color: #d35400; background: #fff5e6; padding: 10px; border-radius: 5px; display: inline-block;"><b>Importe: $ {v_det['Importe']:,}</b></p>
-                <p style="font-size: 14px; color: gray;">Comprobante: {v_det['Tipo Comp']}</p>
+            <div style="background-color: #f0f2f6; padding: 15px; border-left: 5px solid #f39c12; border-radius: 5px; margin-top: 20px;">
+                <h4 style="color: #5e2d61; margin: 0;">Detalles del Viaje Seleccionado</h4>
+                <p style="margin: 5px 0;"><b>Cliente:</b> {v_det['Cliente']}</p>
+                <p style="margin: 5px 0;"><b>Ruta:</b> {v_det['Origen']} ➔ {v_det['Destino']}</p>
+                <p style="margin: 5px 0;"><b>Móvil:</b> {v_det['Patente / Móvil']}</p>
+                <p style="margin: 5px 0;"><b>Importe:</b> $ {v_det['Importe']}</p>
+                <p style="margin: 5px 0;"><b>Tipo:</b> {v_det['Tipo Comp']}</p>
             </div>
             """, unsafe_allow_html=True)
 
@@ -299,3 +273,4 @@ elif sel == "COMPROBANTES":
                 guardar_datos("viajes", st.session_state.viajes)
                 st.rerun()
             st.divider()
+
