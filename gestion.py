@@ -8,7 +8,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 # --- 1. CONFIGURACIÓN Y CONEXIÓN ---
-st.set_page_config(page_title="CHACAGEST - SISTEMA SEGURO", page_icon="🔒", layout="wide")
+st.set_page_config(page_title="CHACAGEST - GESTIÓN TOTAL", page_icon="🚛", layout="wide")
 
 def conectar_google():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -45,148 +45,145 @@ def guardar_datos(nombre_hoja, df):
     except Exception as e:
         st.error(f"Error al guardar: {e}")
 
-# --- 2. SISTEMA DE LOGIN ---
-def login():
-    if "autenticado" not in st.session_state:
-        st.session_state.autenticado = False
+# --- 2. LOGIN ---
+if "autenticado" not in st.session_state:
+    st.session_state.autenticado = False
 
-    if not st.session_state.autenticado:
+if not st.session_state.autenticado:
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col2:
         st.markdown("<br><br>", unsafe_allow_html=True)
-        col1, col2, col3 = st.columns([1, 1, 1])
-        with col2:
-            try:
-                st.image("logo_path.png", width=200)
-            except:
-                st.title("🚛 CHACAGEST")
-            
-            st.subheader("🔐 Ingreso al Sistema")
-            usuario = st.text_input("Usuario")
-            clave = st.text_input("Contraseña", type="password")
-            
-            # --- AQUÍ DEFINÍS TU USUARIO Y CLAVE ---
-            if st.button("INGRESAR"):
-                if usuario == "ChacaGest" and clave == "Noroeste23":
-                    st.session_state.autenticado = True
-                    st.rerun()
-                else:
-                    st.error("Usuario o clave incorrectos")
-        return False
-    return True
+        try: st.image("logo_path.png", width=200)
+        except: st.title("🚛 CHACAGEST")
+        u = st.text_input("Usuario")
+        p = st.text_input("Contraseña", type="password")
+        if st.button("INGRESAR"):
+            if u == "admin" and p == "chaca2026":
+                st.session_state.autenticado = True
+                st.rerun()
+            else: st.error("Incorrecto")
+    st.stop()
 
-# --- 3. INICIO DEL PROGRAMA ---
-if login():
-    # Inicializar datos solo si está logueado
-    if 'clientes' not in st.session_state or 'viajes' not in st.session_state:
+# --- 3. INICIALIZACIÓN Y DISEÑO ---
+if 'clientes' not in st.session_state or 'viajes' not in st.session_state:
+    st.session_state.clientes, st.session_state.viajes = cargar_datos()
+
+st.markdown("""
+    <style>
+    [data-testid="stSidebarNav"] { display: none; }
+    h1, h2, h3 { color: #5e2d61 !important; }
+    div.stButton > button {
+        background: linear-gradient(to right, #f39c12, #d35400) !important;
+        color: white !important; border-radius: 8px !important; border: none !important; font-weight: bold !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+# --- 4. SIDEBAR ---
+with st.sidebar:
+    try: st.image("logo_path.png", use_container_width=True)
+    except: pass
+    sel = option_menu(None, ["CLIENTES", "CARGA VIAJE", "AJUSTES (NC/ND)", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"], 
+                      icons=["people", "truck", "file-earmark-minus", "person-vcard", "globe", "file-text"], default_index=0)
+    if st.button("🔄 Sincronizar"):
         st.session_state.clientes, st.session_state.viajes = cargar_datos()
+        st.rerun()
+    if st.button("🚪 Cerrar Sesión"):
+        st.session_state.autenticado = False
+        st.rerun()
 
-    # --- DISEÑO VISUAL ---
-    st.markdown("""
-        <style>
-        [data-testid="stSidebarNav"] { display: none; }
-        header { visibility: hidden; } 
-        h1, h2, h3 { color: #5e2d61 !important; }
-        div.stButton > button {
-            background: linear-gradient(to right, #f39c12, #d35400) !important;
-            color: white !important; border-radius: 8px !important; border: none !important;
-        }
-        </style>
-        """, unsafe_allow_html=True)
+# --- 5. MÓDULOS ---
 
-    # --- FUNCIONES PDF ---
-    def generar_pdf_ctacte(cliente, df_cliente):
-        pdf = FPDF()
-        pdf.add_page()
-        pdf.set_font("Arial", "B", 16)
-        pdf.cell(0, 10, f"RESUMEN DE CUENTA - {cliente}", ln=True, align="C")
-        pdf.ln(5)
-        pdf.set_font("Arial", "B", 10)
-        pdf.cell(30, 10, "Fecha", 1); pdf.cell(120, 10, "Detalle", 1); pdf.cell(40, 10, "Importe", 1, ln=True)
-        pdf.set_font("Arial", "", 9)
-        for _, fila in df_cliente.iterrows():
-            pdf.cell(30, 8, str(fila['Fecha Viaje']), 1)
-            pdf.cell(120, 8, f"{fila['Origen']} a {fila['Destino']}"[:60], 1)
-            pdf.cell(40, 8, f"$ {fila['Importe']:.2f}", 1, ln=True)
-        return pdf.output(dest='S').encode('latin-1')
+if sel == "CLIENTES":
+    st.header("👤 Gestión de Clientes")
+    with st.expander("➕ ALTA DE NUEVO CLIENTE", expanded=False):
+        with st.form("f_cli", clear_on_submit=True):
+            c1, c2 = st.columns(2)
+            razon = c1.text_input("Razón Social / Nombre *")
+            cuit = c2.text_input("CUIT / DNI *")
+            mail = c1.text_input("Email")
+            tel = c2.text_input("Teléfono")
+            dire = c1.text_input("Dirección Fiscal")
+            loc = c2.text_input("Localidad")
+            prov = c1.selectbox("Provincia", ["Buenos Aires", "CABA", "Santa Fe", "Córdoba", "La Pampa", "Otra"])
+            c_iva = c2.selectbox("Condición IVA", ["Responsable Inscripto", "Monotributo", "Exento", "Consumidor Final"])
+            c_vta = c1.selectbox("Condición de Venta", ["Cuenta Corriente", "Contado"])
+            if st.form_submit_button("REGISTRAR CLIENTE"):
+                if razon and cuit:
+                    nueva_fila = [razon, cuit, mail, tel, dire, loc, prov, c_iva, c_vta]
+                    nuevo_df = pd.DataFrame([nueva_fila], columns=st.session_state.clientes.columns)
+                    st.session_state.clientes = pd.concat([st.session_state.clientes, nuevo_df], ignore_index=True)
+                    guardar_datos("clientes", st.session_state.clientes)
+                    st.success("Guardado"); st.rerun()
 
-    # --- 5. SIDEBAR ---
-    with st.sidebar:
-        try:
-            st.image("logo_path.png", use_container_width=True)
-        except:
-            pass
-        st.markdown("---")
-        sel = option_menu(
-            menu_title=None,
-            options=["CLIENTES", "CARGA VIAJE", "AJUSTES (NC/ND)", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"],
-            icons=["people", "truck", "file-earmark-minus", "person-vcard", "globe", "file-text"],
-            default_index=0,
-            styles={"nav-link-selected": {"background-color": "#5e2d61"}}
-        )
-        if st.button("🔄 Sincronizar"):
-            st.session_state.clientes, st.session_state.viajes = cargar_datos()
-            st.rerun()
-        
-        if st.button("🚪 Cerrar Sesión"):
-            st.session_state.autenticado = False
-            st.rerun()
+    st.subheader("Lista de Clientes")
+    st.dataframe(st.session_state.clientes, use_container_width=True)
+    
+    elim_c = st.selectbox("Seleccione cliente para eliminar:", ["-"] + list(st.session_state.clientes['Razón Social'].unique()))
+    if st.button("❌ ELIMINAR CLIENTE PERMANENTEMENTE") and elim_c != "-":
+        st.session_state.clientes = st.session_state.clientes[st.session_state.clientes['Razón Social'] != elim_c]
+        guardar_datos("clientes", st.session_state.clientes)
+        st.success("Cliente eliminado"); st.rerun()
 
-    # --- 6. MÓDULOS (Lógica igual a la anterior) ---
-    if sel == "CLIENTES":
-        st.header("👤 Gestión de Clientes")
-        with st.expander("➕ ALTA DE NUEVO CLIENTE"):
-            with st.form("f_cli", clear_on_submit=True):
-                r = st.text_input("Razón Social *")
-                cuit = st.text_input("CUIT *")
-                if st.form_submit_button("REGISTRAR"):
-                    if r and cuit:
-                        nuevo = pd.DataFrame([[r, cuit, "", "", "", "", "", "RI", "Cta Cte"]], columns=st.session_state.clientes.columns)
-                        st.session_state.clientes = pd.concat([st.session_state.clientes, nuevo], ignore_index=True)
-                        guardar_datos("clientes", st.session_state.clientes)
-                        st.success("Registrado"); st.rerun()
-        st.dataframe(st.session_state.clientes, use_container_width=True)
-
-    elif sel == "CARGA VIAJE":
-        st.header("🚛 Registro de Viaje")
-        if not st.session_state.clientes.empty:
-            with st.form("f_v"):
-                cli = st.selectbox("Cliente", st.session_state.clientes['Razón Social'].unique())
-                f = st.date_input("Fecha de Viaje")
-                orig = st.text_input("Origen")
-                dest = st.text_input("Destino")
-                imp = st.number_input("Importe $", min_value=0.0)
-                if st.form_submit_button("GUARDAR VIAJE"):
-                    nv = pd.DataFrame([[date.today(), cli, f, orig, dest, "-", imp, "Factura", "-"]], columns=st.session_state.viajes.columns)
-                    st.session_state.viajes = pd.concat([st.session_state.viajes, nv], ignore_index=True)
-                    guardar_datos("viajes", st.session_state.viajes)
-                    st.success("Viaje guardado!"); st.rerun()
-
-    elif sel == "AJUSTES (NC/ND)":
-        st.header("💳 Notas de Crédito / Débito")
-        tipo = st.radio("Acción:", ["Nota de Crédito", "Nota de Débito"], horizontal=True)
-        with st.form("f_nc"):
-            cl = st.selectbox("Cliente", st.session_state.clientes['Razón Social'].unique())
-            nro_afip = st.text_input("Nro Comprobante AFIP Asociado *")
-            mot = st.text_input("Motivo")
-            monto = st.number_input("Monto $", min_value=0.0)
-            if st.form_submit_button("REGISTRAR"):
-                final = -monto if "Crédito" in tipo else monto
-                nc_row = pd.DataFrame([[date.today(), cl, date.today(), "AJUSTE", mot, "-", final, "NC/ND", nro_afip]], columns=st.session_state.viajes.columns)
-                st.session_state.viajes = pd.concat([st.session_state.viajes, nc_row], ignore_index=True)
+elif sel == "CARGA VIAJE":
+    st.header("🚛 Registro de Viaje")
+    if st.session_state.clientes.empty:
+        st.warning("Primero cargue un cliente.")
+    else:
+        with st.form("f_v"):
+            cli = st.selectbox("Cliente", st.session_state.clientes['Razón Social'].unique())
+            c1, c2 = st.columns(2)
+            f_viaje = c1.date_input("Fecha del Viaje")
+            movil = c2.text_input("Patente / Móvil")
+            orig = st.text_input("Origen")
+            dest = st.text_input("Destino")
+            imp = st.number_input("Importe $", min_value=0.0)
+            tipo_v = st.selectbox("Tipo de Operación", ["Cuenta Corriente", "Contado"])
+            if st.form_submit_button("GUARDAR VIAJE"):
+                nv = [date.today(), cli, f_viaje, orig, dest, movil, imp, f"Factura ({tipo_v})", "-"]
+                nv_df = pd.DataFrame([nv], columns=st.session_state.viajes.columns)
+                st.session_state.viajes = pd.concat([st.session_state.viajes, nv_df], ignore_index=True)
                 guardar_datos("viajes", st.session_state.viajes)
-                st.success("Ajuste registrado"); st.rerun()
+                st.success("Viaje guardado"); st.rerun()
 
-    elif sel == "CTA CTE INDIVIDUAL":
-        st.header("📑 Cuenta Corriente")
+elif sel == "AJUSTES (NC/ND)":
+    st.header("💳 Notas de Crédito / Débito")
+    tipo = st.radio("Acción:", ["Nota de Crédito (Resta)", "Nota de Débito (Suma)"], horizontal=True)
+    with st.form("f_nc"):
         cl = st.selectbox("Cliente", st.session_state.clientes['Razón Social'].unique())
-        df_ind = st.session_state.viajes[st.session_state.viajes['Cliente'] == cl]
-        st.metric("SALDO", f"$ {df_ind['Importe'].sum():,.2f}")
-        st.dataframe(df_ind, use_container_width=True)
+        nro_afip = st.text_input("Nro Comprobante AFIP Asociado *")
+        mot = st.text_input("Concepto / Motivo")
+        monto = st.number_input("Monto $", min_value=0.0)
+        if st.form_submit_button("REGISTRAR"):
+            final = -monto if "Crédito" in tipo else monto
+            t_comp = "NC" if "Crédito" in tipo else "ND"
+            nc_row = [date.today(), cl, date.today(), "AJUSTE", mot, "-", final, t_comp, nro_afip]
+            nc_df = pd.DataFrame([nc_row], columns=st.session_state.viajes.columns)
+            st.session_state.viajes = pd.concat([st.session_state.viajes, nc_df], ignore_index=True)
+            guardar_datos("viajes", st.session_state.viajes)
+            st.success("Ajuste registrado"); st.rerun()
 
-    elif sel == "CTA CTE GENERAL":
-        st.header("🌎 Deudores Globales")
-        res = st.session_state.viajes.groupby('Cliente')['Importe'].sum().reset_index()
-        st.table(res.style.format({"Importe": "$ {:,.2f}"}))
+elif sel == "CTA CTE INDIVIDUAL":
+    st.header("📑 Cuenta Corriente")
+    cl = st.selectbox("Cliente", st.session_state.clientes['Razón Social'].unique())
+    df_ind = st.session_state.viajes[st.session_state.viajes['Cliente'] == cl]
+    st.metric("SALDO TOTAL", f"$ {df_ind['Importe'].sum():,.2f}")
+    st.dataframe(df_ind, use_container_width=True)
 
-    elif sel == "COMPROBANTES":
-        st.header("📜 Historial")
-        st.dataframe(st.session_state.viajes.iloc[::-1], use_container_width=True)
+elif sel == "CTA CTE GENERAL":
+    st.header("🌎 Estado de Deudores")
+    res = st.session_state.viajes.groupby('Cliente')['Importe'].sum().reset_index()
+    st.table(res.style.format({"Importe": "$ {:,.2f}"}))
+
+elif sel == "COMPROBANTES":
+    st.header("📜 Historial y Edición")
+    st.write("Haga clic en el botón 🗑️ para eliminar una carga errónea.")
+    for i, row in st.session_state.viajes.iloc[::-1].iterrows():
+        c1, c2, c3 = st.columns([0.2, 0.6, 0.1])
+        c1.write(f"**{row['Fecha Viaje']}**")
+        c2.write(f"**{row['Cliente']}** | {row['Origen']} -> {row['Destino']} | ${row['Importe']}")
+        if c3.button("🗑️", key=f"del_{i}"):
+            st.session_state.viajes = st.session_state.viajes.drop(i)
+            guardar_datos("viajes", st.session_state.viajes)
+            st.rerun()
+        st.divider()
