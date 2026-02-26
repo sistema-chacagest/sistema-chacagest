@@ -3,12 +3,11 @@ import pandas as pd
 import os
 from datetime import date
 from streamlit_option_menu import option_menu
-from fpdf import FPDF
 import gspread
 from google.oauth2.service_account import Credentials
 
-# --- 1. CONFIGURACIÓN Y BLINDAJE ---
-st.set_page_config(page_title="CHACAGEST - GESTIÓN TOTAL", page_icon="🛡️", layout="wide")
+# --- 1. CONFIGURACIÓN Y CONEXIÓN ---
+st.set_page_config(page_title="CHACAGEST - SISTEMA BLINDADO", page_icon="🛡️", layout="wide")
 
 def conectar_google():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -75,7 +74,6 @@ if not st.session_state.autenticado:
 if 'clientes' not in st.session_state or 'viajes' not in st.session_state:
     st.session_state.clientes, st.session_state.viajes = cargar_datos_seguro()
 
-# Estilos visuales
 st.markdown("""
     <style>
     [data-testid="stSidebarNav"] { display: none; }
@@ -85,35 +83,28 @@ st.markdown("""
         background: linear-gradient(to right, #f39c12, #d35400) !important;
         color: white !important; border-radius: 8px !important; border: none !important; font-weight: bold !important;
     }
-    /* Estilo para que el expander de ventas se vea como parte del menú */
-    .stExpander { border: none !important; box-shadow: none !important; background-color: transparent !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 4. SIDEBAR CON MENÚ DESPLEGABLE ---
+# --- 4. SIDEBAR CON MENÚ DESPLEGABLE REAL ---
 with st.sidebar:
     try: st.image("logo_path.png", use_container_width=True)
     except: pass
     st.markdown("---")
     
-    # ESTE ES EL DESPLEGABLE QUE PEDISTE
-    with st.expander("💰 VENTAS", expanded=True):
-        accion = option_menu(
-            menu_title=None,
-            options=["Clientes", "Carga de Viaje", "Ajustes (NC/ND)", "Cta Cte Individual", "Cta Cte General", "Historial"],
-            icons=["people", "truck", "file-earmark-minus", "person-vcard", "globe", "file-text"],
-            menu_icon="cast", 
-            default_index=0,
-            styles={
-                "container": {"padding": "0!important", "background-color": "transparent"},
-                "nav-link": {"font-size": "13px", "text-align": "left", "margin":"0px"},
-                "nav-link-selected": {"background-color": "#5e2d61"},
-            }
-        )
+    # Menú con estructura de árbol (Desplegable)
+    sel = option_menu(
+        menu_title="MENÚ PRINCIPAL", 
+        options=["INICIO", "CLIENTES", "CARGA VIAJE", "AJUSTES (NC/ND)", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES", "COMPRAS"],
+        icons=["house", "people", "truck", "file-earmark-minus", "person-vcard", "globe", "file-text", "cart-check"],
+        menu_icon="cast", 
+        default_index=0,
+        styles={
+            "container": {"background-color": "#f0f2f6"},
+            "nav-link-selected": {"background-color": "#5e2d61"},
+        }
+    )
     
-    st.markdown("### 🛒 COMPRAS")
-    st.caption("Próximamente disponible...")
-
     st.markdown("---")
     if st.button("🔄 Sincronizar"):
         st.session_state.clientes, st.session_state.viajes = cargar_datos_seguro()
@@ -124,81 +115,72 @@ with st.sidebar:
 
 # --- 5. LÓGICA DE MÓDULOS ---
 
-if accion == "Clientes":
+if sel == "INICIO":
+    st.header("Bienvenido a CHACAGEST")
+    st.info("Seleccione una opción del menú lateral para comenzar a trabajar.")
+
+elif sel == "CLIENTES":
     st.header("👤 Gestión de Clientes")
-    with st.expander("➕ ALTA DE NUEVO CLIENTE"):
+    with st.expander("➕ NUEVO CLIENTE"):
         with st.form("f_cli", clear_on_submit=True):
             c1, c2 = st.columns(2)
-            r = c1.text_input("Razón Social / Nombre Completo *")
-            cuit = c2.text_input("CUIT / CUIL / DNI *")
+            r = c1.text_input("Razón Social *"); cuit = c2.text_input("CUIT *")
             mail = c1.text_input("Email"); tel = c2.text_input("Teléfono")
             dir_f = c1.text_input("Dirección Fiscal"); loc = c2.text_input("Localidad")
             prov = c1.text_input("Provincia")
             c_iva = c2.selectbox("Condición IVA", ["Responsable Inscripto", "Monotributo", "Exento", "Consumidor Final"])
             c_vta = c1.selectbox("Condición de Venta", ["Cuenta Corriente", "Contado"])
-            if st.form_submit_button("REGISTRAR CLIENTE"):
+            if st.form_submit_button("REGISTRAR"):
                 if r and cuit:
-                    nueva_fila = pd.DataFrame([[r, cuit, mail, tel, dir_f, loc, prov, c_iva, c_vta]], columns=st.session_state.clientes.columns)
-                    st.session_state.clientes = pd.concat([st.session_state.clientes, nueva_fila], ignore_index=True)
+                    nueva = pd.DataFrame([[r, cuit, mail, tel, dir_f, loc, prov, c_iva, c_vta]], columns=st.session_state.clientes.columns)
+                    st.session_state.clientes = pd.concat([st.session_state.clientes, nueva], ignore_index=True)
                     guardar_datos_blindado("clientes", st.session_state.clientes)
-                    st.success("Cliente guardado"); st.rerun()
-
+                    st.success("Guardado"); st.rerun()
     st.dataframe(st.session_state.clientes, use_container_width=True)
-    
-    with st.expander("🗑️ ELIMINAR CLIENTE"):
-        elim_c = st.selectbox("Seleccione cliente:", ["-"] + list(st.session_state.clientes['Razón Social'].unique()))
-        if st.button("BORRAR PERMANENTEMENTE") and elim_c != "-":
-            st.session_state.clientes = st.session_state.clientes[st.session_state.clientes['Razón Social'] != elim_c]
-            guardar_datos_blindado("clientes", st.session_state.clientes)
-            st.rerun()
 
-elif accion == "Carga de Viaje":
+elif sel == "CARGA VIAJE":
     st.header("🚛 Registro de Viaje")
     with st.form("f_v"):
         cli = st.selectbox("Cliente", st.session_state.clientes['Razón Social'].unique())
         c1, c2 = st.columns(2)
-        f_v = c1.date_input("Fecha del Viaje")
-        pat = c2.text_input("Patente / Móvil")
+        f_v = c1.date_input("Fecha del Viaje"); pat = c2.text_input("Patente / Móvil")
         orig = st.text_input("Origen"); dest = st.text_input("Destino")
         imp = st.number_input("Importe Neto $", min_value=0.0)
-        cond = st.selectbox("Tipo de Operación", ["Cuenta Corriente", "Contado"])
-        if st.form_submit_button("GUARDAR VIAJE"):
+        cond = st.selectbox("Tipo de Pago", ["Cuenta Corriente", "Contado"])
+        if st.form_submit_button("GUARDAR"):
             nv = pd.DataFrame([[date.today(), cli, f_v, orig, dest, pat, imp, f"Factura ({cond})", "-"]], columns=st.session_state.viajes.columns)
             st.session_state.viajes = pd.concat([st.session_state.viajes, nv], ignore_index=True)
             guardar_datos_blindado("viajes", st.session_state.viajes)
-            st.success("Viaje registrado"); st.rerun()
+            st.success("Viaje guardado"); st.rerun()
 
-elif accion == "Ajustes (NC/ND)":
+elif sel == "AJUSTES (NC/ND)":
     st.header("💳 Notas de Crédito / Débito")
-    # Blindaje nota de crédito según tus instrucciones de AFIP
     tipo = st.radio("Acción:", ["Nota de Crédito", "Nota de Débito"], horizontal=True)
     with st.form("f_nc"):
         cl = st.selectbox("Cliente", st.session_state.clientes['Razón Social'].unique())
         nro_asoc = st.text_input("Nro Comprobante AFIP Asociado *")
-        mot = st.text_input("Motivo")
-        monto = st.number_input("Monto $", min_value=0.0)
+        mot = st.text_input("Motivo"); monto = st.number_input("Monto $", min_value=0.0)
         if st.form_submit_button("REGISTRAR"):
-            if nro_asoc:
-                val = -monto if "Crédito" in tipo else monto
-                nc = pd.DataFrame([[date.today(), cl, date.today(), "AJUSTE", mot, "-", val, "NC/ND", nro_asoc]], columns=st.session_state.viajes.columns)
-                st.session_state.viajes = pd.concat([st.session_state.viajes, nc], ignore_index=True)
-                guardar_datos_blindado("viajes", st.session_state.viajes)
-                st.success("Ajuste registrado correctamente"); st.rerun()
+            val = -monto if "Crédito" in tipo else monto
+            nc = pd.DataFrame([[date.today(), cl, date.today(), "AJUSTE", mot, "-", val, "NC/ND", nro_asoc]], columns=st.session_state.viajes.columns)
+            st.session_state.viajes = pd.concat([st.session_state.viajes, nc], ignore_index=True)
+            guardar_datos_blindado("viajes", st.session_state.viajes)
+            st.success("Ajuste registrado"); st.rerun()
 
-elif accion == "Cta Cte Individual":
+elif sel == "CTA CTE INDIVIDUAL":
     st.header("📑 Cuenta Corriente")
-    cl = st.selectbox("Seleccione Cliente", st.session_state.clientes['Razón Social'].unique())
+    cl = st.selectbox("Cliente", st.session_state.clientes['Razón Social'].unique())
     df_ind = st.session_state.viajes[st.session_state.viajes['Cliente'] == cl]
     st.metric("SALDO TOTAL", f"$ {df_ind['Importe'].sum():,.2f}")
     st.dataframe(df_ind, use_container_width=True)
 
-elif accion == "Cta Cte General":
+elif sel == "CTA CTE GENERAL":
     st.header("🌎 Estado de Deudores")
     res = st.session_state.viajes.groupby('Cliente')['Importe'].sum().reset_index()
     st.table(res.style.format({"Importe": "$ {:,.2f}"}))
 
-elif accion == "Historial":
-    st.header("📜 Historial de Comprobantes")
+elif sel == "COMPROBANTES":
+    st.header("📜 Historial")
     for i, row in st.session_state.viajes.iloc[::-1].iterrows():
         c1, c2, c3 = st.columns([0.2, 0.7, 0.1])
         c1.write(f"📅 {row['Fecha Viaje']}")
@@ -208,3 +190,7 @@ elif accion == "Historial":
             guardar_datos_blindado("viajes", st.session_state.viajes)
             st.rerun()
         st.divider()
+
+elif sel == "COMPRAS":
+    st.header("🛒 Módulo de Compras (En Desarrollo)")
+    st.info("Este espacio está blindado y listo para recibir los formularios de gastos y proveedores.")
