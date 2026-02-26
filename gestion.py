@@ -42,7 +42,8 @@ def guardar_datos(nombre_hoja, df):
         ws = sh.worksheet(nombre_hoja)
         ws.clear()
         datos = [df.columns.values.tolist()] + df.astype(str).values.tolist()
-        ws.update(datos)
+        ws.update(datos, 'A1') # ACTUALIZADO PARA EVITAR BORRADO
+        st.success(f"Sincronizado con Google Sheets ✅")
     except Exception as e:
         st.error(f"Error al guardar: {e}")
 
@@ -69,7 +70,7 @@ if not st.session_state.autenticado:
 if 'clientes' not in st.session_state or 'viajes' not in st.session_state:
     st.session_state.clientes, st.session_state.viajes = cargar_datos()
 
-# --- 4. DISEÑO ---
+# --- 4. DISEÑO ESTILO CHACAGEST ---
 st.markdown("""
     <style>
     [data-testid="stSidebarNav"] { display: none; }
@@ -80,6 +81,8 @@ st.markdown("""
         color: white !important; border-radius: 8px !important; border: none !important; font-weight: bold !important;
     }
     .stDataFrame { border: 1px solid #5e2d61; border-radius: 5px; }
+    /* Ajustes para el calendario */
+    .fc-event { cursor: pointer; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -88,7 +91,6 @@ with st.sidebar:
     try: st.image("logo_path.png", use_container_width=True)
     except: pass
     st.markdown("---")
-    # Ponemos "CALENDARIO" al principio y default_index=0
     sel = option_menu(
         menu_title=None,
         options=["CALENDARIO", "CLIENTES", "CARGA VIAJE", "AJUSTES (NC/ND)", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"],
@@ -111,49 +113,50 @@ with st.sidebar:
 # --- 6. MÓDULOS ---
 
 if sel == "CALENDARIO":
-    st.header("📅 Agenda de Viajes")
+    st.header("📅 Agenda Logística")
     
+    # Preparamos los eventos con el color del menú
     eventos = []
-    # Filtrar solo viajes cargados como factura
-    df_eventos = st.session_state.viajes[st.session_state.viajes['Tipo Comp'].str.contains("Factura", na=False)]
+    # Solo mostrar viajes (Facturas), no NC/ND
+    df_v = st.session_state.viajes
+    viajes_reales = df_v[df_v['Tipo Comp'].str.contains("Factura", na=False)]
     
-    for i, row in df_eventos.iterrows():
+    for i, row in viajes_reales.iterrows():
+        # La descripción es lo que aparecerá al interactuar
+        info_hover = f"Unidad: {row['Patente / Móvil']} | Ruta: {row['Origen']} -> {row['Destino']} | Importe: ${row['Importe']}"
+        
         eventos.append({
-            "title": f"🚛 {row['Cliente']} ({row['Origen']})",
+            "title": f"🚛 {row['Cliente']}",
             "start": str(row['Fecha Viaje']),
             "end": str(row['Fecha Viaje']),
             "resourceId": i,
-            "color": "#5e2d61",
+            "color": "#5e2d61", # VIOLETA DEL MENU
+            "extendedProps": {
+                "descripcion": info_hover,
+                "cliente": row['Cliente']
+            }
         })
 
     cal_options = {
-        "editable": False,
-        "selectable": True,
         "headerToolbar": {
             "left": "prev,next today",
             "center": "title",
-            "right": "dayGridMonth,listWeek",
+            "right": "dayGridMonth,listWeek"
         },
         "initialView": "dayGridMonth",
         "locale": "es",
-        "height": 500, # <--- AQUÍ AJUSTAMOS EL TAMAÑO (más pequeño)
+        "height": 550, # Tamaño más compacto
+        "selectable": True,
     }
     
-    # Mostrar el calendario
-    state = calendar(events=eventos, options=cal_options, key="viajes_cal")
+    # Renderizar calendario
+    state = calendar(events=eventos, options=cal_options, key="chacacal")
     
+    # Mostrar info detallada si se hace clic
     if state.get("eventClick"):
-        idx = int(state["eventClick"]["event"]["resourceId"])
-        v = df_eventos.loc[idx]
-        st.markdown(f"""
-        <div style="padding:10px; border-radius:10px; background-color:#f0f2f6; border-left: 5px solid #5e2d61;">
-            <h4>🔍 Detalle del Viaje</h4>
-            <b>Cliente:</b> {v['Cliente']}<br>
-            <b>Ruta:</b> {v['Origen']} a {v['Destino']}<br>
-            <b>Unidad:</b> {v['Patente / Móvil']}<br>
-            <b>Importe:</b> ${v['Importe']}<br>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown("---")
+        props = state["eventClick"]["event"]["extendedProps"]
+        st.success(f"**Detalle del Viaje:** {props['descripcion']}")
 
 elif sel == "CLIENTES":
     st.header("👤 Gestión de Clientes")
@@ -174,17 +177,10 @@ elif sel == "CLIENTES":
                     nueva_fila = pd.DataFrame([[r, cuit, mail, tel, dir_f, loc, prov, c_iva, c_vta]], columns=st.session_state.clientes.columns)
                     st.session_state.clientes = pd.concat([st.session_state.clientes, nueva_fila], ignore_index=True)
                     guardar_datos("clientes", st.session_state.clientes)
-                    st.success("Cliente guardado con éxito"); st.rerun()
+                    st.rerun()
 
     st.subheader("📋 Base de Clientes")
     st.dataframe(st.session_state.clientes, use_container_width=True)
-    
-    with st.expander("🗑️ ELIMINAR CLIENTE"):
-        elim_c = st.selectbox("Seleccione cliente a borrar:", ["-"] + list(st.session_state.clientes['Razón Social'].unique()))
-        if st.button("BORRAR PERMANENTEMENTE") and elim_c != "-":
-            st.session_state.clientes = st.session_state.clientes[st.session_state.clientes['Razón Social'] != elim_c]
-            guardar_datos("clientes", st.session_state.clientes)
-            st.rerun()
 
 elif sel == "CARGA VIAJE":
     st.header("🚛 Registro de Viaje")
@@ -201,7 +197,7 @@ elif sel == "CARGA VIAJE":
             nv = pd.DataFrame([[date.today(), cli, f_v, orig, dest, pat, imp, f"Factura ({cond})", "-"]], columns=st.session_state.viajes.columns)
             st.session_state.viajes = pd.concat([st.session_state.viajes, nv], ignore_index=True)
             guardar_datos("viajes", st.session_state.viajes)
-            st.success("Viaje registrado correctamente"); st.rerun()
+            st.rerun()
 
 elif sel == "AJUSTES (NC/ND)":
     st.header("💳 Notas de Crédito / Débito")
@@ -218,7 +214,7 @@ elif sel == "AJUSTES (NC/ND)":
                 nc = pd.DataFrame([[date.today(), cl, date.today(), "AJUSTE", mot, "-", val, t_txt, nro_asoc]], columns=st.session_state.viajes.columns)
                 st.session_state.viajes = pd.concat([st.session_state.viajes, nc], ignore_index=True)
                 guardar_datos("viajes", st.session_state.viajes)
-                st.success("Ajuste cargado correctamente"); st.rerun()
+                st.rerun()
 
 elif sel == "CTA CTE INDIVIDUAL":
     st.header("📑 Cuenta Corriente por Cliente")
@@ -234,7 +230,6 @@ elif sel == "CTA CTE GENERAL":
 
 elif sel == "COMPROBANTES":
     st.header("📜 Historial de Comprobantes")
-    st.info("Desde aquí puede revisar y eliminar cargas erróneas.")
     for i, row in st.session_state.viajes.iloc[::-1].iterrows():
         c1, c2, c3 = st.columns([0.2, 0.6, 0.1])
         c1.write(f"📅 {row['Fecha Viaje']}")
