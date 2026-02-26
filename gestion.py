@@ -6,7 +6,7 @@ from streamlit_option_menu import option_menu
 from fpdf import FPDF
 import gspread
 from google.oauth2.service_account import Credentials
-from streamlit_calendar import calendar  # LIBRERÍA NUEVA PARA EL CALENDARIO
+from streamlit_calendar import calendar
 
 # --- 1. CONFIGURACIÓN Y CONEXIÓN ---
 st.set_page_config(page_title="CHACAGEST - GESTIÓN TOTAL", page_icon="🚛", layout="wide")
@@ -46,7 +46,7 @@ def guardar_datos(nombre_hoja, df):
     except Exception as e:
         st.error(f"Error al guardar: {e}")
 
-# --- 2. LOGIN (CON TU DISEÑO) ---
+# --- 2. LOGIN ---
 if "autenticado" not in st.session_state:
     st.session_state.autenticado = False
 
@@ -69,7 +69,7 @@ if not st.session_state.autenticado:
 if 'clientes' not in st.session_state or 'viajes' not in st.session_state:
     st.session_state.clientes, st.session_state.viajes = cargar_datos()
 
-# --- 4. DISEÑO ESTILO CHACAGEST (VIOLETA Y NARANJA) ---
+# --- 4. DISEÑO ---
 st.markdown("""
     <style>
     [data-testid="stSidebarNav"] { display: none; }
@@ -88,10 +88,11 @@ with st.sidebar:
     try: st.image("logo_path.png", use_container_width=True)
     except: pass
     st.markdown("---")
+    # Ponemos "CALENDARIO" al principio y default_index=0
     sel = option_menu(
         menu_title=None,
-        options=["CLIENTES", "CARGA VIAJE", "CALENDARIO", "AJUSTES (NC/ND)", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"],
-        icons=["people", "truck", "calendar3", "file-earmark-minus", "person-vcard", "globe", "file-text"],
+        options=["CALENDARIO", "CLIENTES", "CARGA VIAJE", "AJUSTES (NC/ND)", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"],
+        icons=["calendar3", "people", "truck", "file-earmark-minus", "person-vcard", "globe", "file-text"],
         default_index=0,
         styles={
             "container": {"background-color": "#f0f2f6"},
@@ -109,7 +110,52 @@ with st.sidebar:
 
 # --- 6. MÓDULOS ---
 
-if sel == "CLIENTES":
+if sel == "CALENDARIO":
+    st.header("📅 Agenda de Viajes")
+    
+    eventos = []
+    # Filtrar solo viajes cargados como factura
+    df_eventos = st.session_state.viajes[st.session_state.viajes['Tipo Comp'].str.contains("Factura", na=False)]
+    
+    for i, row in df_eventos.iterrows():
+        eventos.append({
+            "title": f"🚛 {row['Cliente']} ({row['Origen']})",
+            "start": str(row['Fecha Viaje']),
+            "end": str(row['Fecha Viaje']),
+            "resourceId": i,
+            "color": "#5e2d61",
+        })
+
+    cal_options = {
+        "editable": False,
+        "selectable": True,
+        "headerToolbar": {
+            "left": "prev,next today",
+            "center": "title",
+            "right": "dayGridMonth,listWeek",
+        },
+        "initialView": "dayGridMonth",
+        "locale": "es",
+        "height": 500, # <--- AQUÍ AJUSTAMOS EL TAMAÑO (más pequeño)
+    }
+    
+    # Mostrar el calendario
+    state = calendar(events=eventos, options=cal_options, key="viajes_cal")
+    
+    if state.get("eventClick"):
+        idx = int(state["eventClick"]["event"]["resourceId"])
+        v = df_eventos.loc[idx]
+        st.markdown(f"""
+        <div style="padding:10px; border-radius:10px; background-color:#f0f2f6; border-left: 5px solid #5e2d61;">
+            <h4>🔍 Detalle del Viaje</h4>
+            <b>Cliente:</b> {v['Cliente']}<br>
+            <b>Ruta:</b> {v['Origen']} a {v['Destino']}<br>
+            <b>Unidad:</b> {v['Patente / Móvil']}<br>
+            <b>Importe:</b> ${v['Importe']}<br>
+        </div>
+        """, unsafe_allow_html=True)
+
+elif sel == "CLIENTES":
     st.header("👤 Gestión de Clientes")
     with st.expander("➕ ALTA DE NUEVO CLIENTE", expanded=False):
         with st.form("f_cli", clear_on_submit=True):
@@ -156,40 +202,6 @@ elif sel == "CARGA VIAJE":
             st.session_state.viajes = pd.concat([st.session_state.viajes, nv], ignore_index=True)
             guardar_datos("viajes", st.session_state.viajes)
             st.success("Viaje registrado correctamente"); st.rerun()
-
-elif sel == "CALENDARIO":
-    st.header("📅 Agenda de Viajes Disponibles")
-    
-    # Preparar eventos para el calendario
-    eventos = []
-    # Filtrar solo lo que sea 'Factura' para no mezclar con NC/ND en el calendario visual
-    df_eventos = st.session_state.viajes[st.session_state.viajes['Tipo Comp'].str.contains("Factura", na=False)]
-    
-    for i, row in df_eventos.iterrows():
-        eventos.append({
-            "title": f"🚛 {row['Cliente']} | {row['Origen']}-{row['Destino']}",
-            "start": str(row['Fecha Viaje']),
-            "end": str(row['Fecha Viaje']),
-            "resourceId": i,
-            "color": "#5e2d61",
-        })
-
-    cal_options = {
-        "editable": False,
-        "selectable": True,
-        "headerToolbar": {
-            "left": "prev,next today",
-            "center": "title",
-            "right": "dayGridMonth,dayGridWeek,listWeek",
-        },
-        "initialView": "dayGridMonth",
-        "locale": "es",
-    }
-    
-    state = calendar(events=eventos, options=cal_options, key="viajes_cal")
-    
-    if state.get("eventClick"):
-        st.info(f"Detalle del Viaje: {state['eventClick']['event']['title']}")
 
 elif sel == "AJUSTES (NC/ND)":
     st.header("💳 Notas de Crédito / Débito")
