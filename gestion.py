@@ -5,6 +5,7 @@ from datetime import date
 import gspread
 from google.oauth2.service_account import Credentials
 from streamlit_option_menu import option_menu
+from streamlit_calendar import calendar  # <--- NUEVA LIBRERÍA
 
 # --- 1. CONFIGURACIÓN Y CONEXIÓN ---
 st.set_page_config(page_title="CHACAGEST - GESTIÓN TOTAL", page_icon="🚛", layout="wide")
@@ -29,11 +30,9 @@ def cargar_datos():
     try:
         sh = conectar_google()
         if sh is None: return None, None
-        
         ws_c = sh.worksheet("clientes")
         datos_c = ws_c.get_all_records()
         df_c = pd.DataFrame(datos_c) if datos_c else pd.DataFrame(columns=col_c)
-        
         ws_v = sh.worksheet("viajes")
         datos_v = ws_v.get_all_records()
         df_v = pd.DataFrame(datos_v) if datos_v else pd.DataFrame(columns=col_v)
@@ -81,7 +80,7 @@ if 'clientes' not in st.session_state or 'viajes' not in st.session_state:
     st.session_state.clientes = c if c is not None else pd.DataFrame(columns=["Razón Social", "CUIT / CUIL / DNI *", "Email", "Teléfono", "Dirección Fiscal", "Localidad", "Provincia", "Condición IVA", "Condición de Venta"])
     st.session_state.viajes = v if v is not None else pd.DataFrame(columns=["Fecha Carga", "Cliente", "Fecha Viaje", "Origen", "Destino", "Patente / Móvil", "Importe", "Tipo Comp", "Nro Comp Asoc"])
 
-# --- 4. DISEÑO ORIGINAL (VIOLETA Y NARANJA) ---
+# --- 4. DISEÑO ---
 st.markdown("""
     <style>
     [data-testid="stSidebarNav"] { display: none; }
@@ -102,8 +101,8 @@ with st.sidebar:
     st.markdown("---")
     sel = option_menu(
         menu_title=None,
-        options=["CLIENTES", "CARGA VIAJE", "AJUSTES (NC/ND)", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"],
-        icons=["people", "truck", "file-earmark-minus", "person-vcard", "globe", "file-text"],
+        options=["CLIENTES", "CARGA VIAJE", "CALENDARIO", "AJUSTES (NC/ND)", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"],
+        icons=["people", "truck", "calendar3", "file-earmark-minus", "person-vcard", "globe", "file-text"],
         default_index=0,
         styles={
             "container": {"background-color": "#f0f2f6"},
@@ -169,9 +168,50 @@ elif sel == "CARGA VIAJE":
             guardar_datos("viajes", st.session_state.viajes)
             st.success("Viaje registrado"); st.rerun()
 
+elif sel == "CALENDARIO":
+    st.header("📅 Calendario de Viajes")
+    
+    # Preparamos los eventos para el calendario
+    eventos = []
+    for _, row in st.session_state.viajes.iterrows():
+        if row['Tipo Comp'] != "NC" and row['Tipo Comp'] != "ND": # Solo viajes, no ajustes
+            eventos.append({
+                "title": f"🚛 {row['Cliente']}",
+                "start": str(row['Fecha Viaje']),
+                "end": str(row['Fecha Viaje']),
+                "resource": f"Destino: {row['Destino']} | Importe: ${row['Importe']}",
+                "color": "#f39c12", # Naranja ChacaGest
+            })
+
+    calendar_options = {
+        "headerToolbar": {
+            "left": "prev,next today",
+            "center": "title",
+            "right": "dayGridMonth,dayGridWeek",
+        },
+        "initialView": "dayGridMonth",
+        "selectable": True,
+    }
+    
+    # CSS para los colores del calendario
+    st.markdown("""
+        <style>
+        .fc-event { cursor: pointer; }
+        .fc-toolbar-title { color: #5e2d61 !important; }
+        .fc-button-primary { background-color: #5e2d61 !important; border: none !important; }
+        </style>
+        """, unsafe_allow_html=True)
+
+    cal = calendar(events=eventos, options=calendar_options)
+    
+    # Mostrar info detallada si se hace clic o se selecciona
+    if "eventClick" in cal:
+        st.info(f"**Detalle del Viaje:** {cal['eventClick']['event']['title']}")
+        st.write(f"📍 {cal['eventClick']['event']['extendedProps'].get('resource', 'Sin datos adicionales')}")
+
 elif sel == "AJUSTES (NC/ND)":
     st.header("💳 Notas de Crédito / Débito")
-    st.info("Nota: Las Notas de Crédito y Débito deben estar asociadas a un comprobante AFIP.")
+    st.info("Nota: Las NC y ND deben estar asociadas a un comprobante AFIP.")
     tipo = st.radio("Acción:", ["Nota de Crédito", "Nota de Débito"], horizontal=True)
     with st.form("f_nc"):
         cl = st.selectbox("Cliente", st.session_state.clientes['Razón Social'].unique() if not st.session_state.clientes.empty else [""])
@@ -185,7 +225,7 @@ elif sel == "AJUSTES (NC/ND)":
                 nc = pd.DataFrame([[date.today(), cl, date.today(), "AJUSTE", mot, "-", val, t_txt, nro_asoc]], columns=st.session_state.viajes.columns)
                 st.session_state.viajes = pd.concat([st.session_state.viajes, nc], ignore_index=True)
                 guardar_datos("viajes", st.session_state.viajes)
-                st.success("Ajuste cargado correctamente"); st.rerun()
+                st.success("Ajuste cargado"); st.rerun()
 
 elif sel == "CTA CTE INDIVIDUAL":
     st.header("📑 Cuenta Corriente por Cliente")
@@ -203,14 +243,12 @@ elif sel == "CTA CTE GENERAL":
 
 elif sel == "COMPROBANTES":
     st.header("📜 Historial de Comprobantes")
-    st.info("Desde aquí puede revisar y eliminar cargas erróneas.")
     if not st.session_state.viajes.empty:
-        # Recorremos el dataframe original para poder usar el índice real para el drop
         for i in reversed(st.session_state.viajes.index):
             row = st.session_state.viajes.loc[i]
             c1, c2, c3 = st.columns([0.2, 0.6, 0.1])
             c1.write(f"📅 {row['Fecha Viaje']}")
-            c2.write(f"👤 **{row['Cliente']}** | {row['Origen']} a {row['Destino']} | **${row['Importe']}** | {row['Tipo Comp']}")
+            c2.write(f"👤 **{row['Cliente']}** | {row['Origen']} a {row['Destino']} | **${row['Importe']}**")
             if c3.button("🗑️", key=f"del_{i}"):
                 st.session_state.viajes = st.session_state.viajes.drop(i)
                 guardar_datos("viajes", st.session_state.viajes)
