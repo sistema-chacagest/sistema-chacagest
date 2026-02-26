@@ -1,7 +1,7 @@
 streamlit
 pandas
-streamlit-option_menu
 gspread
 google-auth
-plotly
-fpdf2
+streamlit-option_menu
+fpdf
+streamlit-calendar
