@@ -1,0 +1,6 @@
+streamlit
+pandas
+gspread
+google-auth
+fpdf
+streamlit-option-menu
