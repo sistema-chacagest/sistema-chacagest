@@ -5,7 +5,6 @@ from datetime import date
 import gspread
 from google.oauth2.service_account import Credentials
 from streamlit_option_menu import option_menu
-from streamlit_calendar import calendar  # Nueva importación
 
 # --- 1. CONFIGURACIÓN Y CONEXIÓN ---
 st.set_page_config(page_title="CHACAGEST - GESTIÓN TOTAL", page_icon="🚛", layout="wide")
@@ -103,8 +102,8 @@ with st.sidebar:
     st.markdown("---")
     sel = option_menu(
         menu_title=None,
-        options=["CLIENTES", "CARGA VIAJE", "AJUSTES (NC/ND)", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES", "CALENDARIO"],
-        icons=["people", "truck", "file-earmark-minus", "person-vcard", "globe", "file-text", "calendar3"],
+        options=["CLIENTES", "CARGA VIAJE", "AJUSTES (NC/ND)", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"],
+        icons=["people", "truck", "file-earmark-minus", "person-vcard", "globe", "file-text"],
         default_index=0,
         styles={
             "container": {"background-color": "#f0f2f6"},
@@ -206,6 +205,7 @@ elif sel == "COMPROBANTES":
     st.header("📜 Historial de Comprobantes")
     st.info("Desde aquí puede revisar y eliminar cargas erróneas.")
     if not st.session_state.viajes.empty:
+        # Recorremos el dataframe original para poder usar el índice real para el drop
         for i in reversed(st.session_state.viajes.index):
             row = st.session_state.viajes.loc[i]
             c1, c2, c3 = st.columns([0.2, 0.6, 0.1])
@@ -216,48 +216,3 @@ elif sel == "COMPROBANTES":
                 guardar_datos("viajes", st.session_state.viajes)
                 st.rerun()
             st.divider()
-
-elif sel == "CALENDARIO":
-    st.header("📅 Agenda de Viajes")
-    
-    if not st.session_state.viajes.empty:
-        # Preparar eventos para el calendario
-        eventos = []
-        for _, row in st.session_state.viajes.iterrows():
-            # Filtramos para no mostrar ajustes de cuenta en el calendario, solo viajes reales
-            if row['Origen'] != "AJUSTE":
-                # Convertimos la fecha a string (YYYY-MM-DD)
-                f_viaje = str(row['Fecha Viaje'])
-                eventos.append({
-                    "title": f"{row['Cliente']} - {row['Destino']}",
-                    "start": f_viaje,
-                    "end": f_viaje,
-                    "resourceId": row['Patente / Móvil'],
-                    "backgroundColor": "#5e2d61",
-                    "borderColor": "#f39c12",
-                    "allDay": True,
-                    "extendedProps": {
-                        "origen": row['Origen'],
-                        "patente": row['Patente / Móvil']
-                    }
-                })
-
-        # Configuración del calendario
-        calendar_options = {
-            "headerToolbar": {
-                "left": "prev,next today",
-                "center": "title",
-                "right": "dayGridMonth,dayGridWeek,listMonth",
-            },
-            "initialView": "dayGridMonth",
-            "locale": "es",
-            "selectable": True,
-            "navLinks": True,
-        }
-
-        # Renderizar calendario
-        calendar(events=eventos, options=calendar_options, key="calendar_v")
-        
-        st.info("💡 Este calendario muestra los viajes planificados según su 'Fecha de Viaje'.")
-    else:
-        st.warning("No hay datos de viajes para mostrar en el calendario.")
