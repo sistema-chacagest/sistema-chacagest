@@ -6,6 +6,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 from streamlit_option_menu import option_menu
 from streamlit_calendar import calendar
+import base64 # Para la descarga del PDF
 
 # --- 1. CONFIGURACIÓN Y CONEXIÓN ---
 st.set_page_config(page_title="CHACAGEST - GESTIÓN TOTAL", page_icon="🚛", layout="wide")
@@ -56,6 +57,39 @@ def guardar_datos(nombre_hoja, df):
     except Exception as e:
         st.error(f"Error al guardar: {e}")
         return False
+
+# --- FUNCIÓN PARA GENERAR REPORTE (HTML/IMPRIMIBLE) ---
+def generar_html_resumen(cliente, df, saldo):
+    tabla_html = df.to_html(index=False, classes='tabla')
+    html = f"""
+    <html>
+    <head>
+        <style>
+            body {{ font-family: Arial, sans-serif; color: #333; }}
+            .header {{ background-color: #5e2d61; color: white; padding: 20px; text-align: center; border-radius: 10px; }}
+            .info {{ margin: 20px 0; font-size: 14px; }}
+            .tabla {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
+            .tabla th {{ background-color: #f39c12; color: white; padding: 10px; text-align: left; }}
+            .tabla td {{ border: 1px solid #ddd; padding: 8px; font-size: 12px; }}
+            .total {{ text-align: right; font-size: 18px; color: #5e2d61; font-weight: bold; margin-top: 20px; }}
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <h1>CHACAGEST - Resumen de Cuenta</h1>
+            <p>Fecha de emisión: {date.today()}</p>
+        </div>
+        <div class="info">
+            <p><b>Cliente:</b> {cliente}</p>
+        </div>
+        {tabla_html}
+        <div class="total">
+            SALDO TOTAL A LA FECHA: $ {saldo:,.2f}
+        </div>
+    </body>
+    </html>
+    """
+    return html
 
 # --- 2. LOGIN ---
 if "autenticado" not in st.session_state:
@@ -139,19 +173,16 @@ if sel == "CALENDARIO":
                 "title": f"🚛 {row['Cliente']}",
                 "start": str(row['Fecha Viaje']),
                 "allDay": True,
-                # Forzamos el color naranja del evento aquí mismo
                 "backgroundColor": "#f39c12",
                 "borderColor": "#d35400"
             })
 
-    # CONFIGURACIÓN TÉCNICA PARA CAMBIAR BOTONES Y COLORES
     cal_options = {
         "headerToolbar": {"left": "prev,next today", "center": "title", "right": "dayGridMonth"},
         "locale": "es",
         "height": 600,
     }
 
-    # ESTA ES LA LLAVE: Inyectamos CSS directamente al iframe del calendario
     custom_css = """
         .fc-button-primary {
             background-color: #5e2d61 !important;
@@ -263,8 +294,21 @@ elif sel == "CTA CTE INDIVIDUAL":
     st.header("📑 Cuenta Corriente por Cliente")
     if not st.session_state.clientes.empty:
         cl = st.selectbox("Seleccionar Cliente", st.session_state.clientes['Razón Social'].unique())
-        df_ind = st.session_state.viajes[st.session_state.viajes['Cliente'] == cl]
-        st.metric("SALDO TOTAL", f"$ {df_ind['Importe'].sum():,.2f}")
+        df_ind = st.session_state.viajes[st.session_state.viajes['Cliente'] == cl].copy()
+        
+        saldo_total = df_ind['Importe'].sum()
+        st.metric("SALDO TOTAL", f"$ {saldo_total:,.2f}")
+        
+        # --- BOTÓN DE IMPRESIÓN / PDF ---
+        html_reporte = generar_html_resumen(cl, df_ind, saldo_total)
+        st.download_button(
+            label="📄 DESCARGAR RESUMEN (PARA IMPRIMIR)",
+            data=html_reporte,
+            file_name=f"Resumen_{cl}_{date.today()}.html",
+            mime="text/html",
+        )
+        st.info("💡 Para imprimir: Abra el archivo descargado y presione Ctrl+P")
+        
         st.dataframe(df_ind, use_container_width=True)
 
 elif sel == "CTA CTE GENERAL":
