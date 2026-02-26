@@ -4,4 +4,4 @@ gspread
 google-auth
 streamlit-option_menu
 fpdf
-streamlit-calendar
+pip install streamlit-calendar
