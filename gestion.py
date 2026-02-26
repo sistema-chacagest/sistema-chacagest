@@ -10,7 +10,7 @@ from streamlit_option_menu import option_menu
 st.set_page_config(page_title="CHACAGEST - GESTIÓN TOTAL", page_icon="🚛", layout="wide")
 
 def conectar_google():
-    # Asegúrate de que el nombre del archivo en Google Drive sea exactamente "Base_Chacagest"
+    # El nombre debe coincidir EXACTAMENTE con tu archivo en Drive
     nombre_planilla = "Base_Chacagest" 
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     
@@ -22,7 +22,7 @@ def conectar_google():
         client = gspread.authorize(creds)
         return client.open(nombre_planilla)
     except Exception as e:
-        st.error(f"Error de conexión con Google Sheets: {e}")
+        st.error(f"Error de conexión: {e}")
         return None
 
 def cargar_datos():
@@ -31,22 +31,26 @@ def cargar_datos():
     
     try:
         sh = conectar_google()
-        if sh is None: return pd.DataFrame(columns=col_c), pd.DataFrame(columns=col_v)
+        if sh is None: return None, None # Retorno nulo para evitar sobrescribir con vacío
         
+        # Carga de Clientes
         ws_c = sh.worksheet("clientes")
         datos_c = ws_c.get_all_records()
         df_c = pd.DataFrame(datos_c) if datos_c else pd.DataFrame(columns=col_c)
         
+        # Carga de Viajes
         ws_v = sh.worksheet("viajes")
         datos_v = ws_v.get_all_records()
         df_v = pd.DataFrame(datos_v) if datos_v else pd.DataFrame(columns=col_v)
         
-        # Limpieza de datos numéricos
-        df_v['Importe'] = pd.to_numeric(df_v['Importe'], errors='coerce').fillna(0)
+        # Limpieza de datos numéricos para evitar errores en cálculos
+        if not df_v.empty:
+            df_v['Importe'] = pd.to_numeric(df_v['Importe'], errors='coerce').fillna(0)
+            
         return df_c, df_v
     except Exception as e:
-        st.warning(f"No se pudieron cargar datos (Hoja vacía o inexistente). Detalle: {e}")
-        return pd.DataFrame(columns=col_c), pd.DataFrame(columns=col_v)
+        st.error(f"Error crítico al leer las pestañas: {e}")
+        return None, None
 
 def guardar_datos(nombre_hoja, df):
     try:
@@ -55,16 +59,16 @@ def guardar_datos(nombre_hoja, df):
         ws = sh.worksheet(nombre_hoja)
         ws.clear()
         
-        # Preparamos los datos: encabezados + valores convertidos a string
+        # Convertimos todo a texto para asegurar compatibilidad con Google Sheets
         df_save = df.copy()
         for col in df_save.columns:
             df_save[col] = df_save[col].astype(str)
             
         datos = [df_save.columns.values.tolist()] + df_save.values.tolist()
-        ws.update(datos) # gspread v6+ detecta el rango automáticamente
+        ws.update(datos) 
         return True
     except Exception as e:
-        st.error(f"Error al guardar en '{nombre_hoja}': {e}")
+        st.error(f"Error al intentar guardar en la nube: {e}")
         return False
 
 # --- 2. LOGIN ---
@@ -85,11 +89,14 @@ if not st.session_state.autenticado:
             else: st.error("Acceso denegado")
     st.stop()
 
-# --- 3. INICIALIZACIÓN ---
+# --- 3. INICIALIZACIÓN DE DATOS (EVITA EL BORRADO ACCIDENTAL) ---
 if 'clientes' not in st.session_state or 'viajes' not in st.session_state:
-    st.session_state.clientes, st.session_state.viajes = cargar_datos()
+    c, v = cargar_datos()
+    # Si la carga falló, creamos estructuras vacías pero no sobreescribimos si ya existen
+    st.session_state.clientes = c if c is not None else pd.DataFrame(columns=["Razón Social", "CUIT / CUIL / DNI *", "Email", "Teléfono", "Dirección Fiscal", "Localidad", "Provincia", "Condición IVA", "Condición de Venta"])
+    st.session_state.viajes = v if v is not None else pd.DataFrame(columns=["Fecha Carga", "Cliente", "Fecha Viaje", "Origen", "Destino", "Patente / Móvil", "Importe", "Tipo Comp", "Nro Comp Asoc"])
 
-# --- 4. ESTILOS ---
+# --- 4. DISEÑO ---
 st.markdown("""
     <style>
     [data-testid="stSidebarNav"] { display: none; }
@@ -113,9 +120,19 @@ with st.sidebar:
         styles={"nav-link-selected": {"background-color": "#5e2d61"}}
     )
     st.markdown("---")
-    if st.button("🔄 Sincronizar Nube"):
-        st.session_state.clientes, st.session_state.viajes = cargar_datos()
-        st.rerun()
+    
+    # REPARACIÓN DEL BOTÓN SINCRONIZAR
+    if st.button("🔄 Sincronizar"):
+        with st.spinner("Actualizando datos..."):
+            c, v = cargar_datos()
+            if c is not None and v is not None:
+                st.session_state.clientes = c
+                st.session_state.viajes = v
+                st.success("Sincronización exitosa")
+                st.rerun()
+            else:
+                st.error("No se pudo conectar. Se mantienen los datos actuales.")
+
     if st.button("🚪 Cerrar Sesión"):
         st.session_state.autenticado = False
         st.rerun()
@@ -139,32 +156,22 @@ if sel == "CLIENTES":
             
             if st.form_submit_button("REGISTRAR CLIENTE"):
                 if r and cuit:
-                    # Crear nueva fila respetando columnas
                     nueva_fila = pd.DataFrame([[r, cuit, mail, tel, dir_f, loc, prov, c_iva, c_vta]], 
                                                columns=st.session_state.clientes.columns)
-                    # Actualizar sesión y Guardar
                     st.session_state.clientes = pd.concat([st.session_state.clientes, nueva_fila], ignore_index=True)
                     if guardar_datos("clientes", st.session_state.clientes):
-                        st.success("✅ Cliente guardado con éxito")
+                        st.success("✅ Cliente guardado en la nube")
                         st.rerun()
                 else:
-                    st.error("Razón Social y CUIT son obligatorios.")
+                    st.warning("Complete los campos obligatorios (*)")
 
     st.subheader("📋 Base de Clientes")
     st.dataframe(st.session_state.clientes, use_container_width=True)
-    
-    with st.expander("🗑️ ELIMINAR CLIENTE"):
-        lista_clientes = st.session_state.clientes['Razón Social'].tolist() if not st.session_state.clientes.empty else []
-        elim_c = st.selectbox("Seleccione cliente a borrar:", ["-"] + lista_clientes)
-        if st.button("BORRAR PERMANENTEMENTE") and elim_c != "-":
-            st.session_state.clientes = st.session_state.clientes[st.session_state.clientes['Razón Social'] != elim_c]
-            guardar_datos("clientes", st.session_state.clientes)
-            st.rerun()
 
 elif sel == "CARGA VIAJE":
     st.header("🚛 Registro de Viaje")
     if st.session_state.clientes.empty:
-        st.warning("Primero debe cargar clientes.")
+        st.warning("⚠️ Debe cargar clientes antes de registrar viajes.")
     else:
         with st.form("f_v"):
             cli = st.selectbox("Seleccionar Cliente", st.session_state.clientes['Razón Social'].unique())
@@ -186,18 +193,17 @@ elif sel == "CARGA VIAJE":
 
 elif sel == "AJUSTES (NC/ND)":
     st.header("💳 Notas de Crédito / Débito (AFIP)")
-    st.info("Nota: Las NC restan del saldo y las ND suman. Ambas deben asociarse a una factura.")
-    tipo = st.radio("Acción:", ["Nota de Crédito", "Nota de Débito"], horizontal=True)
+    tipo = st.radio("Seleccione el ajuste:", ["Nota de Crédito", "Nota de Débito"], horizontal=True)
     
     with st.form("f_nc"):
         cl = st.selectbox("Cliente", st.session_state.clientes['Razón Social'].unique())
-        nro_asoc = st.text_input("Nro Comprobante AFIP Asociado (Ej: 0001-00001234) *")
+        nro_asoc = st.text_input("Nro Comprobante AFIP Asociado *")
         mot = st.text_input("Motivo / Concepto")
         monto = st.number_input("Monto $", min_value=0.0)
         
         if st.form_submit_button("REGISTRAR AJUSTE"):
-            if nro_asoc:
-                # El importe de la NC es negativo para la cuenta corriente
+            if nro_asoc and monto > 0:
+                # NC resta saldo, ND suma saldo
                 val = -monto if "Crédito" in tipo else monto
                 t_txt = "NC" if "Crédito" in tipo else "ND"
                 
@@ -205,20 +211,21 @@ elif sel == "AJUSTES (NC/ND)":
                                   columns=st.session_state.viajes.columns)
                 st.session_state.viajes = pd.concat([st.session_state.viajes, nc], ignore_index=True)
                 if guardar_datos("viajes", st.session_state.viajes):
-                    st.success(f"{t_txt} vinculada al comp. {nro_asoc} guardada.")
+                    st.success(f"Se registró la {t_txt} asociada al comp. {nro_asoc}")
                     st.rerun()
             else:
-                st.error("Debe ingresar el comprobante asociado para AFIP.")
+                st.error("Debe indicar el Nro de Comprobante AFIP y el Monto.")
 
 elif sel == "CTA CTE INDIVIDUAL":
     st.header("📑 Cuenta Corriente por Cliente")
     if not st.session_state.clientes.empty:
         cl = st.selectbox("Seleccionar Cliente", st.session_state.clientes['Razón Social'].unique())
         df_ind = st.session_state.viajes[st.session_state.viajes['Cliente'] == cl]
-        st.metric("SALDO TOTAL", f"$ {df_ind['Importe'].sum():,.2f}")
+        saldo = df_ind['Importe'].sum()
+        st.metric("SALDO ACTUAL", f"$ {saldo:,.2f}")
         st.dataframe(df_ind, use_container_width=True)
     else:
-        st.warning("No hay clientes registrados.")
+        st.info("No hay clientes registrados.")
 
 elif sel == "CTA CTE GENERAL":
     st.header("🌎 Estado Global de Deudores")
@@ -226,18 +233,16 @@ elif sel == "CTA CTE GENERAL":
         res = st.session_state.viajes.groupby('Cliente')['Importe'].sum().reset_index()
         st.table(res.style.format({"Importe": "$ {:,.2f}"}))
     else:
-        st.info("No hay viajes o ajustes registrados.")
+        st.info("Sin registros de deudas.")
 
 elif sel == "COMPROBANTES":
-    st.header("📜 Historial de Comprobantes")
-    st.info("Revisión de cargas. Los registros se muestran del más nuevo al más viejo.")
+    st.header("📜 Historial de Cargas")
     if not st.session_state.viajes.empty:
-        # Mostramos una copia invertida para no alterar el índice original al borrar
         df_rev = st.session_state.viajes.copy().iloc[::-1]
         for i, row in df_rev.iterrows():
             c1, c2, c3 = st.columns([0.2, 0.6, 0.1])
             c1.write(f"📅 {row['Fecha Viaje']}")
-            c2.write(f"👤 **{row['Cliente']}** | {row['Tipo Comp']} | **${row['Importe']}** (Asoc: {row['Nro Comp Asoc']})")
+            c2.write(f"👤 **{row['Cliente']}** | {row['Tipo Comp']} | **${row['Importe']}**")
             if c3.button("🗑️", key=f"del_{i}"):
                 st.session_state.viajes = st.session_state.viajes.drop(i)
                 guardar_datos("viajes", st.session_state.viajes)
