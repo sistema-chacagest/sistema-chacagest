@@ -82,34 +82,44 @@ if 'clientes' not in st.session_state or 'viajes' not in st.session_state:
     st.session_state.clientes = c if c is not None else pd.DataFrame(columns=["Razón Social", "CUIT / CUIL / DNI *", "Email", "Teléfono", "Dirección Fiscal", "Localidad", "Provincia", "Condición IVA", "Condición de Venta"])
     st.session_state.viajes = v if v is not None else pd.DataFrame(columns=["Fecha Carga", "Cliente", "Fecha Viaje", "Origen", "Destino", "Patente / Móvil", "Importe", "Tipo Comp", "Nro Comp Asoc"])
 
-# --- 4. DISEÑO ORIGINAL Y AJUSTES DE CALENDARIO ---
-st.markdown("""
+# --- 4. CSS PERSONALIZADO (COLORES DEL MENÚ) ---
+st.markdown(f"""
     <style>
-    [data-testid="stSidebarNav"] { display: none; }
-    header { visibility: hidden; } 
-    h1, h2, h3 { color: #5e2d61 !important; }
-    div.stButton > button {
+    [data-testid="stSidebarNav"] {{ display: none; }}
+    header {{ visibility: hidden; }} 
+    h1, h2, h3 {{ color: #5e2d61 !important; }}
+    
+    /* Calendario: Colores que combinan con el menú #5e2d61 */
+    .fc-theme-standard td, .fc-theme-standard th {{ border: 1px solid #dcdde1 !important; }}
+    .fc .fc-button-primary {{
+        background-color: #5e2d61 !important;
+        border-color: #5e2d61 !important;
+        text-transform: capitalize;
+    }}
+    .fc .fc-button-primary:hover {{
+        background-color: #4a234d !important;
+    }}
+    .fc .fc-toolbar-title {{ color: #5e2d61 !important; font-weight: bold; }}
+    
+    /* Tamaño reducido */
+    .fc {{ max-width: 95% !important; margin: 0 auto; font-size: 0.8rem; }}
+    
+    div.stButton > button {{
         background: linear-gradient(to right, #f39c12, #d35400) !important;
         color: white !important; border-radius: 8px !important; border: none !important; font-weight: bold !important;
-    }
-    .stDataFrame { border: 1px solid #5e2d61; border-radius: 5px; }
-    
-    /* Ajuste de tamaño del calendario */
-    .fc { max-height: 600px !important; overflow: hidden; font-size: 0.85rem; }
-    .fc-toolbar-title { font-size: 1.2rem !important; color: #5e2d61 !important; }
-    .fc-button-primary { background-color: #5e2d61 !important; border: none !important; }
+    }}
     </style>
     """, unsafe_allow_html=True)
 
-# --- 5. SIDEBAR ---
+# --- 5. SIDEBAR (MENÚ CON CALENDARIO PRIMERO) ---
 with st.sidebar:
     try: st.image("logo_path.png", use_container_width=True)
     except: pass
     st.markdown("---")
     sel = option_menu(
         menu_title=None,
-        options=["CLIENTES", "CARGA VIAJE", "CALENDARIO", "AJUSTES (NC/ND)", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"],
-        icons=["people", "truck", "calendar3", "file-earmark-minus", "person-vcard", "globe", "file-text"],
+        options=["CALENDARIO", "CLIENTES", "CARGA VIAJE", "AJUSTES (NC/ND)", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"],
+        icons=["calendar3", "people", "truck", "file-earmark-minus", "person-vcard", "globe", "file-text"],
         default_index=0,
         styles={
             "container": {"background-color": "#f0f2f6"},
@@ -128,42 +138,51 @@ with st.sidebar:
         st.session_state.autenticado = False
         st.rerun()
 
-# --- 6. MÓDULOS ---
+# --- 6. MÓDULOS (CALENDARIO PRIMERO) ---
 
 if sel == "CALENDARIO":
     st.header("📅 Calendario de Viajes")
     
-    # Preparar eventos
     eventos = []
     for _, row in st.session_state.viajes.iterrows():
-        if row['Origen'] != "AJUSTE" and row['Fecha Viaje'] != "-":
-            color_ev = "#f39c12" if "Contado" in str(row['Tipo Comp']) else "#5e2d61"
-            
-            # Al pasar el mouse, FullCalendar usa el atributo 'title' como tooltip por defecto
-            info_completa = f"Origen: {row['Origen']} | Destino: {row['Destino']} | Patente: {row['Patente / Móvil']} | Importe: ${row['Importe']}"
+        # Filtramos para no mostrar filas de ajustes o sin fecha
+        if row['Origen'] != "AJUSTE" and row['Fecha Viaje'] != "-" and str(row['Fecha Viaje']).strip() != "":
+            # Info detallada que aparecerá al pasar el mouse
+            detalle = (f"🚚 Cliente: {row['Cliente']}\\n"
+                       f"📍 Origen: {row['Origen']}\\n"
+                       f"🏁 Destino: {row['Destino']}\\n"
+                       f"🆔 Patente: {row['Patente / Móvil']}\\n"
+                       f"💰 Importe: ${row['Importe']}")
             
             eventos.append({
-                "title": f"🚛 {row['Cliente']}",
+                "title": f"{row['Cliente']}",
                 "start": str(row['Fecha Viaje']),
                 "end": str(row['Fecha Viaje']),
-                "backgroundColor": color_ev,
-                "borderColor": color_ev,
+                "backgroundColor": "#5e2d61",
+                "borderColor": "#5e2d61",
+                "description": detalle,  # Esto se usa para el tooltip
                 "allDay": True,
-                "description": info_completa, # Atributo para info extra
-                "display": "block"
             })
 
     cal_options = {
-        "headerToolbar": {"left": "prev,next today", "center": "title", "right": "dayGridMonth,listWeek"},
+        "headerToolbar": {"left": "prev,next today", "center": "title", "right": "dayGridMonth,dayGridWeek"},
         "initialView": "dayGridMonth",
         "locale": "es",
-        "height": 550, # Altura reducida para que sea más pequeño
-        "eventMouseEnter": "function(info) { info.el.title = info.event.extendedProps.description; }" # Tooltip simple
+        "height": 500, # Tamaño más pequeño
+        "selectable": True,
     }
 
-    # Renderizar el calendario arriba
-    calendar(events=eventos, options=cal_options, key="calendar_top")
-    st.divider()
+    # El CSS y JS para el tooltip al pasar por encima
+    st.markdown("""
+        <script>
+        var elements = window.parent.document.querySelectorAll('.fc-event');
+        elements.forEach(element => {
+            element.title = element.innerText;
+        });
+        </script>
+    """, unsafe_allow_html=True)
+
+    calendar(events=eventos, options=cal_options, key="calendar_main")
 
 elif sel == "CLIENTES":
     st.header("👤 Gestión de Clientes")
@@ -186,13 +205,6 @@ elif sel == "CLIENTES":
 
     st.subheader("📋 Base de Clientes")
     st.dataframe(st.session_state.clientes, use_container_width=True)
-    
-    with st.expander("🗑️ ELIMINAR CLIENTE"):
-        elim_c = st.selectbox("Seleccione cliente a borrar:", ["-"] + list(st.session_state.clientes['Razón Social'].unique()))
-        if st.button("BORRAR PERMANENTEMENTE") and elim_c != "-":
-            st.session_state.clientes = st.session_state.clientes[st.session_state.clientes['Razón Social'] != elim_c]
-            guardar_datos("clientes", st.session_state.clientes)
-            st.rerun()
 
 elif sel == "CARGA VIAJE":
     st.header("🚛 Registro de Viaje")
@@ -244,7 +256,6 @@ elif sel == "CTA CTE GENERAL":
 
 elif sel == "COMPROBANTES":
     st.header("📜 Historial de Comprobantes")
-    st.info("Desde aquí puede revisar y eliminar cargas erróneas.")
     if not st.session_state.viajes.empty:
         for i in reversed(st.session_state.viajes.index):
             row = st.session_state.viajes.loc[i]
