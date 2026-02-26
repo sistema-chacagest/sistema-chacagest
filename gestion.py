@@ -90,13 +90,9 @@ def generar_html_resumen(cliente, df, saldo):
     """
     return html
 
-# --- 2. LOGIN Y ESTADOS DE NAVEGACIÓN ---
+# --- 2. LOGIN ---
 if "autenticado" not in st.session_state:
     st.session_state.autenticado = False
-if "seccion_activa" not in st.session_state:
-    st.session_state.seccion_activa = "CALENDARIO"
-if "ventas_expandido" not in st.session_state:
-    st.session_state.ventas_expandido = False
 
 if not st.session_state.autenticado:
     col1, col2, col3 = st.columns([1, 1, 1])
@@ -119,81 +115,84 @@ if 'clientes' not in st.session_state or 'viajes' not in st.session_state:
     st.session_state.clientes = c if c is not None else pd.DataFrame(columns=["Razón Social", "CUIT / CUIL / DNI *", "Email", "Teléfono", "Dirección Fiscal", "Localidad", "Provincia", "Condición IVA", "Condición de Venta"])
     st.session_state.viajes = v if v is not None else pd.DataFrame(columns=["Fecha Carga", "Cliente", "Fecha Viaje", "Origen", "Destino", "Patente / Móvil", "Importe", "Tipo Comp", "Nro Comp Asoc"])
 
-# --- 4. DISEÑO ORIGINAL MEJORADO PARA MENÚ ---
+if 'menu_ventas_open' not in st.session_state:
+    st.session_state.menu_ventas_open = False
+if 'pagina_actual' not in st.session_state:
+    st.session_state.pagina_actual = "CALENDARIO"
+
+# --- 4. DISEÑO ORIGINAL ---
 st.markdown("""
     <style>
     [data-testid="stSidebarNav"] { display: none; }
     header { visibility: hidden; } 
     h1, h2, h3 { color: #5e2d61 !important; }
-    
-    /* Botones de acción principales (Naranja) */
     div.stButton > button {
-        background: linear-gradient(to right, #f39c12, #d35400);
-        color: white; border-radius: 8px; border: none; font-weight: bold;
+        background: linear-gradient(to right, #f39c12, #d35400) !important;
+        color: white !important; border-radius: 8px !important; border: none !important; font-weight: bold !important;
     }
-
-    /* Estilo para los botones del menú lateral */
-    .stSidebar [data-testid="stVerticalBlock"] .stButton button {
-        background: transparent !important;
+    .stDataFrame { border: 1px solid #5e2d61; border-radius: 5px; }
+    
+    /* Estilos específicos para el Sidebar de navegación */
+    .sidebar-btn button {
+        background: none !important;
         color: #333 !important;
         border: none !important;
         text-align: left !important;
         width: 100% !important;
-        padding: 5px 10px !important;
+        padding-left: 10px !important;
         font-weight: normal !important;
-        font-size: 15px !important;
     }
-    .stSidebar [data-testid="stVerticalBlock"] .stButton button:hover {
+    .sidebar-btn button:hover {
         background-color: #f0f2f6 !important;
         color: #5e2d61 !important;
     }
-    
-    /* Resaltar sección activa */
-    .stSidebar [data-testid="stVerticalBlock"] .stButton button:active,
-    .stSidebar [data-testid="stVerticalBlock"] .stButton button:focus {
-        box-shadow: none !important;
+    .submenu-btn button {
+        background: none !important;
+        color: #666 !important;
+        border: none !important;
+        text-align: left !important;
+        width: 100% !important;
+        padding-left: 30px !important;
+        font-size: 14px !important;
     }
-
-    .stDataFrame { border: 1px solid #5e2d61; border-radius: 5px; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 5. SIDEBAR (NUEVA ESTRUCTURA) ---
+# --- 5. SIDEBAR (ACORDEÓN) ---
 with st.sidebar:
     try: st.image("logo_path.png", use_container_width=True)
     except: pass
     st.markdown("---")
     
-    # CALENDARIO ARRIBA DE TODO FIJO
-    if st.button("📅 CALENDARIO"):
-        st.session_state.seccion_activa = "CALENDARIO"
+    # CALENDARIO FIJO ARRIBA
+    if st.button("📅 CALENDARIO", key="nav_cal"):
+        st.session_state.pagina_actual = "CALENDARIO"
         st.rerun()
-    
+
     # MODULO VENTAS (DESPLEGABLE)
-    flecha = "🔼" if st.session_state.ventas_expandido else "🔽"
-    if st.button(f"💰 VENTAS {flecha}"):
-        st.session_state.ventas_expandido = not st.session_state.ventas_expandido
+    if st.button("💰 VENTAS", key="nav_ventas"):
+        st.session_state.menu_ventas_open = not st.session_state.menu_ventas_open
         st.rerun()
-    
-    # SUBMENÚ DE VENTAS
-    if st.session_state.ventas_expandido:
-        if st.button("    _ CLIENTES"):
-            st.session_state.seccion_activa = "CLIENTES"
+
+    # CONTENIDO DEL ACORDEÓN
+    if st.session_state.menu_ventas_open:
+        if st.button("   _ CLIENTES"):
+            st.session_state.pagina_actual = "CLIENTES"
             st.rerun()
-        if st.button("    _ CARGA DE VIAJE"):
-            st.session_state.seccion_activa = "CARGA VIAJE"
+        if st.button("   _ CARGA DE VIAJE"):
+            st.session_state.pagina_actual = "CARGA VIAJE"
             st.rerun()
-        if st.button("    _ AJUSTE NC/ND"):
-            st.session_state.seccion_activa = "AJUSTES (NC/ND)"
+        if st.button("   _ AJUSTE NC/ND"):
+            st.session_state.pagina_actual = "AJUSTES (NC/ND)"
             st.rerun()
-        if st.button("    _ CTA CTE INDIVIDUAL"):
-            st.session_state.seccion_activa = "CTA CTE INDIVIDUAL"
+        if st.button("   _ CTA CTE INDIVIDUAL"):
+            st.session_state.pagina_actual = "CTA CTE INDIVIDUAL"
             st.rerun()
-        if st.button("    _ CTA CTE GENERAL"):
-            st.session_state.seccion_activa = "CTA CTE GENERAL"
+        if st.button("   _ CTA CTE GENERAL"):
+            st.session_state.pagina_actual = "CTA CTE GENERAL"
             st.rerun()
-        if st.button("    _ COMPROBANTES"):
-            st.session_state.seccion_activa = "COMPROBANTES"
+        if st.button("   _ COMPROBANTES"):
+            st.session_state.pagina_actual = "COMPROBANTES"
             st.rerun()
 
     st.markdown("---")
@@ -208,7 +207,7 @@ with st.sidebar:
         st.rerun()
 
 # --- 6. MÓDULOS ---
-sel = st.session_state.seccion_activa
+sel = st.session_state.pagina_actual
 
 if sel == "CALENDARIO":
     st.header("📅 Agenda de Viajes")
@@ -235,22 +234,10 @@ if sel == "CALENDARIO":
     }
 
     custom_css = """
-        .fc-button-primary {
-            background-color: #5e2d61 !important;
-            border-color: #5e2d61 !important;
-            color: white !important;
-        }
-        .fc-button-primary:hover {
-            background-color: #f39c12 !important;
-            border-color: #f39c12 !important;
-        }
-        .fc-event {
-            background-color: #f39c12 !important;
-            border: none !important;
-        }
-        .fc-toolbar-title {
-            color: #5e2d61 !important;
-        }
+        .fc-button-primary { background-color: #5e2d61 !important; border-color: #5e2d61 !important; color: white !important; }
+        .fc-button-primary:hover { background-color: #f39c12 !important; border-color: #f39c12 !important; }
+        .fc-event { background-color: #f39c12 !important; border: none !important; }
+        .fc-toolbar-title { color: #5e2d61 !important; }
     """
 
     res_cal = calendar(events=eventos, options=cal_options, custom_css=custom_css, key="cal_final")
@@ -262,7 +249,6 @@ if sel == "CALENDARIO":
         idx = st.session_state.viaje_ver
         if idx in st.session_state.viajes.index:
             v_det = st.session_state.viajes.loc[idx]
-            
             if st.button("❌ Cerrar Información"):
                 st.session_state.viaje_ver = None
                 st.rerun()
@@ -318,7 +304,7 @@ elif sel == "CARGA VIAJE":
         imp = st.number_input("Importe Neto $", min_value=0.0)
         cond = st.selectbox("Tipo de Pago", ["Cuenta Corriente", "Contado"])
         if st.form_submit_button("GUARDAR VIAJE"):
-            nv = pd.DataFrame([[date.today(), cli, f_v, orig, dest, pat, imp, f"Factura ({cond})", "-"]], columns=st.session_state.viajes.columns)
+            nv = pd.DataFrame([[date.today(), cli, f_v, origin, dest, pat, imp, f"Factura ({cond})", "-"]], columns=st.session_state.viajes.columns)
             st.session_state.viajes = pd.concat([st.session_state.viajes, nv], ignore_index=True)
             guardar_datos("viajes", st.session_state.viajes)
             st.success("Viaje registrado"); st.rerun()
@@ -346,20 +332,11 @@ elif sel == "CTA CTE INDIVIDUAL":
     if not st.session_state.clientes.empty:
         cl = st.selectbox("Seleccionar Cliente", st.session_state.clientes['Razón Social'].unique())
         df_ind = st.session_state.viajes[st.session_state.viajes['Cliente'] == cl].copy()
-        
         saldo_total = df_ind['Importe'].sum()
         st.metric("SALDO TOTAL", f"$ {saldo_total:,.2f}")
-        
-        # --- BOTÓN DE IMPRESIÓN / PDF ---
         html_reporte = generar_html_resumen(cl, df_ind, saldo_total)
-        st.download_button(
-            label="📄 DESCARGAR RESUMEN (PARA IMPRIMIR)",
-            data=html_reporte,
-            file_name=f"Resumen_{cl}_{date.today()}.html",
-            mime="text/html",
-        )
+        st.download_button(label="📄 DESCARGAR RESUMEN (PARA IMPRIMIR)", data=html_reporte, file_name=f"Resumen_{cl}_{date.today()}.html", mime="text/html")
         st.info("💡 Para imprimir: Abra el archivo descargado y presione Ctrl+P")
-        
         st.dataframe(df_ind, use_container_width=True)
 
 elif sel == "CTA CTE GENERAL":
@@ -370,7 +347,6 @@ elif sel == "CTA CTE GENERAL":
 
 elif sel == "COMPROBANTES":
     st.header("📜 Historial de Comprobantes")
-    st.info("Desde aquí puede revisar y eliminar cargas erróneas.")
     if not st.session_state.viajes.empty:
         for i in reversed(st.session_state.viajes.index):
             row = st.session_state.viajes.loc[i]
