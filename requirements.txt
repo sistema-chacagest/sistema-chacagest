@@ -1,6 +1,7 @@
-pandas
 streamlit
-streamlit-option_menu
-streamlit-calendar
+pandas
+pandas-ta
+fpdf
 gspread
+streamlit-option-menu
 google-auth
