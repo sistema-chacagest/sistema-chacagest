@@ -1,7 +1,6 @@
-streamlit
 pandas
+streamlit
+streamlit-option_menu
+streamlit-calendar
 gspread
 google-auth
-streamlit-option_menu
-fpdf
-pip install streamlit-calendar
