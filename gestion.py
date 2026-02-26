@@ -75,6 +75,7 @@ if not st.session_state.autenticado:
 if 'clientes' not in st.session_state or 'viajes' not in st.session_state:
     st.session_state.clientes, st.session_state.viajes = cargar_datos_seguro()
 
+# Estilos visuales
 st.markdown("""
     <style>
     [data-testid="stSidebarNav"] { display: none; }
@@ -84,30 +85,34 @@ st.markdown("""
         background: linear-gradient(to right, #f39c12, #d35400) !important;
         color: white !important; border-radius: 8px !important; border: none !important; font-weight: bold !important;
     }
+    /* Estilo para que el expander de ventas se vea como parte del menú */
+    .stExpander { border: none !important; box-shadow: none !important; background-color: transparent !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 4. SIDEBAR JERÁRQUICO ---
+# --- 4. SIDEBAR CON MENÚ DESPLEGABLE ---
 with st.sidebar:
     try: st.image("logo_path.png", use_container_width=True)
     except: pass
     st.markdown("---")
     
-    # Selector de Módulo Principal
-    modulo = option_menu(None, ["VENTAS", "COMPRAS (Próximamente)"], 
-                         icons=["cash-stack", "cart-check"], 
-                         menu_icon="cast", default_index=0,
-                         styles={"nav-link-selected": {"background-color": "#5e2d61"}})
+    # ESTE ES EL DESPLEGABLE QUE PEDISTE
+    with st.expander("💰 VENTAS", expanded=True):
+        accion = option_menu(
+            menu_title=None,
+            options=["Clientes", "Carga de Viaje", "Ajustes (NC/ND)", "Cta Cte Individual", "Cta Cte General", "Historial"],
+            icons=["people", "truck", "file-earmark-minus", "person-vcard", "globe", "file-text"],
+            menu_icon="cast", 
+            default_index=0,
+            styles={
+                "container": {"padding": "0!important", "background-color": "transparent"},
+                "nav-link": {"font-size": "13px", "text-align": "left", "margin":"0px"},
+                "nav-link-selected": {"background-color": "#5e2d61"},
+            }
+        )
     
-    # Desplegable interno para VENTAS
-    if modulo == "VENTAS":
-        st.markdown("### 📊 Menú de Ventas")
-        accion = st.selectbox("Seleccione una operación:", 
-                              ["Clientes", "Carga de Viaje", "Ajustes (NC/ND)", 
-                               "Cta Cte Individual", "Cta Cte General", "Historial de Comprobantes"])
-    else:
-        st.info("Módulo en desarrollo...")
-        accion = None
+    st.markdown("### 🛒 COMPRAS")
+    st.caption("Próximamente disponible...")
 
     st.markdown("---")
     if st.button("🔄 Sincronizar"):
@@ -156,7 +161,7 @@ elif accion == "Carga de Viaje":
         pat = c2.text_input("Patente / Móvil")
         orig = st.text_input("Origen"); dest = st.text_input("Destino")
         imp = st.number_input("Importe Neto $", min_value=0.0)
-        cond = st.selectbox("Tipo de Pago", ["Cuenta Corriente", "Contado"])
+        cond = st.selectbox("Tipo de Operación", ["Cuenta Corriente", "Contado"])
         if st.form_submit_button("GUARDAR VIAJE"):
             nv = pd.DataFrame([[date.today(), cli, f_v, orig, dest, pat, imp, f"Factura ({cond})", "-"]], columns=st.session_state.viajes.columns)
             st.session_state.viajes = pd.concat([st.session_state.viajes, nv], ignore_index=True)
@@ -165,6 +170,7 @@ elif accion == "Carga de Viaje":
 
 elif accion == "Ajustes (NC/ND)":
     st.header("💳 Notas de Crédito / Débito")
+    # Blindaje nota de crédito según tus instrucciones de AFIP
     tipo = st.radio("Acción:", ["Nota de Crédito", "Nota de Débito"], horizontal=True)
     with st.form("f_nc"):
         cl = st.selectbox("Cliente", st.session_state.clientes['Razón Social'].unique())
@@ -172,17 +178,18 @@ elif accion == "Ajustes (NC/ND)":
         mot = st.text_input("Motivo")
         monto = st.number_input("Monto $", min_value=0.0)
         if st.form_submit_button("REGISTRAR"):
-            val = -monto if "Crédito" in tipo else monto
-            nc = pd.DataFrame([[date.today(), cl, date.today(), "AJUSTE", mot, "-", val, "NC/ND", nro_asoc]], columns=st.session_state.viajes.columns)
-            st.session_state.viajes = pd.concat([st.session_state.viajes, nc], ignore_index=True)
-            guardar_datos_blindado("viajes", st.session_state.viajes)
-            st.success("Ajuste registrado"); st.rerun()
+            if nro_asoc:
+                val = -monto if "Crédito" in tipo else monto
+                nc = pd.DataFrame([[date.today(), cl, date.today(), "AJUSTE", mot, "-", val, "NC/ND", nro_asoc]], columns=st.session_state.viajes.columns)
+                st.session_state.viajes = pd.concat([st.session_state.viajes, nc], ignore_index=True)
+                guardar_datos_blindado("viajes", st.session_state.viajes)
+                st.success("Ajuste registrado correctamente"); st.rerun()
 
 elif accion == "Cta Cte Individual":
     st.header("📑 Cuenta Corriente")
-    cl = st.selectbox("Cliente", st.session_state.clientes['Razón Social'].unique())
+    cl = st.selectbox("Seleccione Cliente", st.session_state.clientes['Razón Social'].unique())
     df_ind = st.session_state.viajes[st.session_state.viajes['Cliente'] == cl]
-    st.metric("SALDO TOTAL", f"$ {pd.to_numeric(df_ind['Importe']).sum():,.2f}")
+    st.metric("SALDO TOTAL", f"$ {df_ind['Importe'].sum():,.2f}")
     st.dataframe(df_ind, use_container_width=True)
 
 elif accion == "Cta Cte General":
@@ -190,8 +197,8 @@ elif accion == "Cta Cte General":
     res = st.session_state.viajes.groupby('Cliente')['Importe'].sum().reset_index()
     st.table(res.style.format({"Importe": "$ {:,.2f}"}))
 
-elif accion == "Historial de Comprobantes":
-    st.header("📜 Historial")
+elif accion == "Historial":
+    st.header("📜 Historial de Comprobantes")
     for i, row in st.session_state.viajes.iloc[::-1].iterrows():
         c1, c2, c3 = st.columns([0.2, 0.7, 0.1])
         c1.write(f"📅 {row['Fecha Viaje']}")
