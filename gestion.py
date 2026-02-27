@@ -206,15 +206,17 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 5. SIDEBAR ---
+# --- 5. SIDEBAR (NUEVO ORDEN) ---
 with st.sidebar:
     try: st.image("logo_path.png", use_container_width=True)
     except: pass
     st.markdown("---")
+    
+    # Menú Principal
     sel = option_menu(
         menu_title=None,
-        options=["CALENDARIO", "CLIENTES", "CARGA VIAJE", "PRESUPUESTOS", "TESORERIA", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"],
-        icons=["calendar3", "people", "truck", "file-earmark-spreadsheet", "safe", "person-vcard", "globe", "file-text"],
+        options=["CALENDARIO", "VENTAS", "TESORERIA", "COMPROBANTES"],
+        icons=["calendar3", "cart4", "safe", "file-text"],
         default_index=0,
         styles={
             "container": {"background-color": "#f0f2f6"},
@@ -222,6 +224,23 @@ with st.sidebar:
             "nav-link-selected": {"background-color": "#5e2d61"},
         }
     )
+
+    # Submenú Ventas (Desplegable Acordeón)
+    sub_sel = None
+    if sel == "VENTAS":
+        with st.expander("📂 OPCIONES DE VENTAS", expanded=True):
+            sub_sel = option_menu(
+                menu_title=None,
+                options=["CLIENTES", "CARGA VIAJE", "PRESUPUESTOS", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL"],
+                icons=["people", "truck", "file-earmark-spreadsheet", "person-vcard", "globe"],
+                default_index=0,
+                styles={
+                    "container": {"background-color": "transparent"},
+                    "nav-link": {"font-size": "13px", "text-align": "left"},
+                    "nav-link-selected": {"background-color": "#f39c12"},
+                }
+            )
+
     st.markdown("---")
     if st.button("🔄 Sincronizar"):
         with st.spinner("Sincronizando..."):
@@ -233,9 +252,14 @@ with st.sidebar:
         st.session_state.autenticado = False
         st.rerun()
 
-# --- 6. MÓDULOS ---
+# --- 6. LÓGICA DE NAVEGACIÓN ---
 
-if sel == "CALENDARIO":
+# Redirección de submenú a variable principal para mantener las funciones intactas
+actual_page = sub_sel if sel == "VENTAS" else sel
+
+# --- MÓDULOS ---
+
+if actual_page == "CALENDARIO":
     st.header("📅 Agenda de Viajes")
     if "viaje_ver" not in st.session_state:
         st.session_state.viaje_ver = None
@@ -267,7 +291,7 @@ if sel == "CALENDARIO":
                 <h4 style="color: #5e2d61; margin: 0;">Detalles</h4><p><b>Cliente:</b> {v_det['Cliente']}</p><p><b>Ruta:</b> {v_det['Origen']} ➔ {v_det['Destino']}</p>
                 <p><b>Importe:</b> $ {v_det['Importe']}</p></div>""", unsafe_allow_html=True)
 
-elif sel == "CLIENTES":
+elif actual_page == "CLIENTES":
     st.header("👤 Gestión de Clientes")
     with st.expander("➕ ALTA DE NUEVO CLIENTE", expanded=False):
         with st.form("f_cli", clear_on_submit=True):
@@ -328,7 +352,7 @@ elif sel == "CLIENTES":
     else:
         st.info("No hay clientes registrados.")
 
-elif sel == "CARGA VIAJE":
+elif actual_page == "CARGA VIAJE":
     st.header("🚛 Registro de Viaje")
     with st.form("f_v"):
         cli = st.selectbox("Seleccionar Cliente", st.session_state.clientes['Razón Social'].unique() if not st.session_state.clientes.empty else [""])
@@ -346,7 +370,7 @@ elif sel == "CARGA VIAJE":
             st.success("Viaje registrado")
             st.rerun()
 
-elif sel == "PRESUPUESTOS":
+elif actual_page == "PRESUPUESTOS":
     st.header("📝 Gestión de Presupuestos")
     tab_crear, tab_historial = st.tabs(["🆕 Crear Presupuesto", "📂 Historial y Descargas"])
     with tab_crear:
@@ -384,7 +408,7 @@ elif sel == "PRESUPUESTOS":
                     st.divider()
         else: st.info("No hay presupuestos registrados.")
 
-elif sel == "TESORERIA":
+elif actual_page == "TESORERIA":
     st.header("💰 Tesorería")
     opc_cajas = ["CAJA COTI", "CAJA TATO", "BANCO GALICIA", "BANCO PROVINCIA", "BANCO SUPERVIELLE"]
     t1, t2, t3, t4, t5 = st.tabs(["📥 INGRESOS VARIOS", "📤 EGRESOS VARIOS", "🧾 COBRANZA VIAJE", "📊 VER MOVIMIENTOS", "🔄 TRASPASO"])
@@ -426,7 +450,6 @@ elif sel == "TESORERIA":
             btn_cobro = st.form_submit_button("GENERAR COBRANZA")
         
         if btn_cobro:
-            # Impacto en Tesorería y en Viajes (Cta Cte)
             nt = pd.DataFrame([[date.today(), "COBRANZA", cj, "Cobro Viaje", c_sel, mon, afip]], columns=st.session_state.tesoreria.columns)
             nv = pd.DataFrame([[date.today(), c_sel, date.today(), "PAGO", "TESORERIA", "-", -mon, "RECIBO", afip]], columns=st.session_state.viajes.columns)
             
@@ -458,7 +481,7 @@ elif sel == "TESORERIA":
             st.success("Traspaso realizado")
             st.rerun()
 
-elif sel == "CTA CTE INDIVIDUAL":
+elif actual_page == "CTA CTE INDIVIDUAL":
     st.header("📑 Cuenta Corriente por Cliente")
     if not st.session_state.clientes.empty:
         cl = st.selectbox("Seleccionar Cliente", st.session_state.clientes['Razón Social'].unique())
@@ -468,14 +491,14 @@ elif sel == "CTA CTE INDIVIDUAL":
         st.download_button(label="📄 DESCARGAR RESUMEN", data=html_reporte, file_name=f"Resumen_{cl}.html", mime="text/html")
         st.dataframe(df_ind, use_container_width=True)
 
-elif sel == "CTA CTE GENERAL":
+elif actual_page == "CTA CTE GENERAL":
     st.header("🌎 Estado Global de Deudores")
     if not st.session_state.viajes.empty:
         res = st.session_state.viajes.groupby('Cliente')['Importe'].sum().reset_index()
         res = res[res['Importe'].round(2) != 0]
         st.table(res.style.format({"Importe": "$ {:,.2f}"}))
 
-elif sel == "COMPROBANTES":
+elif actual_page == "COMPROBANTES":
     st.header("📜 Historial de Comprobantes")
     if not st.session_state.viajes.empty:
         for i in reversed(st.session_state.viajes.index):
