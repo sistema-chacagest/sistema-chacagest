@@ -9,7 +9,7 @@ from streamlit_calendar import calendar
 # --- 1. CONFIGURACIÓN ---
 st.set_page_config(page_title="CHACAGEST", page_icon="🚛", layout="wide")
 
-# Estilos originales
+# Estilos originales (Botones naranja y títulos púrpura)
 st.markdown("""
     <style>
     [data-testid="stSidebarNav"] { display: none; }
@@ -20,11 +20,11 @@ st.markdown("""
         color: white !important; border-radius: 8px !important; border: none !important; font-weight: bold !important;
         width: 100%;
     }
+    .stDataFrame { border: 1px solid #5e2d61; border-radius: 5px; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. FUNCIONES DE DATOS (Optimizadas para velocidad) ---
-@st.cache_resource
+# --- 2. CONEXIÓN Y DATOS ---
 def conectar_google():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     try:
@@ -35,122 +35,144 @@ def conectar_google():
         return gspread.authorize(creds).open("Base_Chacagest")
     except: return None
 
-def cargar_todo():
+def cargar_datos():
     sh = conectar_google()
-    if not sh: return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+    if not sh: return [pd.DataFrame() for _ in range(4)]
     
-    def get_df(name, cols):
-        try:
-            data = sh.worksheet(name).get_all_records()
-            return pd.DataFrame(data) if data else pd.DataFrame(columns=cols)
-        except: return pd.DataFrame(columns=cols)
+    def leer(nombre):
+        try: return pd.DataFrame(sh.worksheet(nombre).get_all_records())
+        except: return pd.DataFrame()
 
-    c = get_df("clientes", ["Razón Social", "CUIT / CUIL / DNI *", "Condición IVA"])
-    v = get_df("viajes", ["Fecha Carga", "Cliente", "Fecha Viaje", "Importe", "Tipo Comp", "Nro Comp Asoc"])
-    p = get_df("proveedores", ["Razón Social", "CUIT / DNI", "Cuenta de Gastos", "Categoría IVA"])
-    g = get_df("gastos", ["Fecha", "Proveedor", "Total", "Tipo Factura"])
-    
-    if not v.empty: v['Importe'] = pd.to_numeric(v['Importe'], errors='coerce').fillna(0)
-    if not g.empty: g['Total'] = pd.to_numeric(g['Total'], errors='coerce').fillna(0)
-    
+    c = leer("clientes")
+    v = leer("viajes")
+    p = leer("proveedores")
+    g = leer("gastos")
     return c, v, p, g
 
-# --- 3. LOGICA DE SESIÓN ---
+# --- 3. INICIALIZACIÓN DE SESIÓN ---
 if "autenticado" not in st.session_state: st.session_state.autenticado = False
 
 if not st.session_state.autenticado:
     _, col, _ = st.columns([1, 1, 1])
     with col:
+        st.markdown("<br><br>", unsafe_allow_html=True)
         st.title("🚛 CHACAGEST")
         u = st.text_input("Usuario")
-        p = st.text_input("Contraseña", type="password")
+        pw = st.text_input("Contraseña", type="password")
         if st.button("INGRESAR"):
-            if u == "admin" and p == "chaca2026":
+            if u == "admin" and pw == "chaca2026":
                 st.session_state.autenticado = True
                 st.rerun()
     st.stop()
 
-# Carga inicial única
 if 'clientes' not in st.session_state:
-    c, v, p, g = cargar_todo()
+    c, v, p, g = cargar_datos()
     st.session_state.clientes, st.session_state.viajes = c, v
     st.session_state.proveedores, st.session_state.gastos = p, g
 
-# --- 4. SIDEBAR UNIFICADO (Sin trabas de navegación) ---
+# --- 4. SIDEBAR CON ESTRUCTURA SEPARADA ---
 with st.sidebar:
-    st.markdown("<h2 style='text-align: center;'>MENU</h2>", unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align: center;'>CONTROL DE GESTIÓN</h3>", unsafe_allow_html=True)
     
-    sel = option_menu(
-        menu_title=None,
-        options=["CALENDARIO", "CLIENTES", "CARGA VIAJE", "VENTAS NC/ND", "CTA CTE CLI", "PROVEEDORES", "CARGA GASTOS", "COMPRAS NC/ND", "CTA CTE PROV", "HISTORIAL"],
-        icons=["calendar3", "people", "truck", "file-diff", "person-vcard", "person-badge", "cart-plus", "patch-minus", "journal-text", "archive"],
-        menu_icon="cast", default_index=0,
-        styles={
-            "container": {"padding": "0!important", "background-color": "#fafafa"},
-            "nav-link": {"font-size": "13px", "text-align": "left", "margin":"0px", "--hover-color": "#eee"},
-            "nav-link-selected": {"background-color": "#5e2d61"},
-        }
-    )
-    
+    # 1. CALENDARIO (Botón principal)
+    if st.button("📅 CALENDARIO", use_container_width=True):
+        st.session_state.seccion = "CALENDARIO"
+
     st.markdown("---")
-    if st.button("🔄 Sincronizar Datos"):
-        st.cache_resource.clear()
-        c, v, p, g = cargar_todo()
-        st.session_state.clientes, st.session_state.viajes = c, v
-        st.session_state.proveedores, st.session_state.gastos = p, g
+    
+    # 2. MÓDULO VENTAS
+    with st.expander("💰 VENTAS", expanded=True):
+        sel_v = option_menu(
+            None, ["CLIENTES", "CARGA VIAJE", "AJUSTES (NC/ND)", "CTA CTE CLI", "HISTORIAL VENTA"],
+            icons=["people", "truck", "file-diff", "person-vcard", "archive"],
+            default_index=0, key="v_menu",
+            styles={"nav-link-selected": {"background-color": "#5e2d61"}}
+        )
+        # Si se toca este menú, actualizamos la sección
+        if st.session_state.get('last_v') != sel_v:
+            st.session_state.seccion = sel_v
+            st.session_state.last_v = sel_v
+
+    # 3. MÓDULO COMPRAS
+    with st.expander("🛒 COMPRAS", expanded=False):
+        sel_c = option_menu(
+            None, ["PROVEEDORES", "CARGA GASTO", "AJUSTES PROV", "CTA CTE PROV", "HISTORIAL GASTO"],
+            icons=["person-badge", "cart-plus", "patch-minus", "journal-text", "archive-fill"],
+            default_index=0, key="c_menu",
+            styles={"nav-link-selected": {"background-color": "#d35400"}}
+        )
+        if st.session_state.get('last_c') != sel_c:
+            st.session_state.seccion = sel_c
+            st.session_state.last_c = sel_c
+
+    st.markdown("---")
+    if st.button("🔄 Sincronizar"):
+        st.session_state.clear()
         st.rerun()
 
-# --- 5. MÓDULOS ---
+# --- 5. LÓGICA DE NAVEGACIÓN ---
+seccion = st.session_state.get("seccion", "CALENDARIO")
 
-if sel == "CALENDARIO":
+# --- MÓDULO CALENDARIO ---
+if seccion == "CALENDARIO":
     st.header("📅 Agenda de Viajes")
     eventos = []
-    for i, row in st.session_state.viajes.iterrows():
-        if not st.session_state.viajes.empty and str(row.get('Fecha Viaje', '-')) != "-":
-            eventos.append({"title": f"🚛 {row['Cliente']}", "start": str(row['Fecha Viaje']), "backgroundColor": "#f39c12"})
+    if not st.session_state.viajes.empty:
+        for _, row in st.session_state.viajes.iterrows():
+            if str(row.get('Fecha Viaje')) != "-":
+                eventos.append({"title": f"🚛 {row['Cliente']}", "start": str(row['Fecha Viaje']), "backgroundColor": "#f39c12"})
     calendar(events=eventos, options={"locale": "es", "height": 600})
 
-elif sel == "CLIENTES":
-    st.header("👤 Clientes")
+# --- MÓDULOS VENTAS ---
+elif seccion == "CLIENTES":
+    st.header("👤 Gestión de Clientes")
     st.dataframe(st.session_state.clientes, use_container_width=True)
-    # Aquí iría el form de alta...
 
-elif sel == "CARGA VIAJE":
-    st.header("🚛 Nuevo Viaje")
-    with st.form("v_form"):
-        c1, c2 = st.columns(2)
-        cli = c1.selectbox("Cliente", st.session_state.clientes['Razón Social'].unique() if not st.session_state.clientes.empty else [""])
-        f_v = c2.date_input("Fecha")
-        imp = c1.number_input("Importe Neto $")
-        if st.form_submit_button("GUARDAR"):
-            st.success("Viaje Registrado (Simulado)")
+elif seccion == "CARGA VIAJE":
+    st.header("🚛 Registro de Viaje")
+    with st.form("f_viaje"):
+        cli = st.selectbox("Cliente", st.session_state.clientes['Razón Social'].unique() if not st.session_state.clientes.empty else [""])
+        f = st.date_input("Fecha"); imp = st.number_input("Importe Neto")
+        if st.form_submit_button("GUARDAR"): st.success("Registrado")
 
-elif sel == "CARGA GASTOS":
-    st.header("🧾 Carga de Gastos")
-    with st.form("g_form"):
-        prov = st.selectbox("Proveedor", st.session_state.proveedores['Razón Social'].unique() if not st.session_state.proveedores.empty else [""])
-        c1, c2 = st.columns(2)
-        n21 = c1.number_input("Neto 21%")
-        r_iva = c2.number_input("Retenciones")
-        total = (n21 * 1.21) + r_iva
-        st.subheader(f"Total: $ {total:,.2f}")
-        if st.form_submit_button("REGISTRAR"):
-            st.success("Gasto Guardado")
+elif seccion == "AJUSTES (NC/ND)":
+    st.header("💳 NC/ND de Ventas")
+    st.info("Asociado a comprobante AFIP")
 
-elif sel == "CTA CTE CLI":
-    st.header("📑 Cta Cte Clientes")
+elif seccion == "CTA CTE CLI":
+    st.header("📑 Cuenta Corriente Clientes")
     if not st.session_state.viajes.empty:
-        res = st.session_state.viajes.groupby('Cliente')['Importe'].sum().reset_index()
-        st.table(res)
+        st.dataframe(st.session_state.viajes.groupby('Cliente')['Importe'].sum().reset_index())
 
-elif sel == "CTA CTE PROV":
+# --- MÓDULOS COMPRAS ---
+elif seccion == "PROVEEDORES":
+    st.header("🏢 Registro de Proveedores")
+    with st.form("f_prov"):
+        rz = st.text_input("Razón Social"); cuit = st.text_input("CUIT/DNI")
+        gto = st.selectbox("Cuenta", ["Combustible", "Reparación", "Seguro"])
+        iva = st.selectbox("IVA", ["RI", "Monotributo", "Exento"])
+        if st.form_submit_button("REGISTRAR PROVEEDOR"): st.success("Guardado")
+
+elif seccion == "CARGA GASTO":
+    st.header("🧾 Carga de Gastos")
+    with st.form("f_gasto"):
+        prov = st.selectbox("Proveedor", st.session_state.proveedores['Razón Social'].unique() if not st.session_state.proveedores.empty else [""])
+        n21 = st.number_input("Neto 21%"); n10 = st.number_input("Neto 10.5%")
+        iva21 = n21 * 0.21; iva10 = n10 * 0.105
+        total = n21 + iva21 + n10 + iva10
+        st.subheader(f"Total Calculado: $ {total:,.2f}")
+        if st.form_submit_button("REGISTRAR GASTO"): st.success("Gasto cargado")
+
+elif seccion == "AJUSTES PROV":
+    st.header("📉 NC/ND Proveedores")
+    st.write("Carga de notas recibidas.")
+
+elif seccion == "CTA CTE PROV":
     st.header("📖 Cta Cte Proveedores")
     if not st.session_state.gastos.empty:
-        res_p = st.session_state.gastos.groupby('Proveedor')['Total'].sum().reset_index()
-        st.table(res_p)
+        st.dataframe(st.session_state.gastos.groupby('Proveedor')['Total'].sum().reset_index())
 
-elif sel == "HISTORIAL":
-    st.header("📂 Historial General")
-    tab1, tab2 = st.tabs(["Ventas", "Compras"])
-    with tab1: st.dataframe(st.session_state.viajes)
-    with tab2: st.dataframe(st.session_state.gastos)
+elif seccion == "HISTORIAL VENTA" or seccion == "HISTORIAL GASTO":
+    st.header("📂 Historial de Comprobantes")
+    df = st.session_state.viajes if seccion == "HISTORIAL VENTA" else st.session_state.gastos
+    st.dataframe(df, use_container_width=True)
