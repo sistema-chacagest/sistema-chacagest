@@ -1,5 +1,5 @@
 import streamlit as st
-import pandas as pd
+import pd as pd
 import os
 from datetime import date
 import gspread
@@ -136,33 +136,46 @@ with st.sidebar:
     except: pass
     st.markdown("---")
     
-    # Inicializamos la selección en el estado de sesión si no existe
-    if 'menu_actual' not in st.session_state:
-        st.session_state.menu_actual = "CALENDARIO"
+    # Inicializar el estado de navegación si no existe
+    if 'menu_sel' not in st.session_state:
+        st.session_state.menu_sel = "CALENDARIO"
 
-    # Botón CALENDARIO solo
+    # Botón CALENDARIO (Limpia la selección de Venta)
     if st.button("📅 CALENDARIO", use_container_width=True):
-        st.session_state.menu_actual = "CALENDARIO"
+        st.session_state.menu_sel = "CALENDARIO"
+        st.rerun()
 
-    # Apartado desplegable VENTA
-    with st.expander("💰 VENTA", expanded=True):
+    # Desplegable VENTA
+    with st.expander("💰 VENTA", expanded=(st.session_state.menu_sel != "CALENDARIO")):
+        opciones_vta = ["CLIENTES", "CARGA VIAJE", "AJUSTES (NC/ND)", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"]
+        
+        # Calculamos el índice por defecto para el option_menu
+        default_idx = 0
+        if st.session_state.menu_sel in opciones_vta:
+            default_idx = opciones_vta.index(st.session_state.menu_sel)
+
         sel_venta = option_menu(
             menu_title=None,
-            options=["CLIENTES", "CARGA VIAJE", "AJUSTES (NC/ND)", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"],
+            options=opciones_vta,
             icons=["people", "truck", "file-earmark-minus", "person-vcard", "globe", "file-text"],
-            default_index=0,
+            default_index=default_idx,
             styles={
                 "container": {"background-color": "transparent", "padding": "0px"},
                 "nav-link": {"font-size": "14px", "text-align": "left", "margin":"0px"},
                 "nav-link-selected": {"background-color": "#5e2d61"},
             },
-            key="venta_menu"
+            key="vta_menu_key"
         )
-        # Si el usuario interactúa con este menú, actualizamos el estado
-        st.session_state.menu_actual = sel_venta
+        
+        # Si el usuario hace click en el option_menu, actualizamos el estado global
+        # Solo actualizamos si el usuario cambió manualmente la opción
+        if st.session_state.menu_sel != sel_venta:
+            # Si estábamos en calendario y tocamos el menú de ventas, cambiamos
+            st.session_state.menu_sel = sel_venta
+            st.rerun()
 
-    # Asignamos la variable sel final para que el resto del código funcione
-    sel = st.session_state.menu_actual
+    # Variable 'sel' para los módulos
+    sel = st.session_state.menu_sel
 
     st.markdown("---")
     if st.button("🔄 Sincronizar"):
