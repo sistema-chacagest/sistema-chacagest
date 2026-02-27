@@ -245,8 +245,53 @@ elif sel == "CLIENTES":
                     nueva_fila = pd.DataFrame([[r, cuit, mail, tel, dir_f, loc, prov, c_iva, c_vta]], columns=st.session_state.clientes.columns)
                     st.session_state.clientes = pd.concat([st.session_state.clientes, nueva_fila], ignore_index=True)
                     guardar_datos("clientes", st.session_state.clientes); st.success("Cliente guardado"); st.rerun()
+    
     st.subheader("📋 Base de Clientes")
-    st.dataframe(st.session_state.clientes, use_container_width=True)
+    if not st.session_state.clientes.empty:
+        for i, row in st.session_state.clientes.iterrows():
+            with st.container():
+                c_inf, c_ed, c_el = st.columns([0.7, 0.15, 0.15])
+                c_inf.markdown(f"**{row['Razón Social']}** | CUIT: {row['CUIT / CUIL / DNI *']}")
+                c_inf.caption(f"📍 {row['Localidad']} - {row['Provincia']} | 📞 {row['Teléfono']}")
+                
+                # Botón Editar
+                if c_ed.button("📝 Editar", key=f"edit_{i}"):
+                    st.session_state[f"edit_mode_{i}"] = True
+                
+                # Botón Eliminar
+                if c_el.button("🗑️", key=f"del_cli_{i}"):
+                    # Validar que no tenga viajes para no romper la CTA CTE
+                    tiene_viajes = not st.session_state.viajes[st.session_state.viajes['Cliente'] == row['Razón Social']].empty
+                    if tiene_viajes:
+                        st.error("No se puede eliminar: tiene viajes asociados.")
+                    else:
+                        st.session_state.clientes = st.session_state.clientes.drop(i).reset_index(drop=True)
+                        guardar_datos("clientes", st.session_state.clientes)
+                        st.rerun()
+
+                # Formulario de Edición (aparece solo si se activa)
+                if st.session_state.get(f"edit_mode_{i}", False):
+                    with st.form(f"f_edit_{i}"):
+                        ce1, ce2 = st.columns(2)
+                        n_rs = ce1.text_input("Razón Social", value=row['Razón Social'])
+                        n_cuit = ce2.text_input("CUIT", value=row['CUIT / CUIL / DNI *'])
+                        n_mail = ce1.text_input("Email", value=row['Email'])
+                        n_tel = ce2.text_input("Teléfono", value=row['Teléfono'])
+                        n_loc = ce1.text_input("Localidad", value=row['Localidad'])
+                        n_prov = ce2.text_input("Provincia", value=row['Provincia'])
+                        
+                        be1, be2 = st.columns(2)
+                        if be1.form_submit_button("✅ Guardar"):
+                            st.session_state.clientes.loc[i] = [n_rs, n_cuit, n_mail, n_tel, row['Dirección Fiscal'], n_loc, n_prov, row['Condición IVA'], row['Condición de Venta']]
+                            guardar_datos("clientes", st.session_state.clientes)
+                            st.session_state[f"edit_mode_{i}"] = False
+                            st.rerun()
+                        if be2.form_submit_button("❌ Cancelar"):
+                            st.session_state[f"edit_mode_{i}"] = False
+                            st.rerun()
+                st.divider()
+    else:
+        st.info("No hay clientes registrados.")
 
 elif sel == "CARGA VIAJE":
     st.header("🚛 Registro de Viaje")
@@ -341,4 +386,3 @@ elif sel == "COMPROBANTES":
                 st.session_state.viajes = st.session_state.viajes.drop(i)
                 guardar_datos("viajes", st.session_state.viajes); st.rerun()
             st.divider()
-
