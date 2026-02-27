@@ -27,7 +27,7 @@ def conectar_google():
 def cargar_datos():
     col_c = ["Razón Social", "CUIT / CUIL / DNI *", "Email", "Teléfono", "Dirección Fiscal", "Localidad", "Provincia", "Condición IVA", "Condición de Venta"]
     col_v = ["Fecha Carga", "Cliente", "Fecha Viaje", "Origen", "Destino", "Patente / Móvil", "Importe", "Tipo Comp", "Nro Comp Asoc"]
-    col_p = ["Cliente", "Fecha Viaje", "Origen", "Destino", "Tipo Vehículo", "Importe", "Vencimiento"]
+    col_p = ["Cliente", "Fecha Viaje", "Origen", "Destino", "Tipo Vehículo", "Importe", "Fecha Vencimiento"]
     try:
         sh = conectar_google()
         if sh is None: return None, None, None
@@ -63,13 +63,13 @@ def guardar_datos(nombre_hoja, df):
         st.error(f"Error al guardar: {e}")
         return False
 
-# --- FUNCIONES DE REPORTE (HTML/PDF) ---
+# --- FUNCIONES DE REPORTE ---
 def generar_html_resumen(cliente, df, saldo):
     tabla_html = df.to_html(index=False, classes='tabla')
     return f"<html><head><style>body {{ font-family: Arial; }} .header {{ background: #5e2d61; color: white; padding: 20px; text-align: center; }} .tabla {{ width: 100%; border-collapse: collapse; }} .tabla th {{ background: #f39c12; color: white; padding: 10px; }} .tabla td {{ border: 1px solid #ddd; padding: 8px; }} .total {{ text-align: right; font-size: 20px; color: #5e2d61; font-weight: bold; }}</style></head><body><div class='header'><h1>Resumen de Cuenta</h1><p>{cliente}</p></div>{tabla_html}<div class='total'>SALDO: $ {saldo:,.2f}</div></body></html>"
 
 def generar_html_presupuesto(row):
-    return f"<html><head><style>body {{ font-family: Arial; padding: 30px; border: 2px solid #5e2d61; }} h1 {{ color: #5e2d61; }} .dato {{ font-weight: bold; }}</style></head><body><h1>PRESUPUESTO DE VIAJE</h1><p>Cliente: <span class='dato'>{row['Cliente']}</span></p><p>Fecha Viaje: <span class='dato'>{row['Fecha Viaje']}</span></p><p>Origen: <span class='dato'>{row['Origen']}</span></p><p>Destino: <span class='dato'>{row['Destino']}</span></p><p>Vehículo: <span class='dato'>{row['Tipo Vehículo']}</span></p><p>Importe: <span class='dato'>$ {row['Importe']}</span></p><p>Vencimiento: <span class='dato'>{row['Vencimiento']}</span></p></body></html>"
+    return f"<html><head><style>body {{ font-family: Arial; padding: 30px; border: 2px solid #5e2d61; }} h1 {{ color: #5e2d61; border-bottom: 2px solid #f39c12; }} .dato {{ font-weight: bold; }}</style></head><body><h1>PRESUPUESTO DE VIAJE</h1><p>Cliente: <span class='dato'>{row['Cliente']}</span></p><p>Fecha Viaje: <span class='dato'>{row['Fecha Viaje']}</span></p><p>Origen: <span class='dato'>{row['Origen']}</span></p><p>Destino: <span class='dato'>{row['Destino']}</span></p><p>Vehículo: <span class='dato'>{row['Tipo Vehículo']}</span></p><p>Importe: <span class='dato'>$ {row['Importe']}</span></p><p>Vencimiento: <span class='dato'>{row['Fecha Vencimiento']}</span></p></body></html>"
 
 # --- LOGIN ---
 if "autenticado" not in st.session_state: st.session_state.autenticado = False
@@ -90,9 +90,6 @@ if 'clientes' not in st.session_state:
     c, v, p = cargar_datos()
     st.session_state.clientes, st.session_state.viajes, st.session_state.presupuestos = c, v, p
 
-# --- DISEÑO ---
-st.markdown("<style>h1, h2, h3 { color: #5e2d61 !important; } div.stButton > button { background: linear-gradient(to right, #f39c12, #d35400) !important; color: white !important; border: none !important; font-weight: bold !important; }</style>", unsafe_allow_html=True)
-
 # --- SIDEBAR ---
 with st.sidebar:
     st.markdown("### CHACAGEST")
@@ -108,40 +105,47 @@ if sel == "CALENDARIO":
     if "viaje_ver" not in st.session_state: st.session_state.viaje_ver = None
     eventos = [{"id": str(i), "title": f"🚛 {row['Cliente']}", "start": str(row['Fecha Viaje']), "allDay": True, "backgroundColor": "#f39c12", "borderColor": "#d35400"} 
                for i, row in st.session_state.viajes.iterrows() if str(row['Fecha Viaje']) != "-" and row['Origen'] != "AJUSTE"]
-    res_cal = calendar(events=eventos, options={"locale": "es", "height": 600}, custom_css=".fc-event { cursor: pointer; }", key="cal_final")
+    res_cal = calendar(events=eventos, options={"locale": "es", "height": 600}, custom_css=".fc-event { cursor: pointer; }", key="cal_chaca")
     if res_cal.get("eventClick"):
         st.session_state.viaje_ver = int(res_cal["eventClick"]["event"]["id"])
     if st.session_state.viaje_ver is not None:
         idx = st.session_state.viaje_ver
         if idx in st.session_state.viajes.index:
             v = st.session_state.viajes.loc[idx]
-            if st.button("❌ Cerrar"): st.session_state.viaje_ver = None; st.rerun()
-            st.info(f"**Cliente:** {v['Cliente']} | **Ruta:** {v['Origen']} -> {v['Destino']} | **Móvil:** {v['Patente / Móvil']} | **Monto:** ${v['Importe']}")
+            if st.button("❌ Cerrar Información"): st.session_state.viaje_ver = None; st.rerun()
+            st.info(f"**Cliente:** {v['Cliente']} | **Ruta:** {v['Origen']} ➔ {v['Destino']} | **Móvil:** {v['Patente / Móvil']} | **Importe:** ${v['Importe']}")
 
 elif sel == "PRESUPUESTOS":
-    st.header("📄 Presupuestos")
-    with st.expander("📝 NUEVO PRESUPUESTO"):
+    st.header("📄 Menú de Presupuestos")
+    with st.expander("📝 NUEVO PRESUPUESTO", expanded=True):
         with st.form("f_p"):
-            c_p = st.selectbox("Cliente", st.session_state.clientes['Razón Social'].unique() if not st.session_state.clientes.empty else [""])
-            f_v = st.date_input("Fecha Viaje"); f_vc = st.date_input("Vencimiento Presupuesto", value=date.today()+timedelta(days=7))
-            o_p = st.text_input("Origen"); d_p = st.text_input("Destino")
-            t_v = st.selectbox("Tipo de Vehículo", ["Chasis", "Balancín", "Semi", "Acoplado"]); m_p = st.number_input("Importe $", min_value=0.0)
-            if st.form_submit_button("GUARDAR"):
-                np = pd.DataFrame([[c_p, f_v, o_p, d_p, t_v, m_p, f_vc]], columns=st.session_state.presupuestos.columns)
+            cliente_p = st.selectbox("Cliente", st.session_state.clientes['Razón Social'].unique() if not st.session_state.clientes.empty else [""])
+            c1, c2 = st.columns(2)
+            f_viaje = c1.date_input("Fecha Viaje")
+            f_venc = c2.date_input("Fecha Vencimiento de Presupuesto", value=date.today()+timedelta(days=15))
+            orig_p = st.text_input("Origen")
+            dest_p = st.text_input("Destino")
+            c3, c4 = st.columns(2)
+            tipo_vh = c3.selectbox("Tipo de Vehículo", ["Camioneta", "Chasis", "Balancín", "Semi", "Acoplado"])
+            monto_p = c4.number_input("Importe $", min_value=0.0)
+            if st.form_submit_button("GUARDAR PRESUPUESTO"):
+                np = pd.DataFrame([[cliente_p, f_viaje, orig_p, dest_p, tipo_vh, monto_p, f_venc]], columns=st.session_state.presupuestos.columns)
                 st.session_state.presupuestos = pd.concat([st.session_state.presupuestos, np], ignore_index=True)
                 guardar_datos("presupuestos", st.session_state.presupuestos); st.rerun()
-    st.subheader("📋 Lista")
+    
+    st.subheader("📋 Presupuestos Emitidos")
     for i, row in st.session_state.presupuestos.iterrows():
-        c1, c2, c3 = st.columns([0.6, 0.2, 0.2])
-        c1.write(f"**{row['Cliente']}** | {row['Origen']}➔{row['Destino']} | ${row['Importe']}")
-        c2.download_button("📄 PDF", data=generar_html_presupuesto(row), file_name=f"Presu_{i}.html", mime="text/html", key=f"p_{i}")
-        if c3.button("🗑️", key=f"dp_{i}"):
+        col1, col2, col3 = st.columns([0.6, 0.2, 0.2])
+        col1.write(f"**{row['Cliente']}** | {row['Origen']} a {row['Destino']} | ${row['Importe']}")
+        col2.download_button("📄 PDF", data=generar_html_presupuesto(row), file_name=f"Presu_{row['Cliente']}.html", mime="text/html", key=f"dl_p_{i}")
+        if col3.button("🗑️", key=f"del_p_{i}"):
             st.session_state.presupuestos = st.session_state.presupuestos.drop(i)
             guardar_datos("presupuestos", st.session_state.presupuestos); st.rerun()
+        st.divider()
 
 elif sel == "CLIENTES":
     st.header("👤 Clientes")
-    with st.expander("➕ ALTA"):
+    with st.expander("➕ ALTA DE CLIENTE"):
         with st.form("f_c"):
             r = st.text_input("Razón Social"); cuit = st.text_input("CUIT")
             if st.form_submit_button("REGISTRAR"):
@@ -150,8 +154,8 @@ elif sel == "CLIENTES":
                 guardar_datos("clientes", st.session_state.clientes); st.rerun()
     st.dataframe(st.session_state.clientes, use_container_width=True)
     with st.expander("🗑️ ELIMINAR CLIENTE"):
-        el = st.selectbox("Cliente a borrar:", ["-"] + list(st.session_state.clientes['Razón Social'].unique()))
-        if st.button("ELIMINAR") and el != "-":
+        el = st.selectbox("Seleccione para eliminar:", ["-"] + list(st.session_state.clientes['Razón Social'].unique()))
+        if st.button("ELIMINAR PERMANENTEMENTE") and el != "-":
             st.session_state.clientes = st.session_state.clientes[st.session_state.clientes['Razón Social'] != el]
             guardar_datos("clientes", st.session_state.clientes); st.rerun()
 
@@ -159,10 +163,11 @@ elif sel == "CARGA VIAJE":
     st.header("🚛 Cargar Viaje")
     with st.form("f_v"):
         cli = st.selectbox("Cliente", st.session_state.clientes['Razón Social'].unique())
-        f_v = st.date_input("Fecha"); pat = st.text_input("Patente")
+        c1, c2 = st.columns(2)
+        f_v = c1.date_input("Fecha"); pat = c2.text_input("Patente")
         orig = st.text_input("Origen"); dest = st.text_input("Destino")
         imp = st.number_input("Importe $", min_value=0.0)
-        if st.form_submit_button("GUARDAR"):
+        if st.form_submit_button("GUARDAR VIAJE"):
             nv = pd.DataFrame([[date.today(), cli, f_v, orig, dest, pat, imp, "Factura", "-"]], columns=st.session_state.viajes.columns)
             st.session_state.viajes = pd.concat([st.session_state.viajes, nv], ignore_index=True)
             guardar_datos("viajes", st.session_state.viajes); st.rerun()
@@ -172,17 +177,12 @@ elif sel == "CTA CTE INDIVIDUAL":
     cl = st.selectbox("Cliente", st.session_state.clientes['Razón Social'].unique())
     df_i = st.session_state.viajes[st.session_state.viajes['Cliente'] == cl]
     sal = df_i['Importe'].sum()
-    st.metric("SALDO", f"$ {sal:,.2f}")
+    st.metric("SALDO TOTAL", f"$ {sal:,.2f}")
     st.download_button("📄 DESCARGAR RESUMEN", data=generar_html_resumen(cl, df_i, sal), file_name=f"Resumen_{cl}.html", mime="text/html")
     st.dataframe(df_i, use_container_width=True)
 
 elif sel == "COMPROBANTES":
-    st.header("📜 Historial")
+    st.header("📜 Historial de Viajes")
     for i in reversed(st.session_state.viajes.index):
         row = st.session_state.viajes.loc[i]
-        c1, c2, c3 = st.columns([0.2, 0.6, 0.1])
-        c1.write(row['Fecha Viaje'])
-        c2.write(f"**{row['Cliente']}** | ${row['Importe']}")
-        if c3.button("🗑️", key=f"dv_{i}"):
-            st.session_state.viajes = st.session_state.viajes.drop(i)
-            guardar_datos("viajes", st.session_state.viajes); st.rerun()
+        c1, c2, c3 = st.columns([0.2, 0.6
