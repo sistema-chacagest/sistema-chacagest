@@ -206,32 +206,71 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 5. SIDEBAR ---
+# --- 5. SIDEBAR (MENÚ DESPLEGABLE DINÁMICO) ---
 with st.sidebar:
     try: st.image("logo_path.png", use_container_width=True)
     except: pass
     st.markdown("---")
-    sel = option_menu(
+
+    # Definimos el estado del menú para saber si VENTAS está abierto
+    if "ventas_abierto" not in st.session_state:
+        st.session_state.ventas_abierto = False
+
+    # 1. Menú Principal de Nivel 1
+    # Creamos una lista base
+    opciones_menu = ["CALENDARIO", "VENTAS", "TESORERIA"]
+    iconos_menu = ["calendar3", "cart4", "safe"]
+    
+    # Si el usuario hizo clic en algo de VENTAS antes, lo mantenemos abierto
+    # O si el clic anterior fue específicamente en "VENTAS"
+    menu_principal = option_menu(
         menu_title=None,
-        options=["CALENDARIO", "CLIENTES", "CARGA VIAJE", "PRESUPUESTOS", "TESORERIA", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"],
-        icons=["calendar3", "people", "truck", "file-earmark-spreadsheet", "safe", "person-vcard", "globe", "file-text"],
+        options=opciones_menu,
+        icons=iconos_menu,
         default_index=0,
+        key="menu_p",
         styles={
-            "container": {"background-color": "#f0f2f6"},
-            "nav-link": {"font-size": "14px", "text-align": "left", "margin":"0px"},
+            "container": {"padding": "0px", "background-color": "#f0f2f6"},
+            "nav-link": {"font-size": "15px", "font-weight": "bold"},
             "nav-link-selected": {"background-color": "#5e2d61"},
         }
     )
+
+    # 2. Sub-Menú Dinámico (Aparece debajo solo si se toca VENTAS)
+    sel_sub = None
+    if menu_principal == "VENTAS":
+        st.markdown("<div style='margin-left: 20px; border-left: 2px solid #f39c12; padding-left: 10px;'>", unsafe_allow_html=True)
+        sel_sub = option_menu(
+            menu_title=None,
+            options=["CLIENTES", "CARGA VIAJE", "PRESUPUESTOS", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"],
+            icons=["people", "truck", "file-earmark-spreadsheet", "person-vcard", "globe", "file-text"],
+            default_index=0,
+            key="menu_s",
+            styles={
+                "container": {"background-color": "transparent", "padding": "0px"},
+                "nav-link": {"font-size": "13px", "text-align": "left", "margin":"2px"},
+                "nav-link-selected": {"background-color": "#f39c12", "color": "white"},
+            }
+        )
+        st.markdown("</div>", unsafe_allow_html=True)
+
     st.markdown("---")
     if st.button("🔄 Sincronizar"):
         with st.spinner("Sincronizando..."):
             c, v, p, t = cargar_datos()
-            if c is not None:
-                st.session_state.clientes, st.session_state.viajes, st.session_state.presupuestos, st.session_state.tesoreria = c, v, p, t
-                st.rerun()
+            st.session_state.clientes, st.session_state.viajes, st.session_state.presupuestos, st.session_state.tesoreria = c, v, p, t
+            st.rerun()
+    
     if st.button("🚪 Cerrar Sesión"):
         st.session_state.autenticado = False
         st.rerun()
+
+# --- 6. LÓGICA DE NAVEGACIÓN ACTUALIZADA ---
+# Definimos 'sel' basado en si hay una sub-selección activa
+if menu_principal == "VENTAS":
+    sel = sel_sub
+else:
+    sel = menu_principal
 
 # --- 6. MÓDULOS ---
 
@@ -484,4 +523,5 @@ elif sel == "COMPROBANTES":
                 guardar_datos("viajes", st.session_state.viajes)
                 st.rerun()
             st.divider()
+
 
