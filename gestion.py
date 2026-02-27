@@ -206,75 +206,42 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 5. SIDEBAR (MENÚ DESPLEGABLE DINÁMICO) ---
+# --- 5. SIDEBAR ---
 with st.sidebar:
     try: st.image("logo_path.png", use_container_width=True)
     except: pass
     st.markdown("---")
-
-    # Definimos las opciones base
-    menu_options = ["CALENDARIO", "VENTAS", "TESORERIA"]
-    menu_icons = ["calendar3", "cart4", "safe"]
-    
-    # Verificamos si "VENTAS" fue clickeado previamente para "abrir" el menú
-    # Usamos un query param o session_state para mantener el estado
-    if "menu_abierto" not in st.session_state:
-        st.session_state.menu_abierto = False
-
-    # Lógica de inserción de sub-elementos
-    # Si el usuario selecciona VENTAS, rediseñamos la lista de opciones
-    actual_options = []
-    actual_icons = []
-    
-    for opt in menu_options:
-        actual_options.append(opt)
-        actual_icons.append(menu_icons[menu_options.index(opt)])
-        
-        # SI LA OPCIÓN ES VENTAS, metemos las sub-opciones debajo con un espacio/prefijo
-        if opt == "VENTAS":
-            sub_opciones = [
-                "  • CLIENTES", 
-                "  • CARGA VIAJE", 
-                "  • PRESUPUESTOS", 
-                "  • CTA CTE INDIVIDUAL", 
-                "  • CTA CTE GENERAL", 
-                "  • COMPROBANTES"
-            ]
-            sub_iconos = ["person-badge", "truck", "file-earmark-text", "wallet2", "graph-up", "receipt"]
-            actual_options.extend(sub_opciones)
-            actual_icons.extend(sub_iconos)
-
-    # Renderizamos el Menú Único
-    seleccion = option_menu(
+    sel = option_menu(
         menu_title=None,
-        options=actual_options,
-        icons=actual_icons,
+        options=["CALENDARIO", "CLIENTES", "CARGA VIAJE", "PRESUPUESTOS", "TESORERIA", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"],
+        icons=["calendar3", "people", "truck", "file-earmark-spreadsheet", "safe", "person-vcard", "globe", "file-text"],
         default_index=0,
         styles={
-            "container": {"padding": "5px", "background-color": "#f0f2f6"},
+            "container": {"background-color": "#f0f2f6"},
             "nav-link": {"font-size": "14px", "text-align": "left", "margin":"0px"},
             "nav-link-selected": {"background-color": "#5e2d61"},
         }
     )
-
     st.markdown("---")
     if st.button("🔄 Sincronizar"):
-        c, v, p, t = cargar_datos()
-        st.session_state.clientes, st.session_state.viajes, st.session_state.presupuestos, st.session_state.tesoreria = c, v, p, t
+        with st.spinner("Sincronizando..."):
+            c, v, p, t = cargar_datos()
+            if c is not None:
+                st.session_state.clientes, st.session_state.viajes, st.session_state.presupuestos, st.session_state.tesoreria = c, v, p, t
+                st.rerun()
+    if st.button("🚪 Cerrar Sesión"):
+        st.session_state.autenticado = False
         st.rerun()
 
-# --- 6. LÓGICA DE NAVEGACIÓN (AJUSTADA PARA SUB-MENÚS) ---
-# Limpiamos el prefijo de las sub-opciones para que coincidan con tus IF anteriores
-actual_page = seleccion.replace("  • ", "")
+# --- 6. MÓDULOS ---
 
-# --- El resto de tu código (if actual_page == "CLIENTES": etc.) funciona igual ---
-
-if actual_page == "CALENDARIO":
+if sel == "CALENDARIO":
     st.header("📅 Agenda de Viajes")
     if "viaje_ver" not in st.session_state:
         st.session_state.viaje_ver = None
     eventos = []
     
+    # --- CAMBIO 1: SOLO CARGAR VIAJES (Importe > 0) ---
     df_solo_viajes = st.session_state.viajes[st.session_state.viajes['Importe'] > 0]
     
     for i, row in df_solo_viajes.iterrows():
@@ -301,7 +268,7 @@ if actual_page == "CALENDARIO":
                 <h4 style="color: #5e2d61; margin: 0;">Detalles</h4><p><b>Cliente:</b> {v_det['Cliente']}</p><p><b>Ruta:</b> {v_det['Origen']} ➔ {v_det['Destino']}</p>
                 <p><b>Importe:</b> $ {v_det['Importe']}</p></div>""", unsafe_allow_html=True)
 
-elif actual_page == "CLIENTES":
+elif sel == "CLIENTES":
     st.header("👤 Gestión de Clientes")
     with st.expander("➕ ALTA DE NUEVO CLIENTE", expanded=False):
         with st.form("f_cli", clear_on_submit=True):
@@ -362,7 +329,7 @@ elif actual_page == "CLIENTES":
     else:
         st.info("No hay clientes registrados.")
 
-elif actual_page == "CARGA VIAJE":
+elif sel == "CARGA VIAJE":
     st.header("🚛 Registro de Viaje")
     with st.form("f_v"):
         cli = st.selectbox("Seleccionar Cliente", st.session_state.clientes['Razón Social'].unique() if not st.session_state.clientes.empty else [""])
@@ -380,7 +347,7 @@ elif actual_page == "CARGA VIAJE":
             st.success("Viaje registrado")
             st.rerun()
 
-elif actual_page == "PRESUPUESTOS":
+elif sel == "PRESUPUESTOS":
     st.header("📝 Gestión de Presupuestos")
     tab_crear, tab_historial = st.tabs(["🆕 Crear Presupuesto", "📂 Historial y Descargas"])
     with tab_crear:
@@ -418,58 +385,53 @@ elif actual_page == "PRESUPUESTOS":
                     st.divider()
         else: st.info("No hay presupuestos registrados.")
 
-elif actual_page == "TESORERIA":
+elif sel == "TESORERIA":
     st.header("💰 Tesorería")
     opc_cajas = ["CAJA COTI", "CAJA TATO", "BANCO GALICIA", "BANCO PROVINCIA", "BANCO SUPERVIELLE"]
     t1, t2, t3, t4, t5 = st.tabs(["📥 INGRESOS VARIOS", "📤 EGRESOS VARIOS", "🧾 COBRANZA VIAJE", "📊 VER MOVIMIENTOS", "🔄 TRASPASO"])
 
     with t1:
-        with st.form("f_ing_var", clear_on_submit=True):
+        with st.form("f_ing_var"):
             f = st.date_input("Fecha", date.today())
             cj = st.selectbox("Caja Destino", opc_cajas)
             con = st.text_input("Concepto")
             mon = st.number_input("Monto $", min_value=0.0)
-            btn_ingreso = st.form_submit_button("REGISTRAR INGRESO")
-        if btn_ingreso:
-            nt = pd.DataFrame([[f, "INGRESO VARIO", cj, con, "Varios", mon, "-"]], columns=st.session_state.tesoreria.columns)
-            st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
-            guardar_datos("tesoreria", st.session_state.tesoreria)
-            st.success("Ingreso registrado")
-            st.rerun()
+            if st.form_submit_button("REGISTRAR INGRESO"):
+                nt = pd.DataFrame([[f, "INGRESO VARIO", cj, con, "Varios", mon, "-"]], columns=st.session_state.tesoreria.columns)
+                st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
+                guardar_datos("tesoreria", st.session_state.tesoreria)
+                st.success("Registrado")
+                st.rerun()
 
     with t2:
-        with st.form("f_egr_var", clear_on_submit=True):
+        with st.form("f_egr_var"):
             f = st.date_input("Fecha", date.today())
             cj = st.selectbox("Caja Origen", opc_cajas)
             con = st.text_input("Concepto")
             mon = st.number_input("Monto $", min_value=0.0)
-            btn_egreso = st.form_submit_button("REGISTRAR EGRESO")
-        if btn_egreso:
-            nt = pd.DataFrame([[f, "EGRESO VARIO", cj, con, "Varios", -mon, "-"]], columns=st.session_state.tesoreria.columns)
-            st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
-            guardar_datos("tesoreria", st.session_state.tesoreria)
-            st.success("Egreso registrado")
-            st.rerun()
+            if st.form_submit_button("REGISTRAR EGRESO"):
+                nt = pd.DataFrame([[f, "EGRESO VARIO", cj, con, "Varios", -mon, "-"]], columns=st.session_state.tesoreria.columns)
+                st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
+                guardar_datos("tesoreria", st.session_state.tesoreria)
+                st.success("Registrado")
+                st.rerun()
 
     with t3:
-        with st.form("f_cob", clear_on_submit=True):
+        with st.form("f_cob"):
             c_sel = st.selectbox("Cliente", st.session_state.clientes['Razón Social'].unique() if not st.session_state.clientes.empty else [""])
             cj = st.selectbox("Forma de Cobro", opc_cajas + ["OTROS"])
             mon = st.number_input("Monto $", min_value=0.0)
             afip = st.text_input("Comprobante Asociado (AFIP/Recibo)")
-            btn_cobro = st.form_submit_button("GENERAR COBRANZA")
-        
-        if btn_cobro:
-            nt = pd.DataFrame([[date.today(), "COBRANZA", cj, "Cobro Viaje", c_sel, mon, afip]], columns=st.session_state.tesoreria.columns)
-            nv = pd.DataFrame([[date.today(), c_sel, date.today(), "PAGO", "TESORERIA", "-", -mon, "RECIBO", afip]], columns=st.session_state.viajes.columns)
-            
-            st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
-            st.session_state.viajes = pd.concat([st.session_state.viajes, nv], ignore_index=True)
-            
-            if guardar_datos("tesoreria", st.session_state.tesoreria) and guardar_datos("viajes", st.session_state.viajes):
-                st.success("Cobranza realizada con éxito.")
+            if st.form_submit_button("GENERAR COBRANZA"):
+                nt = pd.DataFrame([[date.today(), "COBRANZA", cj, "Cobro Viaje", c_sel, mon, afip]], columns=st.session_state.tesoreria.columns)
+                nv = pd.DataFrame([[date.today(), c_sel, date.today(), "PAGO", "TESORERIA", "-", -mon, "RECIBO", afip]], columns=st.session_state.viajes.columns)
+                st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
+                st.session_state.viajes = pd.concat([st.session_state.viajes, nv], ignore_index=True)
+                guardar_datos("tesoreria", st.session_state.tesoreria)
+                guardar_datos("viajes", st.session_state.viajes)
+                st.success("Cobranza realizada")
                 rec_html = generar_html_recibo({"Fecha": date.today(), "Cliente/Proveedor": c_sel, "Concepto": "Cobro de Viaje", "Caja/Banco": cj, "Monto": mon, "Ref AFIP": afip})
-                st.download_button("🖨️ DESCARGAR RECIBO", rec_html, file_name=f"Recibo_{c_sel}.html", mime="text/html")
+                st.download_button("🖨️ IMPRIMIR RECIBO PDF/HTML", rec_html, file_name=f"Recibo_{c_sel}.html", mime="text/html")
 
     with t4:
         cj_v = st.selectbox("Seleccionar Caja", opc_cajas)
@@ -478,20 +440,18 @@ elif actual_page == "TESORERIA":
         st.dataframe(df_ver, use_container_width=True)
 
     with t5:
-        with st.form("f_tras", clear_on_submit=True):
+        with st.form("f_tras"):
             o = st.selectbox("Desde", opc_cajas)
             d = st.selectbox("Hacia", opc_cajas)
             m = st.number_input("Monto a Traspasar", min_value=0.0)
-            btn_ejecutar = st.form_submit_button("EJECUTAR")
-        if btn_ejecutar:
-            t1 = pd.DataFrame([[date.today(), "TRASPASO", o, f"Hacia {d}", "INTERNO", -m, "-"]], columns=st.session_state.tesoreria.columns)
-            t2 = pd.DataFrame([[date.today(), "TRASPASO", d, f"Desde {o}", "INTERNO", m, "-"]], columns=st.session_state.tesoreria.columns)
-            st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, t1, t2], ignore_index=True)
-            guardar_datos("tesoreria", st.session_state.tesoreria)
-            st.success("Traspaso realizado")
-            st.rerun()
+            if st.form_submit_button("EJECUTAR"):
+                t1 = pd.DataFrame([[date.today(), "TRASPASO", o, f"Hacia {d}", "INTERNO", -m, "-"]], columns=st.session_state.tesoreria.columns)
+                t2 = pd.DataFrame([[date.today(), "TRASPASO", d, f"Desde {o}", "INTERNO", m, "-"]], columns=st.session_state.tesoreria.columns)
+                st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, t1, t2], ignore_index=True)
+                guardar_datos("tesoreria", st.session_state.tesoreria)
+                st.rerun()
 
-elif actual_page == "CTA CTE INDIVIDUAL":
+elif sel == "CTA CTE INDIVIDUAL":
     st.header("📑 Cuenta Corriente por Cliente")
     if not st.session_state.clientes.empty:
         cl = st.selectbox("Seleccionar Cliente", st.session_state.clientes['Razón Social'].unique())
@@ -501,14 +461,17 @@ elif actual_page == "CTA CTE INDIVIDUAL":
         st.download_button(label="📄 DESCARGAR RESUMEN", data=html_reporte, file_name=f"Resumen_{cl}.html", mime="text/html")
         st.dataframe(df_ind, use_container_width=True)
 
-elif actual_page == "CTA CTE GENERAL":
+elif sel == "CTA CTE GENERAL":
     st.header("🌎 Estado Global de Deudores")
     if not st.session_state.viajes.empty:
         res = st.session_state.viajes.groupby('Cliente')['Importe'].sum().reset_index()
+        
+        # --- CAMBIO 2: NO VISUALIZAR CTAS EN CERO ---
         res = res[res['Importe'].round(2) != 0]
+        
         st.table(res.style.format({"Importe": "$ {:,.2f}"}))
 
-elif actual_page == "COMPROBANTES":
+elif sel == "COMPROBANTES":
     st.header("📜 Historial de Comprobantes")
     if not st.session_state.viajes.empty:
         for i in reversed(st.session_state.viajes.index):
@@ -521,7 +484,4 @@ elif actual_page == "COMPROBANTES":
                 guardar_datos("viajes", st.session_state.viajes)
                 st.rerun()
             st.divider()
-
-
-
 
