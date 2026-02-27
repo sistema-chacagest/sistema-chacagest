@@ -206,60 +206,75 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 5. SIDEBAR (NUEVO FORMATO DE NAVEGACIÓN) ---
+# --- 5. SIDEBAR (DISEÑO DE BOTONERA SEGMENTADA) ---
 with st.sidebar:
     try: st.image("logo_path.png", use_container_width=True)
     except: pass
     st.markdown("---")
     
-    # Menú Principal
+    # 1. Menú Principal (Iconos grandes arriba)
     sel = option_menu(
-        menu_title="MENÚ PRINCIPAL",
+        menu_title=None,
         options=["CALENDARIO", "VENTAS", "TESORERIA"],
         icons=["calendar3", "cart4", "safe"],
-        menu_icon="cast", 
         default_index=0,
+        orientation="vertical", # Puedes probar "horizontal" si quieres que flote arriba
         styles={
-            "container": {"padding": "5px", "background-color": "#f0f2f6"},
-            "nav-link": {"font-size": "14px", "text-align": "left", "margin":"0px", "--hover-color": "#eee"},
-            "nav-link-selected": {"background-color": "#5e2d61"},
+            "container": {"padding": "0px", "background-color": "#f8f9fa"},
+            "nav-link": {"font-size": "14px", "font-weight": "bold", "margin":"5px"},
+            "nav-link-selected": {"background-color": "#5e2d61", "color": "white"},
         }
     )
 
-    # Submenú de Ventas - Formato "Lista Flotante"
+    # 2. Submenú de Ventas (Estilo Botonera Moderna)
     sub_sel = None
     if sel == "VENTAS":
-        st.markdown("---")
-        st.markdown("<p style='text-align:center; color:#5e2d61; font-weight:bold;'>📂 GESTIÓN DE VENTAS</p>", unsafe_allow_html=True)
-        sub_sel = option_menu(
-            menu_title=None,
-            options=["CLIENTES", "CARGA VIAJE", "PRESUPUESTOS", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"],
-            icons=["person-badge", "truck", "file-earmark-text", "wallet2", "graph-up", "receipt"],
-            default_index=0,
-            styles={
-                "container": {"padding": "0px", "background-color": "transparent"},
-                "nav-link": {"font-size": "12px", "text-align": "left", "padding": "10px"},
-                "nav-link-selected": {"background-color": "#f39c12", "color": "white"},
-            }
+        st.markdown("<br><p style='text-align:center; font-size:12px; color:gray; letter-spacing: 2px;'>GESTIÓN COMERCIAL</p>", unsafe_allow_html=True)
+        
+        # Usamos st.radio con un estilo CSS para que parezcan botones de una app móvil
+        opciones_ventas = ["CLIENTES", "CARGA VIAJE", "PRESUPUESTOS", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"]
+        
+        # Estilizamos el radio button para que no parezca el de defecto
+        sub_sel = st.radio(
+            label="Seleccione una opción:",
+            options=opciones_ventas,
+            label_visibility="collapsed",
+            key="sub_menu_ventas"
         )
+        
+        st.markdown("""
+            <style>
+            /* Cambia el aspecto del radio button seleccionado en el sidebar */
+            div[data-testid="stSidebar"] div[role="radiogroup"] > label {
+                background-color: #ffffff;
+                border: 1px solid #ddd;
+                padding: 8px 12px;
+                border-radius: 5px;
+                margin-bottom: 5px;
+                transition: 0.3s;
+                cursor: pointer;
+            }
+            div[data-testid="stSidebar"] div[role="radiogroup"] > label:hover {
+                border-color: #f39c12;
+                color: #f39c12;
+            }
+            div[data-testid="stSidebar"] div[role="radiogroup"] [data-checked="true"] {
+                background-color: #f39c12 !important;
+                color: white !important;
+                border: none;
+            }
+            </style>
+        """, unsafe_allow_html=True)
 
     st.markdown("---")
-    # Botones de acción inferior
-    col_sync, col_off = st.columns(2)
-    if col_sync.button("🔄 Sync"):
-        with st.spinner("..."):
-            c, v, p, t = cargar_datos()
-            st.session_state.clientes, st.session_state.viajes, st.session_state.presupuestos, st.session_state.tesoreria = c, v, p, t
-            st.rerun()
-    
-    if col_off.button("🚪 Salir"):
-        st.session_state.autenticado = False
+    # Botones de utilidad al final
+    if st.button("🔄 Actualizar Datos", use_container_width=True):
+        c, v, p, t = cargar_datos()
+        st.session_state.clientes, st.session_state.viajes, st.session_state.presupuestos, st.session_state.tesoreria = c, v, p, t
         st.rerun()
 
 # --- 6. LÓGICA DE NAVEGACIÓN ---
 actual_page = sub_sel if sel == "VENTAS" else sel
-# --- A partir de aquí, el resto de tus módulos (if actual_page == ...) funcionan igual ---
-
 # --- MÓDULOS ---
 
 if actual_page == "CALENDARIO":
@@ -514,5 +529,6 @@ elif actual_page == "COMPROBANTES":
                 guardar_datos("viajes", st.session_state.viajes)
                 st.rerun()
             st.divider()
+
 
 
