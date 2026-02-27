@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import os
 from datetime import date, timedelta
 import gspread
 from google.oauth2.service_account import Credentials
@@ -28,202 +29,362 @@ def cargar_datos():
     col_c = ["Razón Social", "CUIT / CUIL / DNI *", "Email", "Teléfono", "Dirección Fiscal", "Localidad", "Provincia", "Condición IVA", "Condición de Venta"]
     col_v = ["Fecha Carga", "Cliente", "Fecha Viaje", "Origen", "Destino", "Patente / Móvil", "Importe", "Tipo Comp", "Nro Comp Asoc"]
     col_p = ["Fecha Emisión", "Cliente", "Vencimiento", "Detalle", "Tipo Móvil", "Importe"]
+    # Nuevas columnas para compras
     col_prov = ["Razón Social", "CUIT/DNI", "Cuenta de Gastos", "Categoría IVA"]
     col_comp = ["Fecha", "Proveedor", "Punto Venta", "Tipo Factura", "Neto 21%", "IVA 21%", "Neto 10.5%", "IVA 10.5%", "Ret. IVA", "Ret. Ganancias", "Ret. IIBB", "No Gravados", "Total"]
-
-    sh = conectar_google()
-    if sh is None: return [pd.DataFrame() for _ in range(5)]
     
-    def get_df(name, cols):
-        try:
-            ws = sh.worksheet(name)
-            data = ws.get_all_records()
-            return pd.DataFrame(data) if data else pd.DataFrame(columns=cols)
-        except: return pd.DataFrame(columns=cols)
+    try:
+        sh = conectar_google()
+        if sh is None: return None, None, None, None, None
+        
+        ws_c = sh.worksheet("clientes")
+        datos_c = ws_c.get_all_records()
+        df_c = pd.DataFrame(datos_c) if datos_c else pd.DataFrame(columns=col_c)
+        
+        ws_v = sh.worksheet("viajes")
+        datos_v = ws_v.get_all_records()
+        df_v = pd.DataFrame(datos_v) if datos_v else pd.DataFrame(columns=col_v)
+        df_v['Importe'] = pd.to_numeric(df_v['Importe'], errors='coerce').fillna(0)
 
-    return get_df("clientes", col_c), get_df("viajes", col_v), get_df("presupuestos", col_p), get_df("proveedores", col_prov), get_df("compras", col_comp)
+        try:
+            ws_p = sh.worksheet("presupuestos")
+            datos_p = ws_p.get_all_records()
+            df_p = pd.DataFrame(datos_p) if datos_p else pd.DataFrame(columns=col_p)
+            df_p['Importe'] = pd.to_numeric(df_p['Importe'], errors='coerce').fillna(0)
+        except: df_p = pd.DataFrame(columns=col_p)
+
+        # Carga de Compras y Proveedores
+        try:
+            ws_prov = sh.worksheet("proveedores")
+            datos_prov = ws_prov.get_all_records()
+            df_prov = pd.DataFrame(datos_prov) if datos_prov else pd.DataFrame(columns=col_prov)
+        except: df_prov = pd.DataFrame(columns=col_prov)
+
+        try:
+            ws_comp = sh.worksheet("compras")
+            datos_comp = ws_comp.get_all_records()
+            df_comp = pd.DataFrame(datos_comp) if datos_comp else pd.DataFrame(columns=col_comp)
+            for c in ["Neto 21%", "IVA 21%", "Neto 10.5%", "IVA 10.5%", "Total"]:
+                df_comp[c] = pd.to_numeric(df_comp[c], errors='coerce').fillna(0)
+        except: df_comp = pd.DataFrame(columns=col_comp)
+            
+        return df_c, df_v, df_p, df_prov, df_comp
+    except:
+        return None, None, None, None, None
 
 def guardar_datos(nombre_hoja, df):
     try:
         sh = conectar_google()
+        if sh is None: return False
         ws = sh.worksheet(nombre_hoja)
         ws.clear()
         df_save = df.fillna("-").copy()
         datos = [df_save.columns.values.tolist()] + df_save.astype(str).values.tolist()
         ws.update(datos) 
         return True
-    except: return False
+    except Exception as e:
+        st.error(f"Error al guardar: {e}")
+        return False
 
-# --- 2. FUNCIONES DE IMPRESIÓN (PDF/HTML) ---
-def generar_html_presupuesto(p_data):
-    return f"""
-    <html><body style="font-family: Arial; padding: 30px;">
-        <h1 style="color: #5e2d61;">CHACAGEST - PRESUPUESTO</h1>
-        <hr>
-        <p><b>Cliente:</b> {p_data['Cliente']}</p>
-        <p><b>Fecha:</b> {p_data['Fecha Emisión']} | <b>Vencimiento:</b> {p_data['Vencimiento']}</p>
-        <p><b>Unidad:</b> {p_data['Tipo Móvil']}</p>
-        <div style="background: #f4f4f4; padding: 15px; border-radius: 5px;">
-            <b>Detalle:</b><br>{p_data['Detalle']}
+# --- FUNCIONES PARA REPORTES HTML ---
+def generar_html_resumen(cliente, df, saldo):
+    tabla_html = df.to_html(index=False, classes='tabla')
+    html = f"""
+    <html>
+    <head>
+        <style>
+            body {{ font-family: Arial, sans-serif; color: #333; }}
+            .header {{ background-color: #5e2d61; color: white; padding: 20px; text-align: center; border-radius: 10px; }}
+            .info {{ margin: 20px 0; font-size: 14px; }}
+            .tabla {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
+            .tabla th {{ background-color: #f39c12; color: white; padding: 10px; text-align: left; }}
+            .tabla td {{ border: 1px solid #ddd; padding: 8px; font-size: 12px; }}
+            .total {{ text-align: right; font-size: 18px; color: #5e2d61; font-weight: bold; margin-top: 20px; }}
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <h1>CHACAGEST - Resumen de Cuenta</h1>
+            <p>Fecha de emisión: {date.today()}</p>
         </div>
-        <h2 style="text-align: right; color: #d35400;">TOTAL: $ {float(p_data['Importe']):,.2f}</h2>
-    </body></html>
+        <div class="info">
+            <p><b>Cliente:</b> {cliente}</p>
+        </div>
+        {tabla_html}
+        <div class="total"> SALDO TOTAL A LA FECHA: $ {saldo:,.2f} </div>
+    </body>
+    </html>
     """
+    return html
 
-# --- 3. LOGIN ---
-if "autenticado" not in st.session_state: st.session_state.autenticado = False
+def generar_html_presupuesto(p_data):
+    html = f"""
+    <html>
+    <head>
+        <style>
+            body {{ font-family: Arial, sans-serif; padding: 40px; color: #333; }}
+            .header {{ border-bottom: 3px solid #5e2d61; padding-bottom: 10px; margin-bottom: 20px; }}
+            .title {{ color: #5e2d61; font-size: 24px; font-weight: bold; }}
+            .box {{ border: 1px solid #ddd; padding: 15px; border-radius: 5px; margin-top: 20px; background-color: #f9f9f9; }}
+            .monto {{ font-size: 22px; color: #d35400; font-weight: bold; text-align: right; margin-top: 20px; }}
+            .footer {{ margin-top: 50px; font-size: 11px; color: #777; text-align: center; }}
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <span class="title">🚛 CHACAGEST - PRESUPUESTO</span>
+            <div style="float: right; text-align: right; font-size: 12px;">
+                Emisión: {p_data['Fecha Emisión']}<br>Válido hasta: {p_data['Vencimiento']}
+            </div>
+        </div>
+        <p><b>Señores:</b> {p_data['Cliente']}</p>
+        <p><b>Unidad solicitada:</b> {p_data['Tipo Móvil']}</p>
+        <div class="box">
+            <b>Detalle del Servicio:</b><br>
+            {p_data['Detalle']}
+        </div>
+        <div class="monto">TOTAL PRESUPUESTADO: $ {float(p_data['Importe']):,.2f}</div>
+        <div class="footer">Este documento es un presupuesto estimativo y no representa una factura ni afecta el estado de cuenta corriente.</div>
+    </body>
+    </html>
+    """
+    return html
+
+# --- 2. LOGIN ---
+if "autenticado" not in st.session_state:
+    st.session_state.autenticado = False
+
 if not st.session_state.autenticado:
     col1, col2, col3 = st.columns([1, 1, 1])
     with col2:
         st.markdown("<br><br>", unsafe_allow_html=True)
-        st.title("🚛 CHACAGEST")
-        u = st.text_input("Usuario"); p = st.text_input("Contraseña", type="password")
+        try: st.image("logo_path.png", width=250)
+        except: st.title("🚛 CHACAGEST")
+        u = st.text_input("Usuario")
+        p = st.text_input("Contraseña", type="password")
         if st.button("INGRESAR"):
-            if u == "admin" and p == "chaca2026": st.session_state.autenticado = True; st.rerun()
-            else: st.error("Error")
+            if u == "admin" and p == "chaca2026":
+                st.session_state.autenticado = True
+                st.rerun()
+            else: st.error("Acceso denegado")
     st.stop()
 
-# --- 4. INICIALIZACIÓN Y ESTÉTICA ---
+# --- 3. INICIALIZACIÓN ---
 if 'clientes' not in st.session_state:
-    c, v, p, pr, co = cargar_datos()
-    st.session_state.clientes, st.session_state.viajes, st.session_state.presupuestos, st.session_state.proveedores, st.session_state.compras = c, v, p, pr, co
+    c, v, p, prov, comp = cargar_datos()
+    st.session_state.clientes = c if c is not None else pd.DataFrame(columns=["Razón Social", "CUIT / CUIL / DNI *", "Email", "Teléfono", "Dirección Fiscal", "Localidad", "Provincia", "Condición IVA", "Condición de Venta"])
+    st.session_state.viajes = v if v is not None else pd.DataFrame(columns=["Fecha Carga", "Cliente", "Fecha Viaje", "Origen", "Destino", "Patente / Móvil", "Importe", "Tipo Comp", "Nro Comp Asoc"])
+    st.session_state.presupuestos = p if p is not None else pd.DataFrame(columns=["Fecha Emisión", "Cliente", "Vencimiento", "Detalle", "Tipo Móvil", "Importe"])
+    st.session_state.proveedores = prov if prov is not None else pd.DataFrame(columns=["Razón Social", "CUIT/DNI", "Cuenta de Gastos", "Categoría IVA"])
+    st.session_state.compras = comp if comp is not None else pd.DataFrame(columns=["Fecha", "Proveedor", "Punto Venta", "Tipo Factura", "Neto 21%", "IVA 21%", "Neto 10.5%", "IVA 10.5%", "Ret. IVA", "Ret. Ganancias", "Ret. IIBB", "No Gravados", "Total"])
 
+# --- 4. DISEÑO ORIGINAL ---
 st.markdown("""
     <style>
     [data-testid="stSidebarNav"] { display: none; }
+    header { visibility: hidden; } 
     h1, h2, h3 { color: #5e2d61 !important; }
     div.stButton > button {
         background: linear-gradient(to right, #f39c12, #d35400) !important;
         color: white !important; border-radius: 8px !important; border: none !important; font-weight: bold !important;
     }
-    .stTabs [data-baseweb="tab-list"] { gap: 10px; }
-    .stTabs [data-baseweb="tab"] { background-color: #f0f2f6; border-radius: 5px 5px 0 0; padding: 10px; }
+    .stDataFrame { border: 1px solid #5e2d61; border-radius: 5px; }
     </style>
     """, unsafe_allow_html=True)
 
 # --- 5. SIDEBAR ---
 with st.sidebar:
-    # EL LOGO SE MANTIENE AQUÍ
     try: st.image("logo_path.png", use_container_width=True)
-    except: st.markdown("<h2 style='text-align:center;'>🚛 CHACAGEST</h2>", unsafe_allow_html=True)
-    
+    except: pass
+    st.markdown("---")
     sel = option_menu(
         menu_title=None,
-        options=["CALENDARIO", "MODULO VENTAS", "MODULO COMPRAS"],
-        icons=["calendar3", "cash-stack", "cart-check"],
+        options=["CALENDARIO", "CLIENTES", "CARGA VIAJE", "PRESUPUESTOS", "COMPRAS", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"],
+        icons=["calendar3", "people", "truck", "file-earmark-spreadsheet", "cart-check", "person-vcard", "globe", "file-text"],
         default_index=0,
-        styles={"nav-link-selected": {"background-color": "#5e2d61"}}
+        styles={
+            "container": {"background-color": "#f0f2f6"},
+            "nav-link": {"font-size": "14px", "text-align": "left", "margin":"0px"},
+            "nav-link-selected": {"background-color": "#5e2d61"},
+        }
     )
+    st.markdown("---")
     if st.button("🔄 Sincronizar"):
-        st.session_state.clientes, st.session_state.viajes, st.session_state.presupuestos, st.session_state.proveedores, st.session_state.compras = cargar_datos()
+        with st.spinner("Sincronizando..."):
+            c, v, p, prov, comp = cargar_datos()
+            if c is not None:
+                st.session_state.clientes, st.session_state.viajes, st.session_state.presupuestos, st.session_state.proveedores, st.session_state.compras = c, v, p, prov, comp
+                st.rerun()
+    if st.button("🚪 Cerrar Sesión"):
+        st.session_state.autenticado = False
         st.rerun()
 
 # --- 6. MÓDULOS ---
 
 if sel == "CALENDARIO":
-    st.header("📅 Agenda Global")
-    if "v_cal" not in st.session_state: st.session_state.v_cal = None
+    st.header("📅 Agenda de Viajes")
+    if "viaje_ver" not in st.session_state: st.session_state.viaje_ver = None
     eventos = []
     for i, row in st.session_state.viajes.iterrows():
-        eventos.append({"id": str(i), "title": f"{row['Cliente']}", "start": str(row['Fecha Viaje']), "backgroundColor": "#f39c12"})
+        if str(row['Fecha Viaje']) != "-" and row['Origen'] != "AJUSTE":
+            eventos.append({"id": str(i), "title": f"🚛 {row['Cliente']}", "start": str(row['Fecha Viaje']), "allDay": True, "backgroundColor": "#f39c12", "borderColor": "#d35400"})
     
-    res_cal = calendar(events=eventos, options={"locale": "es", "height": 500})
+    cal_options = {"headerToolbar": {"left": "prev,next today", "center": "title", "right": "dayGridMonth"}, "locale": "es", "height": 600}
+    custom_css = ".fc-button-primary { background-color: #5e2d61 !important; border-color: #5e2d61 !important; } .fc-event { background-color: #f39c12 !important; } .fc-toolbar-title { color: #5e2d61 !important; }"
+    res_cal = calendar(events=eventos, options=cal_options, custom_css=custom_css, key="cal_final")
     
     if res_cal.get("eventClick"):
-        idx = int(res_cal["eventClick"]["event"]["id"])
-        v_det = st.session_state.viajes.loc[idx]
-        st.info(f"**Detalle del Viaje:** {v_det['Cliente']} | {v_det['Origen']} -> {v_det['Destino']} | $ {v_det['Importe']}")
+        st.session_state.viaje_ver = int(res_cal["eventClick"]["event"]["id"])
+    if st.session_state.viaje_ver is not None:
+        idx = st.session_state.viaje_ver
+        if idx in st.session_state.viajes.index:
+            v_det = st.session_state.viajes.loc[idx]
+            if st.button("❌ Cerrar"): st.session_state.viaje_ver = None; st.rerun()
+            st.markdown(f"""<div style="background-color: #f0f2f6; padding: 15px; border-left: 5px solid #f39c12; border-radius: 5px; margin-top: 20px;">
+                <h4 style="color: #5e2d61; margin: 0;">Detalles</h4><p><b>Cliente:</b> {v_det['Cliente']}</p><p><b>Ruta:</b> {v_det['Origen']} ➔ {v_det['Destino']}</p>
+                <p><b>Importe:</b> $ {v_det['Importe']}</p></div>""", unsafe_allow_html=True)
 
-elif sel == "MODULO VENTAS":
-    st.header("💰 Gestión de Ventas")
-    vt1, vt2, vt3, vt4 = st.tabs(["👥 Clientes", "🚛 Carga Viaje", "📝 Presupuestos", "📑 Cta Cte"])
-    
-    with vt1:
-        st.subheader("Clientes")
-        with st.expander("➕ Alta Cliente"):
-            with st.form("f_c"):
-                c1, c2 = st.columns(2)
-                r = c1.text_input("Razón Social"); cuit = c2.text_input("CUIT")
-                tel = c1.text_input("Teléfono"); mail = c2.text_input("Email")
-                if st.form_submit_button("Guardar"):
-                    # Alta completa con todas las columnas
-                    nf = pd.DataFrame([[r, cuit, mail, tel, "-", "-", "-", "-", "Cuenta Corriente"]], columns=st.session_state.clientes.columns)
-                    st.session_state.clientes = pd.concat([st.session_state.clientes, nf], ignore_index=True)
-                    guardar_datos("clientes", st.session_state.clientes); st.rerun()
-        st.dataframe(st.session_state.clientes, use_container_width=True)
+elif sel == "CLIENTES":
+    st.header("👤 Gestión de Clientes")
+    with st.expander("➕ ALTA DE NUEVO CLIENTE", expanded=False):
+        with st.form("f_cli", clear_on_submit=True):
+            c1, c2 = st.columns(2); r = c1.text_input("Razón Social *"); cuit = c2.text_input("CUIT *")
+            mail = c1.text_input("Email"); tel = c2.text_input("Teléfono")
+            dir_f = c1.text_input("Dirección Fiscal"); loc = c2.text_input("Localidad")
+            prov = c1.text_input("Provincia"); c_iva = c2.selectbox("Condición IVA", ["Responsable Inscripto", "Monotributo", "Exento", "Consumidor Final"])
+            c_vta = c1.selectbox("Condición de Venta", ["Cuenta Corriente", "Contado"])
+            if st.form_submit_button("REGISTRAR CLIENTE"):
+                if r and cuit:
+                    nueva_fila = pd.DataFrame([[r, cuit, mail, tel, dir_f, loc, prov, c_iva, c_vta]], columns=st.session_state.clientes.columns)
+                    st.session_state.clientes = pd.concat([st.session_state.clientes, nueva_fila], ignore_index=True)
+                    guardar_datos("clientes", st.session_state.clientes); st.success("Cliente guardado"); st.rerun()
 
-    with vt2:
-        st.subheader("Carga de Viaje")
-        with st.form("f_v"):
+    st.subheader("📋 Base de Clientes")
+    if not st.session_state.clientes.empty:
+        for i, row in st.session_state.clientes.iterrows():
+            with st.container():
+                c_inf, c_ed, c_el = st.columns([0.7, 0.15, 0.15])
+                c_inf.markdown(f"**{row['Razón Social']}** | CUIT: {row['CUIT / CUIL / DNI *']}")
+                c_inf.caption(f"📍 {row['Localidad']} - {row['Provincia']} | 📞 {row['Teléfono']}")
+                if c_ed.button("📝 Editar", key=f"edit_{i}"): st.session_state[f"edit_mode_{i}"] = True
+                if c_el.button("🗑️", key=f"del_cli_{i}"):
+                    if st.session_state.viajes[st.session_state.viajes['Cliente'] == row['Razón Social']].empty:
+                        st.session_state.clientes = st.session_state.clientes.drop(i).reset_index(drop=True)
+                        guardar_datos("clientes", st.session_state.clientes); st.rerun()
+                    else: st.error("No se puede eliminar: tiene viajes asociados.")
+                
+                if st.session_state.get(f"edit_mode_{i}", False):
+                    with st.form(f"f_edit_{i}"):
+                        ce1, ce2 = st.columns(2)
+                        n_rs = ce1.text_input("Razón Social", value=row['Razón Social'])
+                        n_cuit = ce2.text_input("CUIT", value=row['CUIT / CUIL / DNI *'])
+                        if st.form_submit_button("✅ Guardar"):
+                            st.session_state.clientes.loc[i, 'Razón Social'] = n_rs
+                            st.session_state.clientes.loc[i, 'CUIT / CUIL / DNI *'] = n_cuit
+                            guardar_datos("clientes", st.session_state.clientes)
+                            st.session_state[f"edit_mode_{i}"] = False; st.rerun()
+                st.divider()
+
+elif sel == "CARGA VIAJE":
+    st.header("🚛 Registro de Viaje")
+    with st.form("f_v"):
+        cli = st.selectbox("Seleccionar Cliente", st.session_state.clientes['Razón Social'].unique() if not st.session_state.clientes.empty else [""])
+        c1, c2 = st.columns(2); f_v = c1.date_input("Fecha"); pat = c2.text_input("Patente")
+        orig = st.text_input("Origen"); dest = st.text_input("Destino")
+        imp = st.number_input("Importe Neto $", min_value=0.0)
+        cond = st.selectbox("Tipo de Pago", ["Cuenta Corriente", "Contado"])
+        if st.form_submit_button("GUARDAR VIAJE"):
+            nv = pd.DataFrame([[date.today(), cli, f_v, orig, dest, pat, imp, f"Factura ({cond})", "-"]], columns=st.session_state.viajes.columns)
+            st.session_state.viajes = pd.concat([st.session_state.viajes, nv], ignore_index=True)
+            guardar_datos("viajes", st.session_state.viajes); st.success("Viaje registrado"); st.rerun()
+
+elif sel == "PRESUPUESTOS":
+    st.header("📝 Gestión de Presupuestos")
+    tab_crear, tab_historial = st.tabs(["🆕 Crear Presupuesto", "📂 Historial y Descargas"])
+    with tab_crear:
+        with st.form("f_presu", clear_on_submit=True):
             c1, c2 = st.columns(2)
-            cli = c1.selectbox("Cliente", st.session_state.clientes['Razón Social'].unique() if not st.session_state.clientes.empty else [""])
-            f_v = c2.date_input("Fecha Viaje")
-            ori = c1.text_input("Origen"); des = c2.text_input("Destino")
-            pat = c1.text_input("Patente"); imp = c2.number_input("Importe $", min_value=0.0)
-            if st.form_submit_button("Registrar"):
-                nv = pd.DataFrame([[date.today(), cli, f_v, ori, des, pat, imp, "Factura", "-"]], columns=st.session_state.viajes.columns)
-                st.session_state.viajes = pd.concat([st.session_state.viajes, nv], ignore_index=True)
-                guardar_datos("viajes", st.session_state.viajes); st.rerun()
-
-    with vt3:
-        st.subheader("Nuevo Presupuesto")
-        with st.form("f_p"):
-            p_cli = st.selectbox("Cliente ", st.session_state.clientes['Razón Social'].unique() if not st.session_state.clientes.empty else [""])
-            p_det = st.text_area("Detalle del Servicio")
-            p_mov = st.selectbox("Móvil", ["Combi", "Minibus", "Micro"])
-            p_imp = st.number_input("Importe Total", min_value=0.0)
-            if st.form_submit_button("Generar"):
-                np = pd.DataFrame([[date.today(), p_cli, date.today()+timedelta(days=7), p_det, p_mov, p_imp]], columns=st.session_state.presupuestos.columns)
-                st.session_state.presupuestos = pd.concat([st.session_state.presupuestos, np], ignore_index=True)
+            p_cli = c1.selectbox("Cliente", st.session_state.clientes['Razón Social'].unique() if not st.session_state.clientes.empty else [""])
+            p_f_emi = c2.date_input("Fecha Emisión", date.today())
+            p_f_venc = c1.date_input("Fecha Vencimiento", date.today() + timedelta(days=7))
+            p_movil = c2.selectbox("Tipo de Móvil", ["Combi 19 asientos", "Minibus 24 asientos", "Micro 45 asientos", "Micro 60 asientos"])
+            p_det = st.text_area("Detalle del Presupuesto")
+            p_imp = st.number_input("Importe Total $", min_value=0.0)
+            if st.form_submit_button("GENERAR PRESUPUESTO"):
+                nuevo_p = pd.DataFrame([[p_f_emi, p_cli, p_f_venc, p_det, p_movil, p_imp]], columns=st.session_state.presupuestos.columns)
+                st.session_state.presupuestos = pd.concat([st.session_state.presupuestos, nuevo_p], ignore_index=True)
                 guardar_datos("presupuestos", st.session_state.presupuestos); st.rerun()
-        
-        st.divider()
-        for i, row in st.session_state.presupuestos.iterrows():
-            c1, c2 = st.columns([0.8, 0.2])
-            c1.write(f"**{row['Cliente']}** - {row['Tipo Móvil']} - ${row['Importe']}")
-            html_p = generar_html_presupuesto(row)
-            c2.download_button("📄 PDF", data=html_p, file_name=f"Presu_{i}.html", mime="text/html")
 
-    with vt4:
-        if not st.session_state.clientes.empty:
-            cl = st.selectbox("Cta Cte Cliente", st.session_state.clientes['Razón Social'].unique())
-            df_cl = st.session_state.viajes[st.session_state.viajes['Cliente'] == cl]
-            st.metric("Total Deuda", f"$ {df_cl['Importe'].sum():,.2f}")
-            st.dataframe(df_cl, use_container_width=True)
+    with tab_historial:
+        for i in reversed(st.session_state.presupuestos.index):
+            row_p = st.session_state.presupuestos.loc[i]
+            with st.container():
+                ca, cb, cc = st.columns([0.6, 0.2, 0.2])
+                ca.markdown(f"**{row_p['Cliente']}** | {row_p['Tipo Móvil']}")
+                cb.markdown(f"**$ {row_p['Importe']:,.2f}**")
+                html_p = generar_html_presupuesto(row_p)
+                cc.download_button("📄 Descargar", data=html_p, file_name=f"Presu_{i}.html", mime="text/html", key=f"dl_{i}")
+                if cc.button("🗑️", key=f"delp_{i}"):
+                    st.session_state.presupuestos = st.session_state.presupuestos.drop(i)
+                    guardar_datos("presupuestos", st.session_state.presupuestos); st.rerun()
+                st.divider()
 
-elif sel == "MODULO COMPRAS":
-    st.header("🛒 Gestión de Compras")
-    ct1, ct2, ct3 = st.tabs(["👥 Proveedores", "🧾 Carga Gastos", "📑 Cta Cte"])
-    
-    with ct1:
-        with st.form("f_pr"):
-            st.subheader("Nuevo Proveedor")
+elif sel == "COMPRAS":
+    st.header("🛒 Módulo de Gastos y Compras")
+    t_prov, t_gas = st.tabs(["👥 Proveedores", "🧾 Carga de Gastos"])
+    with t_prov:
+        with st.form("f_p_c"):
             c1, c2 = st.columns(2)
-            pr_rs = c1.text_input("Razón Social"); pr_ct = c2.text_input("CUIT/DNI")
+            pr_rs = c1.text_input("Razón Social *"); pr_ct = c2.text_input("CUIT/DNI *")
             pr_gs = c1.selectbox("Cuenta de Gastos", ["Combustible", "Reparación", "Repuesto", "Seguros", "Otros"])
             pr_iv = c2.selectbox("Categoría IVA", ["Responsable Inscripto", "Exento", "Monotributista"])
-            if st.form_submit_button("Registrar"):
-                n_pr = pd.DataFrame([[pr_rs, pr_ct, pr_gs, pr_iv]], columns=st.session_state.proveedores.columns)
-                st.session_state.proveedores = pd.concat([st.session_state.proveedores, n_pr], ignore_index=True)
-                guardar_datos("proveedores", st.session_state.proveedores); st.rerun()
+            if st.form_submit_button("REGISTRAR PROVEEDOR"):
+                if pr_rs and pr_ct:
+                    nf = pd.DataFrame([[pr_rs, pr_ct, pr_gs, pr_iv]], columns=st.session_state.proveedores.columns)
+                    st.session_state.proveedores = pd.concat([st.session_state.proveedores, nf], ignore_index=True)
+                    guardar_datos("proveedores", st.session_state.proveedores); st.rerun()
         st.dataframe(st.session_state.proveedores, use_container_width=True)
 
-    with ct2:
-        with st.form("f_g"):
-            st.subheader("Carga de Gasto Completa")
+    with t_gas:
+        with st.form("f_g_c"):
             c1, c2, c3 = st.columns(3)
             cp_f = c1.date_input("Fecha"); cp_p = c2.selectbox("Proveedor", st.session_state.proveedores['Razón Social'].unique() if not st.session_state.proveedores.empty else [""])
             cp_t = c3.selectbox("Tipo", ["Factura A", "Factura B", "Factura C", "Remito", "Nota de Crédito", "Nota de Débito"])
-            
-            n21 = c1.number_input("Neto 21%", min_value=0.0); n10 = c2.number_input("Neto 10.5%", min_value=0.0); no_g = c3.number_input("No Gravados", min_value=0.0)
-            r_iv = c1.number_input("Ret. IVA", min_value=0.0); r_ga = c2.number_input("Ret. Ganancias", min_value=0.0); r_ib = c3.number_input("Ret. IIBB", min_value=0.0)
-            
+            n21 = c1.number_input("Neto 21%"); n10 = c2.number_input("Neto 10.5%"); no_g = c3.number_input("No Gravados")
+            r_iv = c1.number_input("Ret. IVA"); r_ga = c2.number_input("Ret. Ganancias"); r_ib = c3.number_input("Ret. IIBB")
             i21 = n21 * 0.21; i10 = n10 * 0.105
             total = n21 + i21 + n10 + i10 + r_iv + r_ga + r_ib + no_g
             if "Nota de Crédito" in cp_t: total = -abs(total)
-            
-            st.markdown(f"### TOTAL: $ {total:,.2f}")
-            if st.form_submit_button("Guardar Comprobante"):
-                n_cp = pd.DataFrame([[cp_f, cp_p, "-", cp_t, n21, i21, n10, i10, r_iv, r_ga, r_ib, no_g, total]], columns=st.session_state.compras.columns)
-                st.session_state.compras = pd.concat([st.session_state.compras, n_cp], ignore_index=True)
+            st.subheader(f"TOTAL: $ {total:,.2f}")
+            if st.form_submit_button("GUARDAR COMPROBANTE"):
+                nf = pd.DataFrame([[cp_f, cp_p, "-", cp_t, n21, i21, n10, i10, r_iv, r_ga, r_ib, no_g, total]], columns=st.session_state.compras.columns)
+                st.session_state.compras = pd.concat([st.session_state.compras, nf], ignore_index=True)
                 guardar_datos("compras", st.session_state.compras); st.rerun()
+
+elif sel == "CTA CTE INDIVIDUAL":
+    st.header("📑 Cuenta Corriente por Cliente")
+    if not st.session_state.clientes.empty:
+        cl = st.selectbox("Seleccionar Cliente", st.session_state.clientes['Razón Social'].unique())
+        df_ind = st.session_state.viajes[st.session_state.viajes['Cliente'] == cl].copy()
+        st.metric("SALDO TOTAL", f"$ {df_ind['Importe'].sum():,.2f}")
+        html_reporte = generar_html_resumen(cl, df_ind, df_ind['Importe'].sum())
+        st.download_button("📄 DESCARGAR RESUMEN", data=html_reporte, file_name=f"Resumen_{cl}.html", mime="text/html")
+        st.dataframe(df_ind, use_container_width=True)
+
+elif sel == "CTA CTE GENERAL":
+    st.header("🌎 Estado Global de Deudores")
+    if not st.session_state.viajes.empty:
+        res = st.session_state.viajes.groupby('Cliente')['Importe'].sum().reset_index()
+        st.table(res.style.format({"Importe": "$ {:,.2f}"}))
+
+elif sel == "COMPROBANTES":
+    st.header("📜 Historial de Comprobantes")
+    for i in reversed(st.session_state.viajes.index):
+        row = st.session_state.viajes.loc[i]
+        c1, c2, c3 = st.columns([0.2, 0.6, 0.1])
+        c1.write(f"📅 {row['Fecha Viaje']}")
+        c2.write(f"👤 **{row['Cliente']}** | {row['Origen']} a {row['Destino']} | **${row['Importe']}**")
+        if c3.button("🗑️", key=f"del_{i}"):
+            st.session_state.viajes = st.session_state.viajes.drop(i)
+            guardar_datos("viajes", st.session_state.viajes); st.rerun()
+        st.divider()
