@@ -206,7 +206,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 5. SIDEBAR (ACTUALIZADO CON COMPROBANTES EN VENTAS) ---
+# --- 5. SIDEBAR (NUEVO FORMATO DE NAVEGACIÓN) ---
 with st.sidebar:
     try: st.image("logo_path.png", use_container_width=True)
     except: pass
@@ -214,47 +214,50 @@ with st.sidebar:
     
     # Menú Principal
     sel = option_menu(
-        menu_title=None,
-        options=["CALENDARIO", "VENTAS", "TESORERIA"], # Comprobantes sale de aquí
+        menu_title="MENÚ PRINCIPAL",
+        options=["CALENDARIO", "VENTAS", "TESORERIA"],
         icons=["calendar3", "cart4", "safe"],
+        menu_icon="cast", 
         default_index=0,
         styles={
-            "container": {"background-color": "#f0f2f6"},
-            "nav-link": {"font-size": "14px", "text-align": "left", "margin":"0px"},
+            "container": {"padding": "5px", "background-color": "#f0f2f6"},
+            "nav-link": {"font-size": "14px", "text-align": "left", "margin":"0px", "--hover-color": "#eee"},
             "nav-link-selected": {"background-color": "#5e2d61"},
         }
     )
 
-    # Submenú Ventas (Desplegable Acordeón)
+    # Submenú de Ventas - Formato "Lista Flotante"
     sub_sel = None
     if sel == "VENTAS":
-        with st.expander("📂 OPCIONES DE VENTAS", expanded=True):
-            sub_sel = option_menu(
-                menu_title=None,
-                options=["CLIENTES", "CARGA VIAJE", "PRESUPUESTOS", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"],
-                icons=["people", "truck", "file-earmark-spreadsheet", "person-vcard", "globe", "file-text"],
-                default_index=0,
-                styles={
-                    "container": {"background-color": "transparent"},
-                    "nav-link": {"font-size": "13px", "text-align": "left"},
-                    "nav-link-selected": {"background-color": "#f39c12"},
-                }
-            )
+        st.markdown("---")
+        st.markdown("<p style='text-align:center; color:#5e2d61; font-weight:bold;'>📂 GESTIÓN DE VENTAS</p>", unsafe_allow_html=True)
+        sub_sel = option_menu(
+            menu_title=None,
+            options=["CLIENTES", "CARGA VIAJE", "PRESUPUESTOS", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"],
+            icons=["person-badge", "truck", "file-earmark-text", "wallet2", "graph-up", "receipt"],
+            default_index=0,
+            styles={
+                "container": {"padding": "0px", "background-color": "transparent"},
+                "nav-link": {"font-size": "12px", "text-align": "left", "padding": "10px"},
+                "nav-link-selected": {"background-color": "#f39c12", "color": "white"},
+            }
+        )
 
     st.markdown("---")
-    if st.button("🔄 Sincronizar"):
-        with st.spinner("Sincronizando..."):
+    # Botones de acción inferior
+    col_sync, col_off = st.columns(2)
+    if col_sync.button("🔄 Sync"):
+        with st.spinner("..."):
             c, v, p, t = cargar_datos()
-            if c is not None:
-                st.session_state.clientes, st.session_state.viajes, st.session_state.presupuestos, st.session_state.tesoreria = c, v, p, t
-                st.rerun()
-    if st.button("🚪 Cerrar Sesión"):
+            st.session_state.clientes, st.session_state.viajes, st.session_state.presupuestos, st.session_state.tesoreria = c, v, p, t
+            st.rerun()
+    
+    if col_off.button("🚪 Salir"):
         st.session_state.autenticado = False
         st.rerun()
 
 # --- 6. LÓGICA DE NAVEGACIÓN ---
 actual_page = sub_sel if sel == "VENTAS" else sel
-
 # --- A partir de aquí, el resto de tus módulos (if actual_page == ...) funcionan igual ---
 
 # --- MÓDULOS ---
@@ -511,4 +514,5 @@ elif actual_page == "COMPROBANTES":
                 guardar_datos("viajes", st.session_state.viajes)
                 st.rerun()
             st.divider()
+
 
