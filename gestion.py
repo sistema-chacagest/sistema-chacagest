@@ -5,6 +5,7 @@ from datetime import date, timedelta
 import gspread
 from google.oauth2.service_account import Credentials
 from streamlit_option_menu import option_menu
+# Asegúrate de que streamlit-calendar esté en tu requirements.txt
 from streamlit_calendar import calendar
 import base64
 
@@ -111,7 +112,7 @@ def generar_html_presupuesto(p_data):
         <div style="background: #f9f9f9; padding: 15px; border-radius: 5px; min-height: 100px; border: 1px solid #ddd;">
             <b>Detalle del Servicio:</b><br>{p_data['Detalle']}
         </div>
-        <div class="monto">TOTAL: $ {p_data['Importe']:,.2f}</div>
+        <div class="monto">TOTAL: $ {float(p_data['Importe']):,.2f}</div>
     </body>
     </html>
     """
@@ -178,11 +179,51 @@ with st.sidebar:
 
 if sel == "CALENDARIO":
     st.header("📅 Agenda de Viajes")
+    
+    if "viaje_ver" not in st.session_state:
+        st.session_state.viaje_ver = None
+    
     eventos = []
     for i, row in st.session_state.viajes.iterrows():
         if str(row['Fecha Viaje']) != "-" and row['Origen'] != "AJUSTE":
-            eventos.append({"id": str(i), "title": f"🚛 {row['Cliente']}", "start": str(row['Fecha Viaje']), "allDay": True, "backgroundColor": "#f39c12"})
-    calendar(events=eventos, options={"locale": "es", "height": 600}, key="cal")
+            eventos.append({
+                "id": str(i), 
+                "title": f"🚛 {row['Cliente']}", 
+                "start": str(row['Fecha Viaje']), 
+                "allDay": True, 
+                "backgroundColor": "#f39c12",
+                "borderColor": "#d35400"
+            })
+            
+    cal_options = {
+        "headerToolbar": {"left": "prev,next today", "center": "title", "right": "dayGridMonth"},
+        "locale": "es",
+        "height": 600,
+    }
+    
+    res_cal = calendar(events=eventos, options=cal_options, key="cal_final")
+
+    # Restaurada la lógica de visualización al hacer clic
+    if res_cal.get("eventClick"):
+        st.session_state.viaje_ver = int(res_cal["eventClick"]["event"]["id"])
+
+    if st.session_state.viaje_ver is not None:
+        idx = st.session_state.viaje_ver
+        if idx in st.session_state.viajes.index:
+            v_det = st.session_state.viajes.loc[idx]
+            if st.button("❌ Cerrar Información"):
+                st.session_state.viaje_ver = None
+                st.rerun()
+
+            st.markdown(f"""
+            <div style="background-color: #f0f2f6; padding: 15px; border-left: 5px solid #f39c12; border-radius: 5px; margin-top: 20px;">
+                <h4 style="color: #5e2d61; margin: 0;">Detalles del Viaje</h4>
+                <p><b>Cliente:</b> {v_det['Cliente']}</p>
+                <p><b>Ruta:</b> {v_det['Origen']} ➔ {v_det['Destino']}</p>
+                <p><b>Móvil:</b> {v_det['Patente / Móvil']}</p>
+                <p><b>Importe:</b> $ {v_det['Importe']}</p>
+            </div>
+            """, unsafe_allow_html=True)
 
 elif sel == "CLIENTES":
     st.header("👤 Gestión de Clientes")
@@ -202,7 +243,6 @@ elif sel == "CLIENTES":
     st.subheader("📋 Base de Clientes")
     st.dataframe(st.session_state.clientes, use_container_width=True)
     
-    # --- RESTAURADO: ELIMINAR CLIENTE ---
     with st.expander("🗑️ ELIMINAR CLIENTE"):
         if not st.session_state.clientes.empty:
             elim_c = st.selectbox("Seleccione cliente a borrar:", ["-"] + list(st.session_state.clientes['Razón Social'].unique()))
