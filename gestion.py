@@ -1,12 +1,12 @@
 import streamlit as st
-import pd as pd
+import pandas as pd
 import os
 from datetime import date
 import gspread
 from google.oauth2.service_account import Credentials
 from streamlit_option_menu import option_menu
 from streamlit_calendar import calendar
-import base64 # Para la descarga del PDF
+import base64 
 
 # --- 1. CONFIGURACIÓN Y CONEXIÓN ---
 st.set_page_config(page_title="CHACAGEST - GESTIÓN TOTAL", page_icon="🚛", layout="wide")
@@ -136,46 +136,34 @@ with st.sidebar:
     except: pass
     st.markdown("---")
     
-    # Inicializar el estado de navegación si no existe
-    if 'menu_sel' not in st.session_state:
-        st.session_state.menu_sel = "CALENDARIO"
+    # Manejo del estado del menú
+    if 'menu_actual' not in st.session_state:
+        st.session_state.menu_actual = "CALENDARIO"
 
-    # Botón CALENDARIO (Limpia la selección de Venta)
+    # Botón CALENDARIO solo y separado
     if st.button("📅 CALENDARIO", use_container_width=True):
-        st.session_state.menu_sel = "CALENDARIO"
-        st.rerun()
+        st.session_state.menu_actual = "CALENDARIO"
 
-    # Desplegable VENTA
-    with st.expander("💰 VENTA", expanded=(st.session_state.menu_sel != "CALENDARIO")):
-        opciones_vta = ["CLIENTES", "CARGA VIAJE", "AJUSTES (NC/ND)", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"]
-        
-        # Calculamos el índice por defecto para el option_menu
-        default_idx = 0
-        if st.session_state.menu_sel in opciones_vta:
-            default_idx = opciones_vta.index(st.session_state.menu_sel)
-
+    # Menú desplegable VENTA
+    with st.expander("💰 VENTA", expanded=(st.session_state.menu_actual != "CALENDARIO")):
         sel_venta = option_menu(
             menu_title=None,
-            options=opciones_vta,
+            options=["CLIENTES", "CARGA VIAJE", "AJUSTES (NC/ND)", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"],
             icons=["people", "truck", "file-earmark-minus", "person-vcard", "globe", "file-text"],
-            default_index=default_idx,
+            default_index=0,
             styles={
                 "container": {"background-color": "transparent", "padding": "0px"},
                 "nav-link": {"font-size": "14px", "text-align": "left", "margin":"0px"},
                 "nav-link-selected": {"background-color": "#5e2d61"},
             },
-            key="vta_menu_key"
+            key="venta_menu"
         )
-        
-        # Si el usuario hace click en el option_menu, actualizamos el estado global
-        # Solo actualizamos si el usuario cambió manualmente la opción
-        if st.session_state.menu_sel != sel_venta:
-            # Si estábamos en calendario y tocamos el menú de ventas, cambiamos
-            st.session_state.menu_sel = sel_venta
-            st.rerun()
+        # Si el usuario selecciona algo del submenú, actualizamos el estado general
+        if st.session_state.menu_actual != "CALENDARIO" or sel_venta != "CLIENTES":
+             st.session_state.menu_actual = sel_venta
 
-    # Variable 'sel' para los módulos
-    sel = st.session_state.menu_sel
+    # Variable final para los módulos
+    sel = st.session_state.menu_actual
 
     st.markdown("---")
     if st.button("🔄 Sincronizar"):
