@@ -135,17 +135,35 @@ with st.sidebar:
     try: st.image("logo_path.png", use_container_width=True)
     except: pass
     st.markdown("---")
-    sel = option_menu(
-        menu_title=None,
-        options=["CALENDARIO", "CLIENTES", "CARGA VIAJE", "AJUSTES (NC/ND)", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"],
-        icons=["calendar3", "people", "truck", "file-earmark-minus", "person-vcard", "globe", "file-text"],
-        default_index=0,
-        styles={
-            "container": {"background-color": "#f0f2f6"},
-            "nav-link": {"font-size": "14px", "text-align": "left", "margin":"0px"},
-            "nav-link-selected": {"background-color": "#5e2d61"},
-        }
-    )
+    
+    # Inicializamos la selección en el estado de sesión si no existe
+    if 'menu_actual' not in st.session_state:
+        st.session_state.menu_actual = "CALENDARIO"
+
+    # Botón CALENDARIO solo
+    if st.button("📅 CALENDARIO", use_container_width=True):
+        st.session_state.menu_actual = "CALENDARIO"
+
+    # Apartado desplegable VENTA
+    with st.expander("💰 VENTA", expanded=True):
+        sel_venta = option_menu(
+            menu_title=None,
+            options=["CLIENTES", "CARGA VIAJE", "AJUSTES (NC/ND)", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"],
+            icons=["people", "truck", "file-earmark-minus", "person-vcard", "globe", "file-text"],
+            default_index=0,
+            styles={
+                "container": {"background-color": "transparent", "padding": "0px"},
+                "nav-link": {"font-size": "14px", "text-align": "left", "margin":"0px"},
+                "nav-link-selected": {"background-color": "#5e2d61"},
+            },
+            key="venta_menu"
+        )
+        # Si el usuario interactúa con este menú, actualizamos el estado
+        st.session_state.menu_actual = sel_venta
+
+    # Asignamos la variable sel final para que el resto del código funcione
+    sel = st.session_state.menu_actual
+
     st.markdown("---")
     if st.button("🔄 Sincronizar"):
         with st.spinner("Sincronizando..."):
@@ -331,4 +349,3 @@ elif sel == "COMPROBANTES":
                 guardar_datos("viajes", st.session_state.viajes)
                 st.rerun()
             st.divider()
-
