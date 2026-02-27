@@ -385,5 +385,83 @@ elif sel == "COMPROBANTES":
             if c3.button("🗑️", key=f"del_{i}"):
                 st.session_state.viajes = st.session_state.viajes.drop(i)
                 guardar_datos("viajes", st.session_state.viajes); st.rerun()
+
+import datetime
+
+class TesoriaModulo:
+    def __init__(self):
+        # Estructura de cuentas disponibles
+        self.cuentas = {
+            "CAJA COTI": 0.0,
+            "CAJA TATO": 0.0,
+            "BANCO GALICIA": 0.0,
+            "BANCO PROVINCIA": 0.0,
+            "BANCO SUPERVIELLE": 0.0
+        }
+        self.historial_movimientos = []
+
+    def registrar_movimiento(self, tipo, concepto, monto, cuenta, comprobante_afip=None):
+        """
+        Registra ingresos y egresos afectando el saldo de las cuentas.
+        Incluye validación para asociar Notas de Crédito/Débito a AFIP.
+        """
+        if cuenta not in self.cuentas:
+            print(f"Error: La cuenta '{cuenta}' no existe.")
+            return False
+
+        if tipo.lower() == "egreso" and self.cuentas[cuenta] < monto:
+            print(f"Aviso: Saldo insuficiente en {cuenta}, pero se registrará el movimiento.")
+
+        # Ajuste de saldo
+        if tipo.lower() == "ingreso":
+            self.cuentas[cuenta] += monto
+        elif tipo.lower() == "egreso":
+            self.cuentas[cuenta] -= monto
+
+        # Registro del log
+        movimiento = {
+            "fecha": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "tipo": tipo.upper(),
+            "concepto": concepto,
+            "monto": monto,
+            "cuenta": cuenta,
+            "afip_asociado": comprobante_afip  # Requerido para Notas de Crédito/Débito
+        }
+        
+        self.historial_movimientos.append(movimiento)
+        print(f"Operación exitosa: {concepto} en {cuenta}.")
+        return True
+
+    def mostrar_saldos(self):
+        print("\n--- ESTADO DE CUENTAS ---")
+        for cuenta, saldo in self.cuentas.items():
+            print(f"{cuenta}: ${saldo:,.2f}")
+        print("-------------------------\n")
+
+# --- EJEMPLO DE USO ---
+
+if __name__ == "__main__":
+    tesoreria = TesoriaModulo()
+
+    # 1. Ingresos Varios
+    tesoreria.registrar_movimiento("ingreso", "Ingresos Varios", 50000, "CAJA COTI")
+
+    # 2. Cobranza de Viaje (Forma de cobro: Banco Galicia)
+    tesoreria.registrar_movimiento("ingreso", "Cobranza de Viaje", 120000, "BANCO GALICIA")
+
+    # 3. Egreso Vario (Pago realizado desde Caja Tato)
+    # Aquí puedes incluir la lógica de Nota de Crédito/Débito AFIP
+    tesoreria.registrar_movimiento(
+        "egreso", 
+        "Egresos Varios (Repuestos)", 
+        15000, 
+        "CAJA TATO", 
+        comprobante_afip="NC-0001-000045"
+    )
+
+    # Mostrar resultados
+    tesoreria.mostrar_saldos()
+            
             st.divider()
+
 
