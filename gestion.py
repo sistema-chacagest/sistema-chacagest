@@ -206,76 +206,68 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 5. SIDEBAR (DISEÑO DE BOTONERA SEGMENTADA) ---
+# --- 5. SIDEBAR (MENÚ DESPLEGABLE DINÁMICO) ---
 with st.sidebar:
     try: st.image("logo_path.png", use_container_width=True)
     except: pass
     st.markdown("---")
+
+    # Definimos las opciones base
+    menu_options = ["CALENDARIO", "VENTAS", "TESORERIA"]
+    menu_icons = ["calendar3", "cart4", "safe"]
     
-    # 1. Menú Principal (Iconos grandes arriba)
-    sel = option_menu(
+    # Verificamos si "VENTAS" fue clickeado previamente para "abrir" el menú
+    # Usamos un query param o session_state para mantener el estado
+    if "menu_abierto" not in st.session_state:
+        st.session_state.menu_abierto = False
+
+    # Lógica de inserción de sub-elementos
+    # Si el usuario selecciona VENTAS, rediseñamos la lista de opciones
+    actual_options = []
+    actual_icons = []
+    
+    for opt in menu_options:
+        actual_options.append(opt)
+        actual_icons.append(menu_icons[menu_options.index(opt)])
+        
+        # SI LA OPCIÓN ES VENTAS, metemos las sub-opciones debajo con un espacio/prefijo
+        if opt == "VENTAS":
+            sub_opciones = [
+                "  • CLIENTES", 
+                "  • CARGA VIAJE", 
+                "  • PRESUPUESTOS", 
+                "  • CTA CTE INDIVIDUAL", 
+                "  • CTA CTE GENERAL", 
+                "  • COMPROBANTES"
+            ]
+            sub_iconos = ["person-badge", "truck", "file-earmark-text", "wallet2", "graph-up", "receipt"]
+            actual_options.extend(sub_opciones)
+            actual_icons.extend(sub_iconos)
+
+    # Renderizamos el Menú Único
+    seleccion = option_menu(
         menu_title=None,
-        options=["CALENDARIO", "VENTAS", "TESORERIA"],
-        icons=["calendar3", "cart4", "safe"],
+        options=actual_options,
+        icons=actual_icons,
         default_index=0,
-        orientation="vertical", # Puedes probar "horizontal" si quieres que flote arriba
         styles={
-            "container": {"padding": "0px", "background-color": "#f8f9fa"},
-            "nav-link": {"font-size": "14px", "font-weight": "bold", "margin":"5px"},
-            "nav-link-selected": {"background-color": "#5e2d61", "color": "white"},
+            "container": {"padding": "5px", "background-color": "#f0f2f6"},
+            "nav-link": {"font-size": "14px", "text-align": "left", "margin":"0px"},
+            "nav-link-selected": {"background-color": "#5e2d61"},
         }
     )
 
-    # 2. Submenú de Ventas (Estilo Botonera Moderna)
-    sub_sel = None
-    if sel == "VENTAS":
-        st.markdown("<br><p style='text-align:center; font-size:12px; color:gray; letter-spacing: 2px;'>GESTIÓN COMERCIAL</p>", unsafe_allow_html=True)
-        
-        # Usamos st.radio con un estilo CSS para que parezcan botones de una app móvil
-        opciones_ventas = ["CLIENTES", "CARGA VIAJE", "PRESUPUESTOS", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"]
-        
-        # Estilizamos el radio button para que no parezca el de defecto
-        sub_sel = st.radio(
-            label="Seleccione una opción:",
-            options=opciones_ventas,
-            label_visibility="collapsed",
-            key="sub_menu_ventas"
-        )
-        
-        st.markdown("""
-            <style>
-            /* Cambia el aspecto del radio button seleccionado en el sidebar */
-            div[data-testid="stSidebar"] div[role="radiogroup"] > label {
-                background-color: #ffffff;
-                border: 1px solid #ddd;
-                padding: 8px 12px;
-                border-radius: 5px;
-                margin-bottom: 5px;
-                transition: 0.3s;
-                cursor: pointer;
-            }
-            div[data-testid="stSidebar"] div[role="radiogroup"] > label:hover {
-                border-color: #f39c12;
-                color: #f39c12;
-            }
-            div[data-testid="stSidebar"] div[role="radiogroup"] [data-checked="true"] {
-                background-color: #f39c12 !important;
-                color: white !important;
-                border: none;
-            }
-            </style>
-        """, unsafe_allow_html=True)
-
     st.markdown("---")
-    # Botones de utilidad al final
-    if st.button("🔄 Actualizar Datos", use_container_width=True):
+    if st.button("🔄 Sincronizar"):
         c, v, p, t = cargar_datos()
         st.session_state.clientes, st.session_state.viajes, st.session_state.presupuestos, st.session_state.tesoreria = c, v, p, t
         st.rerun()
 
-# --- 6. LÓGICA DE NAVEGACIÓN ---
-actual_page = sub_sel if sel == "VENTAS" else sel
-# --- MÓDULOS ---
+# --- 6. LÓGICA DE NAVEGACIÓN (AJUSTADA PARA SUB-MENÚS) ---
+# Limpiamos el prefijo de las sub-opciones para que coincidan con tus IF anteriores
+actual_page = seleccion.replace("  • ", "")
+
+# --- El resto de tu código (if actual_page == "CLIENTES": etc.) funciona igual ---
 
 if actual_page == "CALENDARIO":
     st.header("📅 Agenda de Viajes")
@@ -529,6 +521,7 @@ elif actual_page == "COMPROBANTES":
                 guardar_datos("viajes", st.session_state.viajes)
                 st.rerun()
             st.divider()
+
 
 
 
