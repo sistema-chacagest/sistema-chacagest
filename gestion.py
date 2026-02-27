@@ -206,7 +206,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 5. SIDEBAR (NUEVO ORDEN) ---
+# --- 5. SIDEBAR (ACTUALIZADO CON COMPROBANTES EN VENTAS) ---
 with st.sidebar:
     try: st.image("logo_path.png", use_container_width=True)
     except: pass
@@ -215,8 +215,8 @@ with st.sidebar:
     # Menú Principal
     sel = option_menu(
         menu_title=None,
-        options=["CALENDARIO", "VENTAS", "TESORERIA", "COMPROBANTES"],
-        icons=["calendar3", "cart4", "safe", "file-text"],
+        options=["CALENDARIO", "VENTAS", "TESORERIA"], # Comprobantes sale de aquí
+        icons=["calendar3", "cart4", "safe"],
         default_index=0,
         styles={
             "container": {"background-color": "#f0f2f6"},
@@ -231,8 +231,8 @@ with st.sidebar:
         with st.expander("📂 OPCIONES DE VENTAS", expanded=True):
             sub_sel = option_menu(
                 menu_title=None,
-                options=["CLIENTES", "CARGA VIAJE", "PRESUPUESTOS", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL"],
-                icons=["people", "truck", "file-earmark-spreadsheet", "person-vcard", "globe"],
+                options=["CLIENTES", "CARGA VIAJE", "PRESUPUESTOS", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"],
+                icons=["people", "truck", "file-earmark-spreadsheet", "person-vcard", "globe", "file-text"],
                 default_index=0,
                 styles={
                     "container": {"background-color": "transparent"},
@@ -253,9 +253,9 @@ with st.sidebar:
         st.rerun()
 
 # --- 6. LÓGICA DE NAVEGACIÓN ---
-
-# Redirección de submenú a variable principal para mantener las funciones intactas
 actual_page = sub_sel if sel == "VENTAS" else sel
+
+# --- A partir de aquí, el resto de tus módulos (if actual_page == ...) funcionan igual ---
 
 # --- MÓDULOS ---
 
@@ -511,3 +511,4 @@ elif actual_page == "COMPROBANTES":
                 guardar_datos("viajes", st.session_state.viajes)
                 st.rerun()
             st.divider()
+
