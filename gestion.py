@@ -6,7 +6,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 from streamlit_option_menu import option_menu
 from streamlit_calendar import calendar
-import base64 
+import base64 # Para la descarga del PDF
 
 # --- 1. CONFIGURACIÓN Y CONEXIÓN ---
 st.set_page_config(page_title="CHACAGEST - GESTIÓN TOTAL", page_icon="🚛", layout="wide")
@@ -135,36 +135,17 @@ with st.sidebar:
     try: st.image("logo_path.png", use_container_width=True)
     except: pass
     st.markdown("---")
-    
-    # Manejo del estado del menú
-    if 'menu_actual' not in st.session_state:
-        st.session_state.menu_actual = "CALENDARIO"
-
-    # Botón CALENDARIO solo y separado
-    if st.button("📅 CALENDARIO", use_container_width=True):
-        st.session_state.menu_actual = "CALENDARIO"
-
-    # Menú desplegable VENTA
-    with st.expander("💰 VENTA", expanded=(st.session_state.menu_actual != "CALENDARIO")):
-        sel_venta = option_menu(
-            menu_title=None,
-            options=["CLIENTES", "CARGA VIAJE", "AJUSTES (NC/ND)", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"],
-            icons=["people", "truck", "file-earmark-minus", "person-vcard", "globe", "file-text"],
-            default_index=0,
-            styles={
-                "container": {"background-color": "transparent", "padding": "0px"},
-                "nav-link": {"font-size": "14px", "text-align": "left", "margin":"0px"},
-                "nav-link-selected": {"background-color": "#5e2d61"},
-            },
-            key="venta_menu"
-        )
-        # Si el usuario selecciona algo del submenú, actualizamos el estado general
-        if st.session_state.menu_actual != "CALENDARIO" or sel_venta != "CLIENTES":
-             st.session_state.menu_actual = sel_venta
-
-    # Variable final para los módulos
-    sel = st.session_state.menu_actual
-
+    sel = option_menu(
+        menu_title=None,
+        options=["CALENDARIO", "CLIENTES", "CARGA VIAJE", "AJUSTES (NC/ND)", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"],
+        icons=["calendar3", "people", "truck", "file-earmark-minus", "person-vcard", "globe", "file-text"],
+        default_index=0,
+        styles={
+            "container": {"background-color": "#f0f2f6"},
+            "nav-link": {"font-size": "14px", "text-align": "left", "margin":"0px"},
+            "nav-link-selected": {"background-color": "#5e2d61"},
+        }
+    )
     st.markdown("---")
     if st.button("🔄 Sincronizar"):
         with st.spinner("Sincronizando..."):
