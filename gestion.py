@@ -142,7 +142,6 @@ def generar_html_recibo(data):
         <p><b>Fecha:</b> {data['Fecha']}</p>
         <p><b>Recibimos de:</b> {data['Cliente/Proveedor']}</p>
         <p><b>Concepto:</b> {data['Concepto']}</p>
-        <p><b>Medio:</b> {data['Caja/Banco']}</p>
         <div class="monto-box">SON PESOS: $ {abs(data['Monto']):,.2f}</div>
     </body>
     </html>
@@ -164,7 +163,6 @@ def generar_html_orden_pago(data):
         <p><b>Fecha:</b> {data['Fecha']}</p>
         <p><b>Pagado a:</b> {data['Proveedor']}</p>
         <p><b>Concepto:</b> {data['Concepto']}</p>
-        <p><b>Medio de Pago:</b> {data['Caja/Banco']}</p>
         <div class="monto-box">TOTAL PAGADO: $ {abs(data['Monto']):,.2f}</div>
     </body>
     </html>
@@ -623,5 +621,6 @@ elif sel == "HISTORICO COMPRAS":
             if c3.button("🗑️", key=f"del_comp_{i}"):
                 st.session_state.compras = st.session_state.compras.drop(i); guardar_datos("compras", st.session_state.compras); st.rerun()
             st.divider()
+
 
 
