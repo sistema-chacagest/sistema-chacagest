@@ -125,7 +125,6 @@ def generar_html_resumen(cliente, df, saldo):
     return html
 
 def generar_html_recibo(data):
-    # Sirve para Cobranzas (Ingresos) y Orden de Pago (Egresos)
     tipo_titulo = "ORDEN DE PAGO" if data['Monto'] < 0 else "RECIBO DE PAGO"
     monto_mostrar = abs(data['Monto'])
     html = f"""
@@ -208,6 +207,10 @@ if 'clientes' not in st.session_state or 'viajes' not in st.session_state:
     st.session_state.tesoreria = t if t is not None else pd.DataFrame()
     st.session_state.proveedores = prov if prov is not None else pd.DataFrame()
     st.session_state.compras = com if com is not None else pd.DataFrame()
+
+# Variables para manejar descargas fuera de formularios
+if "op_lista" not in st.session_state:
+    st.session_state.op_lista = None
 
 # --- 4. DISEÑO ---
 st.markdown("""
@@ -350,24 +353,28 @@ elif sel == "TESORERIA":
             mon_op = st.number_input("Monto del Pago $", min_value=0.0)
             ref_op = st.text_input("Nro Comprobante / Referencia")
             con_op = st.text_input("Concepto", value="Pago a Proveedor")
-            if st.form_submit_button("GENERAR PAGO"):
+            if st.form_submit_button("REGISTRAR PAGO"):
                 if prov_op and mon_op > 0:
-                    # 1. Registrar en Tesorería (Salida de dinero)
                     nt_op = pd.DataFrame([[date.today(), "ORDEN DE PAGO", cj_op, con_op, prov_op, -mon_op, ref_op]], columns=st.session_state.tesoreria.columns)
                     st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt_op], ignore_index=True)
-                    
-                    # 2. Registrar en Compras (Descuento de Cta Cte - Se carga como "PAGO" con total negativo)
                     nc_op = pd.DataFrame([[date.today(), prov_op, "-", "PAGO", 0, 0, 0, 0, 0, 0, -mon_op]], columns=st.session_state.compras.columns)
                     st.session_state.compras = pd.concat([st.session_state.compras, nc_op], ignore_index=True)
-                    
                     guardar_datos("tesoreria", st.session_state.tesoreria)
                     guardar_datos("compras", st.session_state.compras)
                     
-                    st.success(f"Orden de Pago generada correctamente por $ {mon_op:,.2f}")
-                    # 3. Preparar Impresión
-                    op_html = generar_html_recibo({"Fecha": date.today(), "Cliente/Proveedor": prov_op, "Concepto": con_op, "Caja/Banco": cj_op, "Monto": -mon_op, "Ref AFIP": ref_op})
-                    st.download_button("🖨️ DESCARGAR ORDEN DE PAGO", op_html, file_name=f"OrdenPago_{prov_op}_{date.today()}.html", mime="text/html")
+                    # Guardamos los datos para la descarga en session_state (FUERA DEL FORM)
+                    st.session_state.op_lista = {
+                        "html": generar_html_recibo({"Fecha": date.today(), "Cliente/Proveedor": prov_op, "Concepto": con_op, "Caja/Banco": cj_op, "Monto": -mon_op, "Ref AFIP": ref_op}),
+                        "nombre": f"OrdenPago_{prov_op}_{date.today()}.html"
+                    }
+                    st.success(f"Orden de Pago registrada para {prov_op}. Use el botón de abajo para descargar.")
                 else: st.warning("Complete proveedor y monto.")
+        
+        # EL BOTÓN DE DESCARGA AHORA ESTÁ AFUERA DEL FORM
+        if st.session_state.op_lista:
+            st.download_button("🖨️ DESCARGAR ORDEN DE PAGO", st.session_state.op_lista["html"], file_name=st.session_state.op_lista["nombre"], mime="text/html")
+            if st.button("Limpiar"): st.session_state.op_lista = None; st.rerun()
+
     with t5:
         cj_v = st.selectbox("Seleccionar Caja", opc_cajas)
         df_ver = st.session_state.tesoreria[st.session_state.tesoreria['Caja/Banco'] == cj_v]
