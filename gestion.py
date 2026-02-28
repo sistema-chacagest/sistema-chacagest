@@ -259,7 +259,7 @@ def generar_html_presupuesto(p_data):
 
             <div class="leyenda-box">
                 • La seña para la reserva es del 30%[cite: 216].<br>
-                • Los gastos de los choferes (hospedaje y comida) estarán a cargo del contratante[cite: 217]. En caso de que la empresa tenga que hacerse responsable de los mismos, el presente presupuesto deberá ser reformulado[cite: 218].
+                • Los gastos de los choferes (hospedaje y comida) estarán a cargo del contratante. En caso de que la empresa tenga que hacerse responsable de los mismos, el presente presupuesto deberá ser reformulado.
             </div>
 
             <p style="margin: 20px 0; font-size: 13px;"><b>Validez de la oferta:</b> Hasta el {p_data['Vencimiento']}</p>
@@ -735,3 +735,4 @@ elif sel == "HISTORICO COMPRAS":
                 st.session_state.compras = st.session_state.compras.drop(i)
                 guardar_datos("compras", st.session_state.compras); st.rerun()
             st.divider()
+
