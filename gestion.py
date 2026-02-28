@@ -121,7 +121,7 @@ def generar_html_resumen(cliente, df, saldo):
             <tr>
                 <td>
                     <p class="empresa-name">CHACABUCO NOROESTE TOUR S.R.L.</p>
-                    <p class="sub-title">Servicios de Transporte & Logística | CHACAGEST</p>
+                    <p class="sub-title">desde 1996 viajando con vos | CHACAGEST</p>
                 </td>
                 <td style="text-align: right;">
                     <p><b>ESTADO DE CUENTA</b><br>Emisión: {date.today()}</p>
@@ -159,7 +159,7 @@ def generar_html_recibo(data):
             <div class="header-recibo">
                 <div>
                     <b style="font-size: 20px;">CHACABUCO NOROESTE TOUR S.R.L.</b><br>
-                    <span>C.P. 6740 - Chacabuco, Bs. As.</span>
+                    <span>CUIT 30-71114824-4 C.P. 6740 - Chacabuco, Bs. As.</span>
                 </div>
                 <div class="monto-destacado">$ {abs(data['Monto']):,.2f}</div>
             </div>
@@ -170,8 +170,7 @@ def generar_html_recibo(data):
                 Recibimos de <b>{data['Cliente/Proveedor']}</b> la cantidad de pesos 
                 <span style="text-transform: uppercase;"><b>{abs(data['Monto']):,.2f}</b></span> 
                 en concepto de: <b>{data['Concepto']}</b>.<br>
-                Realizado mediante: <b>{data['Caja/Banco']}</b>.<br>
-                <span class="afip-ref">Referencia / Comprobante AFIP: {data['Ref AFIP']}</span>
+                <span class="afip-ref">En Concepto de {data['Ref AFIP']}</span>
             </div>
 
             <div style="margin-top: 40px;">
@@ -231,7 +230,9 @@ def generar_html_presupuesto(p_data):
 
             <div class="footer-p">
                 CHACABUCO NOROESTE TOUR S.R.L. | Chacabuco, Buenos Aires | chacanoroeste@email.com<br>
-                <i>Gracias por confiar en nosotros.</i>
+                <i>•	La seña para la reserva es del 30%
+
+•	Los gastos de los choferes (hospedaje y comida) estarán a cargo del contratante. En caso de que la empresa tenga que hacerse responsable de los mismos, el presente presupuesto deberá ser reformulado. </i>
             </div>
         </div>
     </body>
@@ -657,6 +658,7 @@ elif sel == "HISTORICO COMPRAS":
             if c3.button("🗑️", key=f"del_comp_{i}"):
                 st.session_state.compras = st.session_state.compras.drop(i); guardar_datos("compras", st.session_state.compras); st.rerun()
             st.divider()
+
 
 
 
