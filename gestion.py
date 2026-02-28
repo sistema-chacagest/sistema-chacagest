@@ -96,7 +96,11 @@ def guardar_datos(nombre_hoja, df):
         st.error(f"Error al guardar: {e}")
         return False
 
+# ... (aquí termina tu función guardar_datos)
+
+# =========================================================
 # --- FUNCIONES PARA REPORTES HTML PROFESIONALES ---
+# =========================================================
 
 def generar_html_resumen(cliente, df, saldo):
     tabla_html = df.to_html(index=False, classes='tabla')
@@ -121,7 +125,7 @@ def generar_html_resumen(cliente, df, saldo):
             <tr>
                 <td>
                     <p class="empresa-name">CHACABUCO NOROESTE TOUR S.R.L.</p>
-                    <p class="sub-title">desde 1996 viajando con vos | CHACAGEST</p>
+                    <p class="sub-title">Servicios de Transporte & Logística | CHACAGEST</p>
                 </td>
                 <td style="text-align: right;">
                     <p><b>ESTADO DE CUENTA</b><br>Emisión: {date.today()}</p>
@@ -159,27 +163,57 @@ def generar_html_recibo(data):
             <div class="header-recibo">
                 <div>
                     <b style="font-size: 20px;">CHACABUCO NOROESTE TOUR S.R.L.</b><br>
-                    <span>CUIT 30-71114824-4 C.P. 6740 - Chacabuco, Bs. As.</span>
+                    <span>C.P. 6740 - Chacabuco, Bs. As.</span>
                 </div>
                 <div class="monto-destacado">$ {abs(data['Monto']):,.2f}</div>
             </div>
-            
             <h2 style="text-align: center; text-decoration: underline;">RECIBO DE PAGO</h2>
-            
             <div class="cuerpo">
                 Recibimos de <b>{data['Cliente/Proveedor']}</b> la cantidad de pesos 
                 <span style="text-transform: uppercase;"><b>{abs(data['Monto']):,.2f}</b></span> 
                 en concepto de: <b>{data['Concepto']}</b>.<br>
-                <span class="afip-ref">En Concepto de {data['Ref AFIP']}</span>
+                Realizado mediante: <b>{data['Caja/Banco']}</b>.<br>
+                <span class="afip-ref">Referencia / Comprobante AFIP: {data['Ref AFIP']}</span>
             </div>
-
-            <div style="margin-top: 40px;">
-                <b>FECHA:</b> {data['Fecha']}
-            </div>
-
+            <div style="margin-top: 40px;"><b>FECHA:</b> {data['Fecha']}</div>
             <div class="firma-box">Firma y Sello Responsable</div>
             <div style="clear: both;"></div>
-            <p style="text-align: center; font-size: 9px; color: #aaa; margin-top: 50px;">Documento no válido como factura. Generado por CHACAGEST.</p>
+            <p style="text-align: center; font-size: 9px; color: #aaa; margin-top: 50px;">Generado por CHACAGEST.</p>
+        </div>
+    </body>
+    </html>
+    """
+
+def generar_html_orden_pago(data):
+    return f"""
+    <html>
+    <head>
+        <style>
+            body {{ font-family: 'Segoe UI', Arial, sans-serif; padding: 20px; color: #333; }}
+            .op-container {{ border: 2px solid #d35400; border-radius: 10px; padding: 30px; background-color: #fff; }}
+            .header-op {{ border-bottom: 2px solid #d35400; padding-bottom: 15px; margin-bottom: 25px; }}
+            .titulo-doc {{ font-size: 24px; font-weight: bold; text-align: center; margin: 20px 0; color: #444; }}
+            .monto-op {{ background: #fff4e6; border: 1px dashed #d35400; padding: 15px; font-size: 22px; font-weight: bold; text-align: center; color: #d35400; margin: 20px 0; }}
+            .detalle-table {{ width: 100%; margin-top: 20px; line-height: 1.8; }}
+        </style>
+    </head>
+    <body>
+        <div class="op-container">
+            <div class="header-op">
+                <h2 style="margin:0; color: #d35400;">CHACABUCO NOROESTE TOUR S.R.L.</h2>
+                <small>Administración y Finanzas | CHACAGEST</small>
+            </div>
+            <div class="titulo-doc">ORDEN DE PAGO A PROVEEDOR</div>
+            <table class="detalle-table">
+                <tr><td><b>BENEFICIARIO:</b></td><td>{data['Proveedor']}</td></tr>
+                <tr><td><b>FECHA:</b></td><td>{data['Fecha']}</td></tr>
+                <tr><td><b>CONCEPTO:</b></td><td>{data['Concepto']}</td></tr>
+                <tr><td><b>MEDIO DE PAGO:</b></td><td>{data['Caja/Banco']}</td></tr>
+                <tr><td><b>REFERENCIA:</b></td><td>{data['Ref AFIP']}</td></tr>
+            </table>
+            <div class="monto-op">TOTAL PAGADO: $ {abs(data['Monto']):,.2f}</div>
+            <div style="margin-top: 60px; border-top: 1px solid #333; width: 220px; text-align: center; float: right;">Recibí conforme</div>
+            <div style="clear: both;"></div>
         </div>
     </body>
     </html>
@@ -191,54 +225,34 @@ def generar_html_presupuesto(p_data):
     <head>
         <style>
             body {{ font-family: 'Trebuchet MS', sans-serif; padding: 30px; }}
-            .main-border {{ border: 1px solid #ddd; border-top: 10px solid #f39c12; padding: 40px; box-shadow: 0 0 10px #eee; }}
-            .header-p {{ display: flex; justify-content: space-between; margin-bottom: 40px; }}
-            .label-presu {{ background: #f39c12; color: white; padding: 5px 15px; font-weight: bold; border-radius: 3px; }}
-            .box-detalle {{ background: #fafafa; border: 1px solid #eee; padding: 20px; margin: 20px 0; min-height: 150px; }}
-            .footer-p {{ border-top: 1px solid #eee; padding-top: 20px; font-size: 12px; color: #888; text-align: center; }}
+            .main-border {{ border: 1px solid #ddd; border-top: 10px solid #f39c12; padding: 40px; }}
+            .header-p {{ border-bottom: 1px solid #eee; padding-bottom: 20px; margin-bottom: 30px; }}
             .total-p {{ font-size: 24px; text-align: right; color: #333; border-top: 2px solid #333; padding-top: 10px; }}
+            .box-detalle {{ background: #fafafa; border: 1px solid #eee; padding: 20px; margin: 20px 0; min-height: 100px; }}
         </style>
     </head>
     <body>
         <div class="main-border">
             <div class="header-p">
-                <div>
-                    <h1 style="margin:0; color:#444;">CHACABUCO NOROESTE TOUR S.R.L.</h1>
-                    <small>VIAJES ESPECIALES - TURISMO - TRASLADOS PERSONALES</small>
-                </div>
-                <div style="text-align: right;">
-                    <span class="label-presu">PRESUPUESTO</span><br>
-                    <p style="margin-top:10px;"><b>Nro:</b> 0001-{p_data.name if hasattr(p_data, 'name') else '00'}<br><b>Fecha:</b> {p_data['Fecha Emisión']}</p>
-                </div>
+                <h1 style="margin:0; color:#444;">CHACABUCO NOROESTE TOUR S.R.L.</h1>
+                <p>VIAJES ESPECIALES - TURISMO - TRASLADOS PERSONALES</p>
+                <div style="text-align: right;"><b>PRESUPUESTO</b> | Fecha: {p_data['Fecha Emisión']}</div>
             </div>
-
-            <p><b>PARA:</b> {p_data['Cliente']}</p>
-            <p><b>TIPO DE UNIDAD:</b> {p_data['Tipo Móvil']}</p>
-            
+            <p><b>CLIENTE:</b> {p_data['Cliente']}</p>
+            <p><b>UNIDAD:</b> {p_data['Tipo Móvil']}</p>
             <div class="box-detalle">
                 <b>DETALLE DEL SERVICIO:</b><br><br>
                 {p_data['Detalle'].replace('\n', '<br>')}
             </div>
-
-            <div class="total-p">
-                TOTAL PRESUPUESTADO: <span style="color: #d35400;">$ {p_data['Importe']:,.2f}</span>
-            </div>
-
-            <div style="margin: 30px 0; font-size: 13px;">
-                <b>Vigencia del presupuesto:</b> Hasta el {p_data['Vencimiento']}
-            </div>
-
-            <div class="footer-p">
-                CHACABUCO NOROESTE TOUR S.R.L. | Chacabuco, Buenos Aires | chacanoroeste@email.com<br>
-                <i>•	La seña para la reserva es del 30%
-
-•	Los gastos de los choferes (hospedaje y comida) estarán a cargo del contratante. En caso de que la empresa tenga que hacerse responsable de los mismos, el presente presupuesto deberá ser reformulado. </i>
-            </div>
+            <div class="total-p">TOTAL: <span style="color: #d35400;">$ {p_data['Importe']:,.2f}</span></div>
+            <p style="font-size: 12px; margin-top: 40px;">Válido hasta: {p_data['Vencimiento']}</p>
         </div>
     </body>
     </html>
     """
 
+# =========================================================
+# --- 2. LOGIN --- (Aquí sigue tu código normal...)
 # --- 2. LOGIN ---
 if "autenticado" not in st.session_state:
     st.session_state.autenticado = False
@@ -658,6 +672,7 @@ elif sel == "HISTORICO COMPRAS":
             if c3.button("🗑️", key=f"del_comp_{i}"):
                 st.session_state.compras = st.session_state.compras.drop(i); guardar_datos("compras", st.session_state.compras); st.rerun()
             st.divider()
+
 
 
 
