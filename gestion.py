@@ -450,6 +450,7 @@ elif sel == "TESORERIA":
     st.header("💰 Tesorería")
     opc_cajas = ["CAJA COTI", "CAJA TATO", "BANCO GALICIA", "BANCO PROVINCIA", "BANCO SUPERVIELLE"]
     t1, t2, t3, t4, t5, t6 = st.tabs(["📥 INGRESOS VARIOS", "📤 EGRESOS VARIOS", "🧾 COBRANZA VIAJE", "📊 VER MOVIMIENTOS", "🔄 TRASPASO", "💸 ORDEN DE PAGO"])
+    
     with t1:
         with st.form("f_ing_var"):
             f = st.date_input("Fecha", date.today()); cj = st.selectbox("Caja Destino", opc_cajas)
@@ -467,6 +468,7 @@ elif sel == "TESORERIA":
                 st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
                 guardar_datos("tesoreria", st.session_state.tesoreria); st.success("Registrado"); st.rerun()
     with t3:
+        if "html_recibo_ready" not in st.session_state: st.session_state.html_recibo_ready = None
         with st.form("f_cob"):
             c_sel = st.selectbox("Cliente", st.session_state.clientes['Razón Social'].unique() if not st.session_state.clientes.empty else [""])
             cj = st.selectbox("Forma de Cobro", opc_cajas + ["OTROS"]); mon = st.number_input("Monto $", min_value=0.0)
@@ -476,9 +478,15 @@ elif sel == "TESORERIA":
                 nv = pd.DataFrame([[date.today(), c_sel, date.today(), "PAGO", "TESORERIA", "-", -mon, "RECIBO", afip]], columns=st.session_state.viajes.columns)
                 st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
                 st.session_state.viajes = pd.concat([st.session_state.viajes, nv], ignore_index=True)
-                guardar_datos("tesoreria", st.session_state.tesoreria); guardar_datos("viajes", st.session_state.viajes); st.success("Cobranza realizada")
-                rec_html = generar_html_recibo({"Fecha": date.today(), "Cliente/Proveedor": c_sel, "Concepto": "Cobro de Viaje", "Caja/Banco": cj, "Monto": mon, "Ref AFIP": afip})
-                st.download_button("🖨️ IMPRIMIR RECIBO PDF/HTML", rec_html, file_name=f"Recibo_{c_sel}.html", mime="text/html")
+                guardar_datos("tesoreria", st.session_state.tesoreria); guardar_datos("viajes", st.session_state.viajes)
+                st.session_state.html_recibo_ready = generar_html_recibo({"Fecha": date.today(), "Cliente/Proveedor": c_sel, "Concepto": "Cobro de Viaje", "Caja/Banco": cj, "Monto": mon, "Ref AFIP": afip})
+                st.session_state.cli_ready = c_sel
+                st.rerun()
+        if st.session_state.html_recibo_ready:
+            st.success("Cobranza realizada con éxito.")
+            st.download_button("🖨️ IMPRIMIR RECIBO PDF/HTML", st.session_state.html_recibo_ready, file_name=f"Recibo_{st.session_state.cli_ready}.html", mime="text/html")
+            if st.button("Limpiar"): st.session_state.html_recibo_ready = None; st.rerun()
+
     with t4:
         cj_v = st.selectbox("Seleccionar Caja", opc_cajas)
         df_ver = st.session_state.tesoreria[st.session_state.tesoreria['Caja/Banco'] == cj_v]
@@ -493,6 +501,7 @@ elif sel == "TESORERIA":
                 guardar_datos("tesoreria", st.session_state.tesoreria); st.rerun()
     with t6:
         st.subheader("Generar Orden de Pago a Proveedor")
+        if "html_op_ready" not in st.session_state: st.session_state.html_op_ready = None
         with st.form("f_op"):
             p_sel = st.selectbox("Seleccionar Proveedor", st.session_state.proveedores['Razón Social'].unique() if not st.session_state.proveedores.empty else [""])
             cj_p = st.selectbox("Caja de Salida", opc_cajas)
@@ -505,9 +514,13 @@ elif sel == "TESORERIA":
                     st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
                     st.session_state.compras = pd.concat([st.session_state.compras, nc], ignore_index=True)
                     guardar_datos("tesoreria", st.session_state.tesoreria); guardar_datos("compras", st.session_state.compras)
-                    st.success("Orden de Pago registrada")
-                    op_html = generar_html_orden_pago({"Fecha": date.today(), "Proveedor": p_sel, "Concepto": "Pago Proveedor", "Caja/Banco": cj_p, "Monto": mon_p, "Ref AFIP": afip_p})
-                    st.download_button("🖨️ IMPRIMIR ORDEN DE PAGO", op_html, file_name=f"OrdenPago_{p_sel}.html", mime="text/html")
+                    st.session_state.html_op_ready = generar_html_orden_pago({"Fecha": date.today(), "Proveedor": p_sel, "Concepto": "Pago Proveedor", "Caja/Banco": cj_p, "Monto": mon_p, "Ref AFIP": afip_p})
+                    st.session_state.prov_ready = p_sel
+                    st.rerun()
+        if st.session_state.html_op_ready:
+            st.success("Orden de Pago registrada con éxito.")
+            st.download_button("🖨️ IMPRIMIR ORDEN DE PAGO", st.session_state.html_op_ready, file_name=f"OrdenPago_{st.session_state.prov_ready}.html", mime="text/html")
+            if st.button("Limpiar OP"): st.session_state.html_op_ready = None; st.rerun()
 
 elif sel == "CTA CTE INDIVIDUAL":
     st.header("📑 Cuenta Corriente por Cliente")
