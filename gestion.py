@@ -30,8 +30,6 @@ def cargar_datos():
     col_v = ["Fecha Carga", "Cliente", "Fecha Viaje", "Origen", "Destino", "Patente / Móvil", "Importe", "Tipo Comp", "Nro Comp Asoc"]
     col_p = ["Fecha Emisión", "Cliente", "Vencimiento", "Detalle", "Tipo Móvil", "Importe"]
     col_t = ["Fecha", "Tipo", "Caja/Banco", "Concepto", "Cliente/Proveedor", "Monto", "Ref AFIP"]
-    
-    # NUEVAS COLUMNAS COMPRAS
     col_prov = ["Razón Social", "CUIT/DNI", "Cuenta de Gastos", "Categoría IVA"]
     col_compras = ["Fecha", "Proveedor", "Punto Venta", "Tipo Factura", "Neto 21", "Neto 10.5", "Ret IVA", "Ret Ganancia", "Ret IIBB", "No Gravados", "Total"]
 
@@ -64,16 +62,17 @@ def cargar_datos():
         except:
             df_t = pd.DataFrame(columns=col_t)
 
-        # Carga Modulo Compras
         try:
             ws_prov = sh.worksheet("proveedores")
-            df_prov = pd.DataFrame(ws_prov.get_all_records()) if ws_prov.get_all_records() else pd.DataFrame(columns=col_prov)
+            datos_prov = ws_prov.get_all_records()
+            df_prov = pd.DataFrame(datos_prov) if datos_prov else pd.DataFrame(columns=col_prov)
         except:
             df_prov = pd.DataFrame(columns=col_prov)
 
         try:
             ws_com = sh.worksheet("compras")
-            df_com = pd.DataFrame(ws_com.get_all_records()) if ws_com.get_all_records() else pd.DataFrame(columns=col_compras)
+            datos_com = ws_com.get_all_records()
+            df_com = pd.DataFrame(datos_com) if datos_com else pd.DataFrame(columns=col_compras)
             for c in ["Neto 21", "Neto 10.5", "Ret IVA", "Ret Ganancia", "Ret IIBB", "No Gravados", "Total"]:
                 df_com[c] = pd.to_numeric(df_com[c], errors='coerce').fillna(0)
         except:
@@ -146,6 +145,29 @@ def generar_html_recibo(data):
         <p><b>Medio:</b> {data['Caja/Banco']}</p>
         <p><b>Asoc. AFIP:</b> {data['Ref AFIP']}</p>
         <div class="monto-box">SON PESOS: $ {abs(data['Monto']):,.2f}</div>
+    </body>
+    </html>
+    """
+    return html
+
+def generar_html_orden_pago(data):
+    html = f"""
+    <html>
+    <head>
+        <style>
+            body {{ font-family: Arial, sans-serif; padding: 30px; border: 2px solid #d35400; }}
+            .header {{ text-align: center; border-bottom: 2px solid #d35400; margin-bottom: 20px; color: #d35400; }}
+            .monto-box {{ background: #fff4e6; padding: 15px; font-size: 20px; font-weight: bold; text-align: center; border: 1px dashed #d35400; }}
+        </style>
+    </head>
+    <body>
+        <div class="header"><h2>ORDEN DE PAGO - CHACAGEST</h2></div>
+        <p><b>Fecha:</b> {data['Fecha']}</p>
+        <p><b>Pagado a:</b> {data['Proveedor']}</p>
+        <p><b>Concepto:</b> {data['Concepto']}</p>
+        <p><b>Medio de Pago:</b> {data['Caja/Banco']}</p>
+        <p><b>Referencia:</b> {data['Ref AFIP']}</p>
+        <div class="monto-box">TOTAL PAGADO: $ {abs(data['Monto']):,.2f}</div>
     </body>
     </html>
     """
@@ -227,7 +249,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 5. SIDEBAR (MENÚ DESPLEGABLE DINÁMICO) ---
+# --- 5. SIDEBAR ---
 with st.sidebar:
     try: st.image("logo_path.png", use_container_width=True)
     except: pass
@@ -293,7 +315,6 @@ with st.sidebar:
         st.session_state.autenticado = False
         st.rerun()
 
-# Lógica de navegación
 if menu_principal in ["VENTAS", "COMPRAS"]:
     sel = sel_sub
 else:
@@ -428,7 +449,7 @@ elif sel == "PRESUPUESTOS":
 elif sel == "TESORERIA":
     st.header("💰 Tesorería")
     opc_cajas = ["CAJA COTI", "CAJA TATO", "BANCO GALICIA", "BANCO PROVINCIA", "BANCO SUPERVIELLE"]
-    t1, t2, t3, t4, t5 = st.tabs(["📥 INGRESOS VARIOS", "📤 EGRESOS VARIOS", "🧾 COBRANZA VIAJE", "📊 VER MOVIMIENTOS", "🔄 TRASPASO"])
+    t1, t2, t3, t4, t5, t6 = st.tabs(["📥 INGRESOS VARIOS", "📤 EGRESOS VARIOS", "🧾 COBRANZA VIAJE", "📊 VER MOVIMIENTOS", "🔄 TRASPASO", "💸 ORDEN DE PAGO"])
     with t1:
         with st.form("f_ing_var"):
             f = st.date_input("Fecha", date.today()); cj = st.selectbox("Caja Destino", opc_cajas)
@@ -470,6 +491,23 @@ elif sel == "TESORERIA":
                 t2 = pd.DataFrame([[date.today(), "TRASPASO", d, f"Desde {o}", "INTERNO", m, "-"]], columns=st.session_state.tesoreria.columns)
                 st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, t1, t2], ignore_index=True)
                 guardar_datos("tesoreria", st.session_state.tesoreria); st.rerun()
+    with t6:
+        st.subheader("Generar Orden de Pago a Proveedor")
+        with st.form("f_op"):
+            p_sel = st.selectbox("Seleccionar Proveedor", st.session_state.proveedores['Razón Social'].unique() if not st.session_state.proveedores.empty else [""])
+            cj_p = st.selectbox("Caja de Salida", opc_cajas)
+            mon_p = st.number_input("Monto $", min_value=0.0)
+            afip_p = st.text_input("Referencia AFIP / Pago")
+            if st.form_submit_button("GENERAR ORDEN DE PAGO"):
+                if p_sel and mon_p > 0:
+                    nt = pd.DataFrame([[date.today(), "PAGO PROV", cj_p, "Orden de Pago", p_sel, -mon_p, afip_p]], columns=st.session_state.tesoreria.columns)
+                    nc = pd.DataFrame([[date.today(), p_sel, "-", "ORDEN PAGO", 0, 0, 0, 0, 0, 0, -mon_p]], columns=st.session_state.compras.columns)
+                    st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
+                    st.session_state.compras = pd.concat([st.session_state.compras, nc], ignore_index=True)
+                    guardar_datos("tesoreria", st.session_state.tesoreria); guardar_datos("compras", st.session_state.compras)
+                    st.success("Orden de Pago registrada")
+                    op_html = generar_html_orden_pago({"Fecha": date.today(), "Proveedor": p_sel, "Concepto": "Pago Proveedor", "Caja/Banco": cj_p, "Monto": mon_p, "Ref AFIP": afip_p})
+                    st.download_button("🖨️ IMPRIMIR ORDEN DE PAGO", op_html, file_name=f"OrdenPago_{p_sel}.html", mime="text/html")
 
 elif sel == "CTA CTE INDIVIDUAL":
     st.header("📑 Cuenta Corriente por Cliente")
@@ -497,21 +535,42 @@ elif sel == "COMPROBANTES":
                 st.session_state.viajes = st.session_state.viajes.drop(i); guardar_datos("viajes", st.session_state.viajes); st.rerun()
             st.divider()
 
-# --- MÓDULOS DE COMPRAS (SOLICITADOS) ---
-
 elif sel == "CARGA PROVEEDOR":
-    st.header("👤 Carga de Proveedor")
-    with st.form("f_prov", clear_on_submit=True):
-        c1, c2 = st.columns(2)
-        rs = c1.text_input("Razón Social")
-        doc = c2.text_input("CUIT o DNI")
-        cuenta = c1.selectbox("Cuenta de Gastos", ["COMBUSTIBLE", "REPARACION", "REPUESTO", "VARIOS"])
-        cat_iva = c2.selectbox("Categoría IVA", ["Responsable Inscripto", "Exento en IVA", "Consumidor Final", "Monotributista", "No Inscripto"])
-        if st.form_submit_button("REGISTRAR PROVEEDOR"):
-            if rs and doc:
-                np = pd.DataFrame([[rs, doc, cuenta, cat_iva]], columns=st.session_state.proveedores.columns)
-                st.session_state.proveedores = pd.concat([st.session_state.proveedores, np], ignore_index=True)
-                guardar_datos("proveedores", st.session_state.proveedores); st.success("Proveedor registrado"); st.rerun()
+    st.header("👤 Gestión de Proveedores")
+    with st.expander("➕ ALTA DE NUEVO PROVEEDOR", expanded=False):
+        with st.form("f_prov", clear_on_submit=True):
+            c1, c2 = st.columns(2)
+            rs = c1.text_input("Razón Social")
+            doc = c2.text_input("CUIT o DNI")
+            cuenta = c1.selectbox("Cuenta de Gastos", ["COMBUSTIBLE", "REPARACION", "REPUESTO", "VARIOS"])
+            cat_iva = c2.selectbox("Categoría IVA", ["Responsable Inscripto", "Exento en IVA", "Consumidor Final", "Monotributista", "No Inscripto"])
+            if st.form_submit_button("REGISTRAR PROVEEDOR"):
+                if rs and doc:
+                    np = pd.DataFrame([[rs, doc, cuenta, cat_iva]], columns=st.session_state.proveedores.columns)
+                    st.session_state.proveedores = pd.concat([st.session_state.proveedores, np], ignore_index=True)
+                    guardar_datos("proveedores", st.session_state.proveedores); st.success("Proveedor registrado"); st.rerun()
+    st.subheader("📋 Base de Proveedores")
+    if not st.session_state.proveedores.empty:
+        for i, row in st.session_state.proveedores.iterrows():
+            with st.container():
+                c_inf, c_ed, c_el = st.columns([0.7, 0.15, 0.15])
+                c_inf.markdown(f"**{row['Razón Social']}** | CUIT: {row['CUIT/DNI']}")
+                c_inf.caption(f"📂 Cuenta: {row['Cuenta de Gastos']} | {row['Categoría IVA']}")
+                if c_ed.button("📝 Editar", key=f"edit_p_{i}"): st.session_state[f"edit_p_mode_{i}"] = True
+                if c_el.button("🗑️", key=f"del_p_{i}"):
+                    tiene_compras = not st.session_state.compras[st.session_state.compras['Proveedor'] == row['Razón Social']].empty
+                    if tiene_compras: st.error("No se puede eliminar: tiene comprobantes asociados.")
+                    else:
+                        st.session_state.proveedores = st.session_state.proveedores.drop(i).reset_index(drop=True)
+                        guardar_datos("proveedores", st.session_state.proveedores); st.rerun()
+                if st.session_state.get(f"edit_p_mode_{i}", False):
+                    with st.form(f"f_edit_p_{i}"):
+                        ce1, ce2 = st.columns(2)
+                        n_rs = ce1.text_input("Razón Social", value=row['Razón Social']); n_doc = ce2.text_input("CUIT/DNI", value=row['CUIT/DNI'])
+                        if st.form_submit_button("✅ Guardar"):
+                            st.session_state.proveedores.loc[i] = [n_rs, n_doc, row['Cuenta de Gastos'], row['Categoría IVA']]
+                            guardar_datos("proveedores", st.session_state.proveedores); st.session_state[f"edit_p_mode_{i}"] = False; st.rerun()
+            st.divider()
 
 elif sel == "CARGA GASTOS":
     st.header("💸 Carga de Gastos")
@@ -524,7 +583,6 @@ elif sel == "CARGA GASTOS":
         c5, c6, c7 = st.columns(3)
         r_iva = c5.number_input("Retención IVA", min_value=0.0); r_gan = c6.number_input("Retención Ganancia", min_value=0.0); r_iibb = c7.number_input("Retención IIBB", min_value=0.0)
         nograv = st.number_input("Conceptos No Gravados", min_value=0.0)
-        # Suma total lógica
         total = (n21 * 1.21) + (n10 * 1.105) + r_iva + r_gan + r_iibb + nograv
         if tipo_f in ["NOTA DE CREDITO"]: total = -total
         if st.form_submit_button("REGISTRAR COMPROBANTE"):
@@ -554,4 +612,3 @@ elif sel == "HISTORICO COMPRAS":
             if c3.button("🗑️", key=f"del_comp_{i}"):
                 st.session_state.compras = st.session_state.compras.drop(i); guardar_datos("compras", st.session_state.compras); st.rerun()
             st.divider()
-
