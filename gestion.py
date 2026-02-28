@@ -228,8 +228,7 @@ def generar_html_presupuesto(p_data):
     * El servicio se rige por las normativas vigentes de transporte de pasajeros.
     """
     # ---------------------------------
-
-    return f"""
+    """
     <html>
     <head>
         <style>
@@ -705,6 +704,7 @@ elif sel == "HISTORICO COMPRAS":
             if c3.button("🗑️", key=f"del_comp_{i}"):
                 st.session_state.compras = st.session_state.compras.drop(i); guardar_datos("compras", st.session_state.compras); st.rerun()
             st.divider()
+
 
 
 
