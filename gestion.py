@@ -7,6 +7,7 @@ from google.oauth2.service_account import Credentials
 from streamlit_option_menu import option_menu
 from streamlit_calendar import calendar
 import base64
+from fpdf import FPDF # Librería para generar el PDF real
 
 # --- 1. CONFIGURACIÓN Y CONEXIÓN ---
 st.set_page_config(page_title="CHACAGEST - GESTIÓN TOTAL", page_icon="🚛", layout="wide")
@@ -97,7 +98,66 @@ def guardar_datos(nombre_hoja, df):
         return False
 
 # =========================================================
-# --- FUNCIONES PARA REPORTES HTML PROFESIONALES ---
+# --- FUNCIÓN NUEVA: GENERADOR DE PDF ---
+# =========================================================
+def exportar_a_pdf(titulo, subtitulo, info_principal, detalle_texto, monto, ref="", tipo="PRESUPUESTO"):
+    pdf = FPDF()
+    pdf.add_page()
+    
+    # Header
+    pdf.set_fill_color(94, 45, 97) # Color #5e2d61
+    pdf.rect(0, 0, 210, 40, 'F')
+    pdf.set_font("Arial", "B", 16)
+    pdf.set_text_color(255, 255, 255)
+    pdf.cell(0, 10, "CHACABUCO NOROESTE TOUR S.R.L.", ln=True, align='L')
+    pdf.set_font("Arial", "", 10)
+    pdf.cell(0, 5, "VIAJES ESPECIALES - TURISMO - TRASLADOS", ln=True, align='L')
+    
+    # Tipo de Doc y Fecha
+    pdf.set_xy(140, 10)
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(60, 10, tipo, border=1, ln=True, align='C')
+    pdf.set_xy(140, 22)
+    pdf.set_font("Arial", "", 9)
+    pdf.cell(60, 5, f"Fecha: {date.today()}", ln=True, align='R')
+    
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_y(50)
+    
+    # Datos Principales
+    pdf.set_font("Arial", "B", 11)
+    pdf.cell(0, 7, f"{info_principal}", ln=True)
+    pdf.set_font("Arial", "", 11)
+    if ref: pdf.cell(0, 7, f"Referencia: {ref}", ln=True)
+    
+    # Cuadro de Detalle
+    pdf.ln(10)
+    pdf.set_font("Arial", "B", 10)
+    pdf.cell(0, 7, "DETALLE:", ln=True)
+    pdf.set_font("Arial", "", 10)
+    pdf.multi_cell(0, 6, str(detalle_texto), border=1)
+    
+    # Monto
+    pdf.ln(10)
+    pdf.set_font("Arial", "B", 14)
+    pdf.set_text_color(211, 84, 0) # Color Naranja
+    pdf.cell(0, 10, f"TOTAL: $ {monto:,.2f}", ln=True, align='R')
+    
+    # Leyendas según tipo
+    pdf.set_y(-60)
+    pdf.set_text_color(100, 100, 100)
+    pdf.set_font("Arial", "I", 8)
+    if tipo == "PRESUPUESTO":
+        pdf.multi_cell(0, 5, "Condiciones: Seña 30%. Gastos de choferes a cargo del contratante.")
+    
+    pdf.set_y(-30)
+    pdf.set_font("Arial", "", 8)
+    pdf.cell(0, 5, "CHACAGEST Software System - Chacabuco, Bs. As.", ln=True, align='C')
+    
+    return pdf.output()
+
+# =========================================================
+# --- FUNCIONES PARA REPORTES HTML (SE MANTIENEN PARA VISTA PREVIA) ---
 # =========================================================
 
 def generar_html_resumen(cliente, df, saldo):
@@ -517,8 +577,25 @@ elif sel == "PRESUPUESTOS":
                     c_a.markdown(f"**{row_p['Cliente']}** | {row_p['Tipo Móvil']}")
                     c_a.caption(f"Emisión: {row_p['Fecha Emisión']} - Vence: {row_p['Vencimiento']}")
                     c_b.markdown(f"**$ {row_p['Importe']:,.2f}**")
-                    html_p = generar_html_presupuesto(row_p)
-                    c_c.download_button(label="📄 Descargar", data=html_p, file_name=f"Presupuesto_{row_p['Cliente']}_{row_p['Fecha Emisión']}.html", mime="text/html", key=f"dl_p_{i}")
+                    
+                    # GENERADOR DE PDF PARA DESCARGAR
+                    pdf_presu = exportar_a_pdf(
+                        titulo="PRESUPUESTO", 
+                        subtitulo=row_p['Tipo Móvil'], 
+                        info_principal=f"CLIENTE: {row_p['Cliente']}", 
+                        detalle_texto=row_p['Detalle'], 
+                        monto=row_p['Importe'], 
+                        tipo="PRESUPUESTO"
+                    )
+                    
+                    c_c.download_button(
+                        label="📄 Descargar PDF", 
+                        data=pdf_presu, 
+                        file_name=f"Presupuesto_{row_p['Cliente']}.pdf", 
+                        mime="application/pdf", 
+                        key=f"dl_pdf_p_{i}"
+                    )
+                    
                     if c_c.button("🗑️", key=f"del_p_{i}"):
                         st.session_state.presupuestos = st.session_state.presupuestos.drop(i)
                         guardar_datos("presupuestos", st.session_state.presupuestos)
@@ -554,7 +631,7 @@ elif sel == "TESORERIA":
                 guardar_datos("tesoreria", st.session_state.tesoreria)
                 st.success("Registrado"); st.rerun()
     with t3:
-        if "html_recibo_ready" not in st.session_state: st.session_state.html_recibo_ready = None
+        if "pdf_recibo_ready" not in st.session_state: st.session_state.pdf_recibo_ready = None
         with st.form("f_cob"):
             c_sel = st.selectbox("Cliente", st.session_state.clientes['Razón Social'].unique() if not st.session_state.clientes.empty else [""])
             cj = st.selectbox("Forma de Cobro", opc_cajas + ["OTROS"])
@@ -567,13 +644,22 @@ elif sel == "TESORERIA":
                 st.session_state.viajes = pd.concat([st.session_state.viajes, nv], ignore_index=True)
                 guardar_datos("tesoreria", st.session_state.tesoreria)
                 guardar_datos("viajes", st.session_state.viajes)
-                st.session_state.html_recibo_ready = generar_html_recibo({"Fecha": date.today(), "Cliente/Proveedor": c_sel, "Concepto": "Cobro de Viaje", "Caja/Banco": cj, "Monto": mon, "Ref AFIP": afip})
+                
+                # PDF RECIBO
+                st.session_state.pdf_recibo_ready = exportar_a_pdf(
+                    titulo="RECIBO DE PAGO", 
+                    subtitulo=f"Caja: {cj}", 
+                    info_principal=f"CLIENTE: {c_sel}", 
+                    detalle_texto=f"Cobro en concepto de servicio de transporte. Referencia: {afip}", 
+                    monto=mon, 
+                    tipo="RECIBO"
+                )
                 st.session_state.cli_ready = c_sel
                 st.rerun()
-        if st.session_state.html_recibo_ready:
+        if st.session_state.pdf_recibo_ready:
             st.success("Cobranza realizada con éxito.")
-            st.download_button("🖨️ IMPRIMIR RECIBO PDF/HTML", st.session_state.html_recibo_ready, file_name=f"Recibo_{st.session_state.cli_ready}.html", mime="text/html")
-            if st.button("Limpiar"): st.session_state.html_recibo_ready = None; st.rerun()
+            st.download_button("🖨️ DESCARGAR RECIBO PDF", st.session_state.pdf_recibo_ready, file_name=f"Recibo_{st.session_state.cli_ready}.pdf", mime="application/pdf")
+            if st.button("Limpiar"): st.session_state.pdf_recibo_ready = None; st.rerun()
 
     with t4:
         cj_v = st.selectbox("Seleccionar Caja", opc_cajas)
@@ -593,7 +679,7 @@ elif sel == "TESORERIA":
                 st.rerun()
     with t6:
         st.subheader("Generar Orden de Pago a Proveedor")
-        if "html_op_ready" not in st.session_state: st.session_state.html_op_ready = None
+        if "pdf_op_ready" not in st.session_state: st.session_state.pdf_op_ready = None
         with st.form("f_op"):
             p_sel = st.selectbox("Seleccionar Proveedor", st.session_state.proveedores['Razón Social'].unique() if not st.session_state.proveedores.empty else [""])
             cj_p = st.selectbox("Caja de Salida", opc_cajas)
@@ -607,13 +693,22 @@ elif sel == "TESORERIA":
                     st.session_state.compras = pd.concat([st.session_state.compras, nc], ignore_index=True)
                     guardar_datos("tesoreria", st.session_state.tesoreria)
                     guardar_datos("compras", st.session_state.compras)
-                    st.session_state.html_op_ready = generar_html_orden_pago({"Fecha": date.today(), "Proveedor": p_sel, "Concepto": "Pago Proveedor", "Caja/Banco": cj_p, "Monto": mon_p, "Ref AFIP": afip_p})
+                    
+                    # PDF ORDEN PAGO
+                    st.session_state.pdf_op_ready = exportar_a_pdf(
+                        titulo="ORDEN DE PAGO", 
+                        subtitulo=f"Pagado desde: {cj_p}", 
+                        info_principal=f"PROVEEDOR: {p_sel}", 
+                        detalle_texto=f"Orden de pago por servicios/compras. Ref: {afip_p}", 
+                        monto=mon_p, 
+                        tipo="ORDEN DE PAGO"
+                    )
                     st.session_state.prov_ready = p_sel
                     st.rerun()
-        if st.session_state.html_op_ready:
+        if st.session_state.pdf_op_ready:
             st.success("Orden de Pago registrada con éxito.")
-            st.download_button("🖨️ IMPRIMIR ORDEN DE PAGO", st.session_state.html_op_ready, file_name=f"OrdenPago_{st.session_state.prov_ready}.html", mime="text/html")
-            if st.button("Limpiar OP"): st.session_state.html_op_ready = None; st.rerun()
+            st.download_button("🖨️ DESCARGAR ORDEN DE PAGO PDF", st.session_state.pdf_op_ready, file_name=f"OrdenPago_{st.session_state.prov_ready}.pdf", mime="application/pdf")
+            if st.button("Limpiar OP"): st.session_state.pdf_op_ready = None; st.rerun()
 
 elif sel == "CTA CTE INDIVIDUAL":
     st.header("📑 Cuenta Corriente por Cliente")
@@ -621,8 +716,10 @@ elif sel == "CTA CTE INDIVIDUAL":
         cl = st.selectbox("Seleccionar Cliente", st.session_state.clientes['Razón Social'].unique())
         df_ind = st.session_state.viajes[st.session_state.viajes['Cliente'] == cl].copy()
         st.metric("SALDO TOTAL", f"$ {df_ind['Importe'].sum():,.2f}")
+        
+        # PARA RESUMEN DE CUENTA MANTENEMOS HTML PORQUE ES UNA TABLA GRANDE
         html_reporte = generar_html_resumen(cl, df_ind, df_ind['Importe'].sum())
-        st.download_button(label="📄 DESCARGAR RESUMEN", data=html_reporte, file_name=f"Resumen_{cl}.html", mime="text/html")
+        st.download_button(label="📄 DESCARGAR RESUMEN (HTML)", data=html_reporte, file_name=f"Resumen_{cl}.html", mime="text/html")
         st.dataframe(df_ind, use_container_width=True)
 
 elif sel == "CTA CTE GENERAL":
@@ -735,5 +832,3 @@ elif sel == "HISTORICO COMPRAS":
                 st.session_state.compras = st.session_state.compras.drop(i)
                 guardar_datos("compras", st.session_state.compras); st.rerun()
             st.divider()
-
-
