@@ -324,8 +324,7 @@ st.markdown("""
     h1, h2, h3 { color: #5e2d61 !important; }
     div.stButton > button {
         background: linear-gradient(to right, #f39c12, #d35400) !important;
-        color: white !important; border-radius: 8px !important; border: none !important; font-weight: bold !important;
-    }
+        color: white !important; border-radius: 8px !important; border: none !important; font-weight: bold !important;}
     .stDataFrame { border: 1px solid #5e2d61; border-radius: 5px; }
     </style>
     """, unsafe_allow_html=True)
@@ -706,6 +705,7 @@ elif sel == "HISTORICO COMPRAS":
             if c3.button("🗑️", key=f"del_comp_{i}"):
                 st.session_state.compras = st.session_state.compras.drop(i); guardar_datos("compras", st.session_state.compras); st.rerun()
             st.divider()
+
 
 
 
