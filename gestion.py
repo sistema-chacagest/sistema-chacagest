@@ -163,7 +163,7 @@ def generar_html_recibo(data):
             <div class="header-recibo">
                 <div>
                     <b style="font-size: 20px;">CHACABUCO NOROESTE TOUR S.R.L.</b><br>
-                    <span>C.P. 6740 - Chacabuco, Bs. As.</span>
+                    <span>CUIT 30-71114824-4 - C.P. 6740 - Chacabuco, Bs. As.</span>
                 </div>
                 <div class="monto-destacado">$ {abs(data['Monto']):,.2f}</div>
             </div>
@@ -173,7 +173,7 @@ def generar_html_recibo(data):
                 <span style="text-transform: uppercase;"><b>{abs(data['Monto']):,.2f}</b></span> 
                 en concepto de: <b>{data['Concepto']}</b>.<br>
                 Realizado mediante: <b>{data['Caja/Banco']}</b>.<br>
-                <span class="afip-ref">Referencia / Comprobante AFIP: {data['Ref AFIP']}</span>
+                <span class="afip-ref">En concepto de: {data['Ref AFIP']}</span>
             </div>
             <div style="margin-top: 40px;"><b>FECHA:</b> {data['Fecha']}</div>
             <div class="firma-box">Firma y Sello Responsable</div>
@@ -201,7 +201,7 @@ def generar_html_orden_pago(data):
         <div class="op-container">
             <div class="header-op">
                 <h2 style="margin:0; color: #d35400;">CHACABUCO NOROESTE TOUR S.R.L.</h2>
-                <small>Administración y Finanzas | CHACAGEST</small>
+                <small>Desde 1996, viajando con vos | CHACAGEST</small>
             </div>
             <div class="titulo-doc">ORDEN DE PAGO A PROVEEDOR</div>
             <table class="detalle-table">
@@ -220,35 +220,69 @@ def generar_html_orden_pago(data):
     """
 
 def generar_html_presupuesto(p_data):
+    # --- CONFIGURA TU LEYENDA AQUÍ ---
+    leyenda_personalizada = """
+    <b>NOTAS IMPORTANTE:</b><br>
+    * El presupuesto no congela tarifa salvo con el pago de la seña (50%).<br>
+    * Los peajes y gastos de estacionamiento están incluidos (salvo aclaración contraria).<br>
+    * El servicio se rige por las normativas vigentes de transporte de pasajeros.
+    """
+    # ---------------------------------
+
     return f"""
     <html>
     <head>
         <style>
             body {{ font-family: 'Trebuchet MS', sans-serif; padding: 30px; }}
-            .main-border {{ border: 1px solid #ddd; border-top: 10px solid #f39c12; padding: 40px; }}
-            .header-p {{ border-bottom: 1px solid #eee; padding-bottom: 20px; margin-bottom: 30px; }}
-            .total-p {{ font-size: 24px; text-align: right; color: #333; border-top: 2px solid #333; padding-top: 10px; }}
-            .box-detalle {{ background: #fafafa; border: 1px solid #eee; padding: 20px; margin: 20px 0; min-height: 100px; }}
+            .main-border {{ border: 1px solid #ddd; border-top: 10px solid #f39c12; padding: 40px; box-shadow: 0 0 10px #eee; }}
+            .header-p {{ display: flex; justify-content: space-between; margin-bottom: 40px; border-bottom: 1px solid #eee; padding-bottom: 20px; }}
+            .label-presu {{ background: #f39c12; color: white; padding: 5px 15px; font-weight: bold; border-radius: 3px; }}
+            .box-detalle {{ background: #fafafa; border: 1px solid #eee; padding: 20px; margin: 20px 0; min-height: 120px; }}
+            .total-p {{ font-size: 24px; text-align: right; color: #333; border-top: 2px solid #333; padding-top: 10px; margin-top: 20px; }}
+            .leyenda-box {{ margin-top: 30px; padding: 15px; border: 1px solid #f39c12; border-radius: 5px; background-color: #fffaf0; font-size: 13px; color: #555; }}
+            .footer-p {{ margin-top: 40px; font-size: 11px; color: #888; text-align: center; border-top: 1px solid #eee; padding-top: 15px; }}
         </style>
     </head>
     <body>
         <div class="main-border">
             <div class="header-p">
-                <h1 style="margin:0; color:#444;">CHACABUCO NOROESTE TOUR S.R.L.</h1>
-                <p>VIAJES ESPECIALES - TURISMO - TRASLADOS PERSONALES</p>
-                <div style="text-align: right;"><b>PRESUPUESTO</b> | Fecha: {p_data['Fecha Emisión']}</div>
+                <div>
+                    <h1 style="margin:0; color:#444;">CHACABUCO NOROESTE TOUR S.R.L.</h1>
+                    <small>VIAJES ESPECIALES - TURISMO - TRASLADOS PERSONALES</small>
+                </div>
+                <div style="text-align: right;">
+                    <span class="label-presu">PRESUPUESTO</span><br>
+                    <p style="margin-top:10px;"><b>Fecha:</b> {p_data['Fecha Emisión']}</p>
+                </div>
             </div>
+
             <p><b>CLIENTE:</b> {p_data['Cliente']}</p>
-            <p><b>UNIDAD:</b> {p_data['Tipo Móvil']}</p>
+            <p><b>TIPO DE UNIDAD:</b> {p_data['Tipo Móvil']}</p>
+            
             <div class="box-detalle">
                 <b>DETALLE DEL SERVICIO:</b><br><br>
                 {p_data['Detalle'].replace('\n', '<br>')}
             </div>
-            <div class="total-p">TOTAL: <span style="color: #d35400;">$ {p_data['Importe']:,.2f}</span></div>
-            <p style="font-size: 12px; margin-top: 40px;">Válido hasta: {p_data['Vencimiento']}</p>
+
+            <div class="total-p">
+                TOTAL: <span style="color: #d35400;">$ {p_data['Importe']:,.2f}</span>
+            </div>
+
+            <div class="leyenda-box">
+                •	La seña para la reserva es del 30%
+
+                •	Los gastos de los choferes (hospedaje y comida) estarán a cargo del contratante. En caso de que la empresa tenga que hacerse responsable de los mismos, el presente presupuesto deberá ser reformulado.
+            </div>
+
+            <p style="margin: 20px 0; font-size: 13px;"><b>Validez de la oferta:</b> Hasta el {p_data['Vencimiento']}</p>
+
+            <div class="footer-p">
+                CHACABUCO NOROESTE TOUR S.R.L. | Chacabuco, Buenos Aires | CHACAGEST Software System
+            </div>
         </div>
     </body>
     </html>
+    """
     """
 
 # =========================================================
@@ -672,6 +706,7 @@ elif sel == "HISTORICO COMPRAS":
             if c3.button("🗑️", key=f"del_comp_{i}"):
                 st.session_state.compras = st.session_state.compras.drop(i); guardar_datos("compras", st.session_state.compras); st.rerun()
             st.divider()
+
 
 
 
