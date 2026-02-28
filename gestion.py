@@ -114,7 +114,7 @@ def generar_html_resumen(cliente, df, saldo):
     </head>
     <body>
         <div class="header">
-            <h1>CHACAGEST - Resumen de Cuenta</h1>
+            <h1>CHACABUCO NOROESTE TOUR S.R.L - Resumen de Cuenta</h1>
             <p>Fecha de emisión: {date.today()}</p>
         </div>
         <div class="info">
@@ -138,12 +138,11 @@ def generar_html_recibo(data):
         </style>
     </head>
     <body>
-        <div class="header"><h2>RECIBO DE PAGO - CHACAGEST</h2></div>
+        <div class="header"><h2>RECIBO DE PAGO - CHACABUCO NOROESTE TOUR S.R.L</h2></div>
         <p><b>Fecha:</b> {data['Fecha']}</p>
         <p><b>Recibimos de:</b> {data['Cliente/Proveedor']}</p>
         <p><b>Concepto:</b> {data['Concepto']}</p>
         <p><b>Medio:</b> {data['Caja/Banco']}</p>
-        <p><b>Asoc. AFIP:</b> {data['Ref AFIP']}</p>
         <div class="monto-box">SON PESOS: $ {abs(data['Monto']):,.2f}</div>
     </body>
     </html>
@@ -161,12 +160,11 @@ def generar_html_orden_pago(data):
         </style>
     </head>
     <body>
-        <div class="header"><h2>ORDEN DE PAGO - CHACAGEST</h2></div>
+        <div class="header"><h2>ORDEN DE PAGO - CHACABUCO NOROESTE TOUR S.R.L</h2></div>
         <p><b>Fecha:</b> {data['Fecha']}</p>
         <p><b>Pagado a:</b> {data['Proveedor']}</p>
         <p><b>Concepto:</b> {data['Concepto']}</p>
         <p><b>Medio de Pago:</b> {data['Caja/Banco']}</p>
-        <p><b>Referencia:</b> {data['Ref AFIP']}</p>
         <div class="monto-box">TOTAL PAGADO: $ {abs(data['Monto']):,.2f}</div>
     </body>
     </html>
@@ -188,7 +186,7 @@ def generar_html_presupuesto(p_data):
     </head>
     <body>
         <div class="header">
-            <span class="title">🚛 CHACAGEST - PRESUPUESTO</span>
+            <span class="title">🚛 CHACABUCO NOROESTE TOUR S.R.L - PRESUPUESTO</span>
             <div style="float: right; text-align: right; font-size: 12px;">
                 Emisión: {p_data['Fecha Emisión']}<br>Válido hasta: {p_data['Vencimiento']}
             </div>
@@ -625,4 +623,5 @@ elif sel == "HISTORICO COMPRAS":
             if c3.button("🗑️", key=f"del_comp_{i}"):
                 st.session_state.compras = st.session_state.compras.drop(i); guardar_datos("compras", st.session_state.compras); st.rerun()
             st.divider()
+
 
