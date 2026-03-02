@@ -782,24 +782,6 @@ elif sel == "BALANCE DE GESTIÓN":
 
     st.divider()
 
-    col_izq, col_der = st.columns(2)
-
-    with col_izq:
-        st.subheader("📈 Ingresos por Cliente")
-        if not st.session_state.ventas.empty:
-            v_cli = st.session_state.ventas.groupby('Cliente')['Total'].sum().sort_values(ascending=False).reset_index()
-            st.dataframe(v_cli.style.format({"Total": "$ {:,.2f}"}), use_container_width=True)
-
-    with col_der:
-        st.subheader("📉 Gastos por Proveedor")
-        if not st.session_state.compras.empty:
-            # Aquí ya contempla Notas de Crédito/Débito según lo configurado para AFIP
-            g_prov = st.session_state.compras.groupby('Proveedor')['Total'].sum().sort_values(ascending=False).reset_index()
-            st.dataframe(g_prov.style.format({"Total": "$ {:,.2f}"}), use_container_width=True)
-
-    # Botón con el nuevo estilo violeta
-    if st.button("📥 EXPORTAR RESUMEN"):
-        st.info("Función de exportación lista para conectar a PDF o Excel.")
 
 
 
