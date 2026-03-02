@@ -769,3 +769,4 @@ elif sel == "HISTORICO COMPRAS":
 
 
 
+
