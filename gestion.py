@@ -318,14 +318,15 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 
-# --- 5. SIDEBAR ---
 with st.sidebar:
-    try: st.image("logo_path.png", use_container_width=True)
-    except: pass
-    st.markdown("---")
-
-    opciones_menu = ["CALENDARIO", "VENTAS", "COMPRAS", "TESORERIA"]
-    iconos_menu = ["calendar3", "cart4", "bag-check", "safe"]
+    st.image("logo.png", use_container_width=True) # Tu logo
+    sel = option_menu(
+        "CHACAGEST", 
+        ["INICIO", "CARGA CLIENTES", "VIAJES / VENTAS", "TESORERIA", "CARGA GASTOS", "CTA CTE PROVEEDOR", "HISTORICO COMPRAS", "BALANCE DE GESTIÓN"], 
+        icons=["house", "person-add", "truck", "cash-coin", "cart-plus", "person-vcard", "clock-history", "scale"], 
+        menu_icon="cast", 
+        default_index=0
+    )
     
     menu_principal = option_menu(
         menu_title=None,
@@ -765,6 +766,40 @@ elif sel == "HISTORICO COMPRAS":
                 guardar_datos("compras", st.session_state.compras); st.rerun()
             st.divider()
 
+elif sel == "BALANCE DE GESTIÓN":
+    st.header("⚖️ Balance General de Gestión")
+    
+    # Cálculos de Totales
+    total_ingresos = st.session_state.ventas['Total'].sum() if not st.session_state.ventas.empty else 0.0
+    total_gastos = st.session_state.compras['Total'].sum() if not st.session_state.compras.empty else 0.0
+    resultado = total_ingresos - total_gastos
+    
+    # Tarjetas Visuales
+    c1, c2, c3 = st.columns(3)
+    c1.metric("TOTAL INGRESOS", f"$ {total_ingresos:,.2f}")
+    c2.metric("TOTAL GASTOS", f"$ {total_gastos:,.2f}", delta_color="inverse")
+    c3.metric("RESULTADO NETO", f"$ {resultado:,.2f}", delta=f"{resultado:,.2f}")
+
+    st.divider()
+
+    col_izq, col_der = st.columns(2)
+
+    with col_izq:
+        st.subheader("📈 Ingresos por Cliente")
+        if not st.session_state.ventas.empty:
+            v_cli = st.session_state.ventas.groupby('Cliente')['Total'].sum().sort_values(ascending=False).reset_index()
+            st.dataframe(v_cli.style.format({"Total": "$ {:,.2f}"}), use_container_width=True)
+
+    with col_der:
+        st.subheader("📉 Gastos por Proveedor")
+        if not st.session_state.compras.empty:
+            # Aquí ya contempla Notas de Crédito/Débito según lo configurado para AFIP
+            g_prov = st.session_state.compras.groupby('Proveedor')['Total'].sum().sort_values(ascending=False).reset_index()
+            st.dataframe(g_prov.style.format({"Total": "$ {:,.2f}"}), use_container_width=True)
+
+    # Botón con el nuevo estilo violeta
+    if st.button("📥 EXPORTAR RESUMEN"):
+        st.info("Función de exportación lista para conectar a PDF o Excel.")
 
 
 
