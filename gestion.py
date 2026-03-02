@@ -123,7 +123,7 @@ def generar_html_resumen(cliente, df, saldo):
             <tr>
                 <td>
                     <p class="empresa-name">CHACABUCO NOROESTE TOUR S.R.L.</p>
-                    <p class="sub-title">Desde 1996 viajando con vos | CHACAGEST</p>
+                    <p class="sub-title">Desde 1996 viajando con vos | CHACAGEST Software System</p>
                 </td>
                 <td style="text-align: right;">
                     <p><b>ESTADO DE CUENTA</b><br>Emisión: {date.today()}</p>
@@ -735,3 +735,4 @@ elif sel == "HISTORICO COMPRAS":
                 st.session_state.compras = st.session_state.compras.drop(i)
                 guardar_datos("compras", st.session_state.compras); st.rerun()
             st.divider()
+
