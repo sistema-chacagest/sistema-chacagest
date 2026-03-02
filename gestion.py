@@ -687,26 +687,55 @@ elif sel == "CARGA PROVEEDOR":
 
 elif sel == "CARGA GASTOS":
     st.header("💸 Carga de Gastos")
-    with st.form("f_gasto", clear_on_submit=True):
-        prov_sel = st.selectbox("Proveedor", st.session_state.proveedores['Razón Social'].unique() if not st.session_state.proveedores.empty else [""])
-        c1, c2 = st.columns(2)
-        pv = c1.text_input("Punto de Venta")
-        tipo_f = c2.selectbox("Tipo de Factura", ["A", "B", "C", "REMITO", "NOTA DE CREDITO", "NOTA DE DEBITO"])
-        c3, c4 = st.columns(2)
-        n21 = c3.number_input("Importe Neto (21%)", min_value=0.0)
-        n10 = c4.number_input("Importe Neto (10.5%)", min_value=0.0)
-        c5, c6, c7 = st.columns(3)
-        r_iva = c5.number_input("Retención IVA", min_value=0.0)
-        r_gan = c6.number_input("Retención Ganancia", min_value=0.0)
-        r_iibb = c7.number_input("Retención IIBB", min_value=0.0)
-        nograv = st.number_input("Conceptos No Gravados", min_value=0.0)
-        total = (n21 * 1.21) + (n10 * 1.105) + r_iva + r_gan + r_iibb + nograv
-        if tipo_f in ["NOTA DE CREDITO"]: total = -total
-        if st.form_submit_button("REGISTRAR COMPROBANTE"):
-            ng = pd.DataFrame([[date.today(), prov_sel, pv, tipo_f, n21, n10, r_iva, r_gan, r_iibb, nograv, total]], columns=st.session_state.compras.columns)
+    
+    # 1. Campos de identificación (Fuera del form para permitir actualización instantánea)
+    prov_sel = st.selectbox("Proveedor", st.session_state.proveedores['Razón Social'].unique() if not st.session_state.proveedores.empty else [""])
+    
+    col_f1, col_f2, col_f3 = st.columns(3)
+    fecha_comp = col_f1.date_input("Fecha Comprobante", date.today()) # Nueva fecha solicitada
+    pv = col_f2.text_input("Punto de Venta")
+    tipo_f = col_f3.selectbox("Tipo de Factura", ["A", "B", "C", "REMITO", "NOTA DE CREDITO", "NOTA DE DEBITO"])
+    
+    st.divider()
+    
+    # 2. Campos numéricos
+    c1, c2 = st.columns(2)
+    n21 = c1.number_input("Importe Neto (21%)", min_value=0.0, step=0.01)
+    n10 = c2.number_input("Importe Neto (10.5%)", min_value=0.0, step=0.01)
+    
+    c3, c4, c5 = st.columns(3)
+    r_iva = c3.number_input("Retención IVA", min_value=0.0, step=0.01)
+    r_gan = c4.number_input("Retención Ganancia", min_value=0.0, step=0.01)
+    r_iibb = c5.number_input("Retención IIBB", min_value=0.0, step=0.01)
+    
+    nograv = st.number_input("Conceptos No Gravados", min_value=0.0, step=0.01)
+
+    # --- CÁLCULO DINÁMICO (Se actualiza al instante) ---
+    iva21 = n21 * 0.21
+    iva10 = n10 * 0.105
+    total_calculado = (n21 + iva21) + (n10 + iva10) + r_iva + r_gan + r_iibb + nograv
+    
+    if tipo_f == "NOTA DE CREDITO":
+        total_calculado = -total_calculado
+
+    # 3. Visualización de Resultados antes de registrar
+    st.markdown("---")
+    res1, res2, res3 = st.columns(3)
+    res1.metric("IVA 21%", f"$ {iva21:,.2f}")
+    res2.metric("IVA 10.5%", f"$ {iva10:,.2f}")
+    res3.subheader(f"TOTAL: $ {total_calculado:,.2f}")
+    
+    # 4. Botón de Registro Final
+    if st.button("✅ REGISTRAR COMPROBANTE FINAL"):
+        if prov_sel:
+            ng = pd.DataFrame([[fecha_comp, prov_sel, pv, tipo_f, n21, n10, r_iva, r_gan, r_iibb, nograv, total_calculado]], 
+                              columns=st.session_state.compras.columns)
             st.session_state.compras = pd.concat([st.session_state.compras, ng], ignore_index=True)
             guardar_datos("compras", st.session_state.compras)
-            st.success(f"Gasto guardado por total de $ {total:,.2f}"); st.rerun()
+            st.success(f"Gasto guardado por total de $ {total_calculado:,.2f}")
+            st.rerun()
+        else:
+            st.error("Por favor, seleccione un proveedor.")
 
 elif sel == "CTA CTE PROVEEDOR":
     st.header("📊 Cuenta Corriente Individual")
@@ -734,6 +763,8 @@ elif sel == "HISTORICO COMPRAS":
                 st.session_state.compras = st.session_state.compras.drop(i)
                 guardar_datos("compras", st.session_state.compras); st.rerun()
             st.divider()
+
+
 
 
 
