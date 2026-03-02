@@ -651,7 +651,7 @@ elif sel == "CARGA PROVEEDOR":
             c1, c2 = st.columns(2)
             rs = c1.text_input("Razón Social")
             doc = c2.text_input("CUIT o DNI")
-            cuenta = c1.selectbox("Cuenta de Gastos", ["COMBUSTIBLE", "REPARACION", "REPUESTO", "VARIOS"])
+            cuenta = c1.selectbox("Cuenta de Gastos", ["COMBUSTIBLE", "REPARACION", "REPUESTO", "SERVICIO LUZ, GAS",  "VARIOS"])
             cat_iva = c2.selectbox("Categoría IVA", ["Responsable Inscripto", "Exento en IVA", "Consumidor Final", "Monotributista", "No Inscripto"])
             if st.form_submit_button("REGISTRAR PROVEEDOR"):
                 if rs and doc:
@@ -734,6 +734,7 @@ elif sel == "HISTORICO COMPRAS":
                 st.session_state.compras = st.session_state.compras.drop(i)
                 guardar_datos("compras", st.session_state.compras); st.rerun()
             st.divider()
+
 
 
 
