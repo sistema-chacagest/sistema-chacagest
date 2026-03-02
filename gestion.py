@@ -171,7 +171,7 @@ def generar_html_recibo(data):
                 <span style="text-transform: uppercase;"><b>{abs(data['Monto']):,.2f}</b></span> 
                 en concepto de: <b>{data['Concepto']}</b>.<br>
                 Realizado mediante: <b>{data['Caja/Banco']}</b>.<br>
-                <span class="afip-ref">Referencia AFIP: {data['Ref AFIP']}</span>
+                <span class="afip-ref">En Cocepto de: {data['Ref AFIP']}</span>
             </div>
             <div style="margin-top: 40px;"><b>FECHA:</b> {data['Fecha']}</div>
             <div class="firma-box">Firma y Sello Responsable</div>
@@ -199,14 +199,13 @@ def generar_html_orden_pago(data):
         <div class="op-container">
             <div class="header-op">
                 <h2 style="margin:0; color: #d35400;">CHACABUCO NOROESTE TOUR S.R.L.</h2>
-                <small>Desde 1996, viajando con vos | CHACAGEST</small>
+                <small>Desde 1996, viajando con vos | CHACAGEST Software System</small>
             </div>
             <div class="titulo-doc">ORDEN DE PAGO A PROVEEDOR</div>
             <table class="detalle-table">
                 <tr><td><b>BENEFICIARIO:</b></td><td>{data['Proveedor']}</td></tr>
                 <tr><td><b>FECHA:</b></td><td>{data['Fecha']}</td></tr>
                 <tr><td><b>CONCEPTO:</b></td><td>{data['Concepto']}</td></tr>
-                <tr><td><b>MEDIO DE PAGO:</b></td><td>{data['Caja/Banco']}</td></tr>
                 <tr><td><b>REFERENCIA:</b></td><td>{data['Ref AFIP']}</td></tr>
             </table>
             <div class="monto-op">TOTAL PAGADO: $ {abs(data['Monto']):,.2f}</div>
@@ -528,7 +527,7 @@ elif sel == "PRESUPUESTOS":
 
 elif sel == "TESORERIA":
     st.header("💰 Tesorería")
-    opc_cajas = ["CAJA COTI", "CAJA TATO", "BANCO GALICIA", "BANCO PROVINCIA", "BANCO SUPERVIELLE"]
+    opc_cajas = ["CAJA COTI", "CAJA TATO", "BANCO GALICIA", "BANCO PROVINCIA", "TARJETA DE CREDITO", "BANCO SUPERVIELLE"]
     t1, t2, t3, t4, t5, t6 = st.tabs(["📥 INGRESOS VARIOS", "📤 EGRESOS VARIOS", "🧾 COBRANZA VIAJE", "📊 VER MOVIMIENTOS", "🔄 TRASPASO", "💸 ORDEN DE PAGO"])
     
     with t1:
@@ -735,4 +734,5 @@ elif sel == "HISTORICO COMPRAS":
                 st.session_state.compras = st.session_state.compras.drop(i)
                 guardar_datos("compras", st.session_state.compras); st.rerun()
             st.divider()
+
 
