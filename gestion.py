@@ -300,20 +300,30 @@ if 'clientes' not in st.session_state or 'viajes' not in st.session_state:
     st.session_state.proveedores = prov if prov is not None else pd.DataFrame()
     st.session_state.compras = com if com is not None else pd.DataFrame()
 
-# --- 4. DISEÑO ORIGINAL ---
+# --- 4. DISEÑO ACTUALIZADO A VIOLETA ---
 st.markdown("""
     <style>
     [data-testid="stSidebarNav"] { display: none; }
     header { visibility: hidden; } 
-    h1, h2, h3 { color: #5e2d61 !important; }
+    h1, h2, h3 { color: #5e2d61 !important; } /* Color de títulos [cite: 71] */
+    
+    /* ESTE ES EL CAMBIO PARA LOS BOTONES */
     div.stButton > button {
-        background: linear-gradient(to right, #f39c12, #d35400) !important;
+        background: #5e2d61 !important; /* Violeta institucional */
         color: white !important; 
         border-radius: 8px !important; 
         border: none !important; 
         font-weight: bold !important;
+        transition: 0.3s ease;
     }
-    .stDataFrame { border: 1px solid #5e2d61; border-radius: 5px; }
+    
+    /* EFECTO AL PASAR EL MOUSE */
+    div.stButton > button:hover {
+        background: #4a234d !important; /* Violeta más oscuro */
+        box-shadow: 0px 4px 10px rgba(0,0,0,0.2);
+    }
+
+    .stDataFrame { border: 1px solid #5e2d61; border-radius: 5px; } [cite: 74]
     </style>
     """, unsafe_allow_html=True)
 
@@ -763,6 +773,7 @@ elif sel == "HISTORICO COMPRAS":
                 st.session_state.compras = st.session_state.compras.drop(i)
                 guardar_datos("compras", st.session_state.compras); st.rerun()
             st.divider()
+
 
 
 
