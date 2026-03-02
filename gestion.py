@@ -28,7 +28,7 @@ def conectar_google():
 def cargar_datos():
     col_c = ["Razón Social", "CUIT / CUIL / DNI *", "Email", "Teléfono", "Dirección Fiscal", "Localidad", "Provincia", "Condición IVA", "Condición de Venta"]
     col_v = ["Fecha Carga", "Cliente", "Fecha Viaje", "Origen", "Destino", "Patente / Móvil", "Importe", "Tipo Comp", "Nro Comp Asoc"]
-    col_p = ["Fecha Emisión", "Cliente", "Vencimiento", "Detalle", "Tipo Móvil", "Importe"]
+    col_p = ["Fecha Emisión", "Cliente", "Vencimiento", "Detalle", "Tipo Móvil", "Importe", "Detalle"]
     col_t = ["Fecha", "Tipo", "Caja/Banco", "Concepto", "Cliente/Proveedor", "Monto", "Ref AFIP"]
     # SE AGREGAN CBU Y ALIAS A LA ESTRUCTURA
     col_prov = ["Razón Social", "CUIT/DNI", "Cuenta de Gastos", "Categoría IVA", "CBU", "Alias"]
@@ -478,13 +478,22 @@ elif sel == "CARGA VIAJE":
         cli = st.selectbox("Seleccionar Cliente", st.session_state.clientes['Razón Social'].unique() if not st.session_state.clientes.empty else [""])
         c1, c2 = st.columns(2)
         f_v = c1.date_input("Fecha")
-        pat = c2.text_input("Patente")
-        orig = st.text_input("Origen")
-        dest = st.text_input("Destino")
+        pat = c2.text_input("Patente / Móvil")
+        
+        o, d = st.columns(2)
+        orig = o.text_input("Origen")
+        dest = d.text_input("Destino")
+        
+        # NUEVO CAMPO DETALLE
+        det_viaje = st.text_area("Detalle del viaje (opcional)")
+        
         imp = st.number_input("Importe Neto $", min_value=0.0)
         cond = st.selectbox("Tipo de Pago", ["Cuenta Corriente", "Contado"])
+        
         if st.form_submit_button("GUARDAR VIAJE"):
-            nv = pd.DataFrame([[date.today(), cli, f_v, orig, dest, pat, imp, f"Factura ({cond})", "-"]], columns=st.session_state.viajes.columns)
+            # Se añade det_viaje al final de la lista de valores
+            nv = pd.DataFrame([[date.today(), cli, f_v, orig, dest, pat, imp, f"Factura ({cond})", "-", det_viaje]], 
+                              columns=st.session_state.viajes.columns)
             st.session_state.viajes = pd.concat([st.session_state.viajes, nv], ignore_index=True)
             guardar_datos("viajes", st.session_state.viajes)
             st.success("Viaje registrado"); st.rerun()
@@ -773,3 +782,4 @@ elif sel == "HISTORICO COMPRAS":
                 st.session_state.compras = st.session_state.compras.drop(i)
                 guardar_datos("compras", st.session_state.compras); st.rerun()
             st.divider()
+
