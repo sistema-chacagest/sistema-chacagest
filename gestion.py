@@ -642,17 +642,56 @@ elif sel == "CTA CTE GENERAL":
         st.table(res.style.format({"Importe": "$ {:,.2f}"}))
 
 elif sel == "COMPROBANTES":
-    st.header("📜 Historial de Comprobantes")
+    st.header("📜 Historial de Viajes y Comprobantes")
     if not st.session_state.viajes.empty:
+        # Usamos reverse para ver lo más nuevo arriba
         for i in reversed(st.session_state.viajes.index):
             row = st.session_state.viajes.loc[i]
-            c1, c2, c3 = st.columns([0.2, 0.6, 0.1])
-            c1.write(f"📅 {row['Fecha Viaje']}")
-            c2.write(f"👤 **{row['Cliente']}** | {row['Origen']} a {row['Destino']} | **${row['Importe']}**")
-            if c3.button("🗑️", key=f"del_{i}"):
-                st.session_state.viajes = st.session_state.viajes.drop(i)
-                guardar_datos("viajes", st.session_state.viajes); st.rerun()
-            st.divider()
+            
+            # Saltamos las filas que son "PAGO" de tesorería si quieres ver solo viajes
+            if row['Origen'] == "TESORERIA": continue 
+
+            with st.container():
+                c1, c2, c3, c4 = st.columns([0.15, 0.55, 0.15, 0.15])
+                c1.write(f"📅 {row['Fecha Viaje']}")
+                c2.markdown(f"👤 **{row['Cliente']}** | {row['Origen']} ➔ {row['Destino']}")
+                c2.caption(f"💰 ${row['Importe']:,.2f} | 🚛 {row['Patente / Móvil']} | 📝 {row.get('Detalle', '-')}")
+                
+                if c3.button("📝 Editar", key=f"edit_v_{i}"):
+                    st.session_state[f"edit_v_mode_{i}"] = True
+                
+                if c4.button("🗑️", key=f"del_v_{i}"):
+                    st.session_state.viajes = st.session_state.viajes.drop(i)
+                    guardar_datos("viajes", st.session_state.viajes)
+                    st.rerun()
+
+                # FORMULARIO DE EDICIÓN (Se activa al presionar Editar)
+                if st.session_state.get(f"edit_v_mode_{i}", False):
+                    with st.form(f"f_edit_v_{i}"):
+                        st.subheader("Editar Datos del Viaje")
+                        ce1, ce2 = st.columns(2)
+                        n_orig = ce1.text_input("Origen", value=row['Origen'])
+                        n_dest = ce2.text_input("Destino", value=row['Destino'])
+                        n_pat = ce1.text_input("Patente / Móvil", value=row['Patente / Móvil'])
+                        n_imp = ce2.number_input("Importe", value=float(row['Importe']))
+                        n_det = st.text_area("Detalle", value=row.get('Detalle', '-'))
+                        
+                        be1, be2 = st.columns(2)
+                        if be1.form_submit_button("✅ Guardar Cambios"):
+                            st.session_state.viajes.at[i, 'Origen'] = n_orig
+                            st.session_state.viajes.at[i, 'Destino'] = n_dest
+                            st.session_state.viajes.at[i, 'Patente / Móvil'] = n_pat
+                            st.session_state.viajes.at[i, 'Importe'] = n_imp
+                            st.session_state.viajes.at[i, 'Detalle'] = n_det
+                            guardar_datos("viajes", st.session_state.viajes)
+                            st.session_state[f"edit_v_mode_{i}"] = False
+                            st.rerun()
+                        if be2.form_submit_button("❌ Cancelar"):
+                            st.session_state[f"edit_v_mode_{i}"] = False
+                            st.rerun()
+                st.divider()
+    else:
+        st.info("No hay viajes registrados.")
 
 elif sel == "CARGA PROVEEDOR":
     st.header("👤 Gestión de Proveedores")
@@ -782,4 +821,5 @@ elif sel == "HISTORICO COMPRAS":
                 st.session_state.compras = st.session_state.compras.drop(i)
                 guardar_datos("compras", st.session_state.compras); st.rerun()
             st.divider()
+
 
