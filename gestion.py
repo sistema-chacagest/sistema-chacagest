@@ -30,7 +30,8 @@ def cargar_datos():
     col_v = ["Fecha Carga", "Cliente", "Fecha Viaje", "Origen", "Destino", "Patente / Móvil", "Importe", "Tipo Comp", "Nro Comp Asoc"]
     col_p = ["Fecha Emisión", "Cliente", "Vencimiento", "Detalle", "Tipo Móvil", "Importe"]
     col_t = ["Fecha", "Tipo", "Caja/Banco", "Concepto", "Cliente/Proveedor", "Monto", "Ref AFIP"]
-    col_prov = ["Razón Social", "CUIT/DNI", "Cuenta de Gastos", "Categoría IVA"]
+    # MODIFICACIÓN: Se agregan Alias y CBU a la estructura
+    col_prov = ["Razón Social", "CUIT/DNI", "Cuenta de Gastos", "Categoría IVA", "Alias", "CBU"]
     col_compras = ["Fecha", "Proveedor", "Punto Venta", "Tipo Factura", "Neto 21", "Neto 10.5", "Ret IVA", "Ret Ganancia", "Ret IIBB", "No Gravados", "Total"]
 
     try:
@@ -653,9 +654,15 @@ elif sel == "CARGA PROVEEDOR":
             doc = c2.text_input("CUIT o DNI")
             cuenta = c1.selectbox("Cuenta de Gastos", ["COMBUSTIBLE", "REPARACION", "REPUESTO", "SERVICIO LUZ, GAS",  "VARIOS"])
             cat_iva = c2.selectbox("Categoría IVA", ["Responsable Inscripto", "Exento en IVA", "Consumidor Final", "Monotributista", "No Inscripto"])
+            # MODIFICACIÓN: Nuevos campos Alias y CBU
+            c3, c4 = st.columns(2)
+            alias = c3.text_input("Alias CBU")
+            cbu = c4.text_input("CBU (22 dígitos)")
+            
             if st.form_submit_button("REGISTRAR PROVEEDOR"):
                 if rs and doc:
-                    np = pd.DataFrame([[rs, doc, cuenta, cat_iva]], columns=st.session_state.proveedores.columns)
+                    # Se incluye alias y cbu en el guardado
+                    np = pd.DataFrame([[rs, doc, cuenta, cat_iva, alias, cbu]], columns=st.session_state.proveedores.columns)
                     st.session_state.proveedores = pd.concat([st.session_state.proveedores, np], ignore_index=True)
                     guardar_datos("proveedores", st.session_state.proveedores)
                     st.success("Proveedor registrado"); st.rerun()
@@ -665,7 +672,9 @@ elif sel == "CARGA PROVEEDOR":
             with st.container():
                 c_inf, c_ed, c_el = st.columns([0.7, 0.15, 0.15])
                 c_inf.markdown(f"**{row['Razón Social']}** | CUIT: {row['CUIT/DNI']}")
-                c_inf.caption(f"📂 Cuenta: {row['Cuenta de Gastos']} | {row['Categoría IVA']}")
+                # MODIFICACIÓN: Mostrar Alias y CBU en la info
+                c_inf.caption(f"📂 Cuenta: {row['Cuenta de Gastos']} | {row['Categoría IVA']} | 🏦 Alias: {row.get('Alias','-')} | CBU: {row.get('CBU','-')}")
+                
                 if c_ed.button("📝 Editar", key=f"edit_p_{i}"): st.session_state[f"edit_p_mode_{i}"] = True
                 if c_el.button("🗑️", key=f"del_p_{i}"):
                     tiene_compras = not st.session_state.compras[st.session_state.compras['Proveedor'] == row['Razón Social']].empty
@@ -679,8 +688,11 @@ elif sel == "CARGA PROVEEDOR":
                         ce1, ce2 = st.columns(2)
                         n_rs = ce1.text_input("Razón Social", value=row['Razón Social'])
                         n_doc = ce2.text_input("CUIT/DNI", value=row['CUIT/DNI'])
+                        # MODIFICACIÓN: Campos de edición para Alias y CBU
+                        n_alias = ce1.text_input("Alias", value=row.get('Alias',''))
+                        n_cbu = ce2.text_input("CBU", value=row.get('CBU',''))
                         if st.form_submit_button("✅ Guardar"):
-                            st.session_state.proveedores.loc[i] = [n_rs, n_doc, row['Cuenta de Gastos'], row['Categoría IVA']]
+                            st.session_state.proveedores.loc[i] = [n_rs, n_doc, row['Cuenta de Gastos'], row['Categoría IVA'], n_alias, n_cbu]
                             guardar_datos("proveedores", st.session_state.proveedores)
                             st.session_state[f"edit_p_mode_{i}"] = False; st.rerun()
             st.divider()
@@ -688,17 +700,15 @@ elif sel == "CARGA PROVEEDOR":
 elif sel == "CARGA GASTOS":
     st.header("💸 Carga de Gastos")
     
-    # 1. Campos de identificación (Fuera del form para permitir actualización instantánea)
     prov_sel = st.selectbox("Proveedor", st.session_state.proveedores['Razón Social'].unique() if not st.session_state.proveedores.empty else [""])
     
     col_f1, col_f2, col_f3 = st.columns(3)
-    fecha_comp = col_f1.date_input("Fecha Comprobante", date.today()) # Nueva fecha solicitada
+    fecha_comp = col_f1.date_input("Fecha Comprobante", date.today())
     pv = col_f2.text_input("Punto de Venta")
     tipo_f = col_f3.selectbox("Tipo de Factura", ["A", "B", "C", "REMITO", "NOTA DE CREDITO", "NOTA DE DEBITO"])
     
     st.divider()
     
-    # 2. Campos numéricos
     c1, c2 = st.columns(2)
     n21 = c1.number_input("Importe Neto (21%)", min_value=0.0, step=0.01)
     n10 = c2.number_input("Importe Neto (10.5%)", min_value=0.0, step=0.01)
@@ -710,7 +720,6 @@ elif sel == "CARGA GASTOS":
     
     nograv = st.number_input("Conceptos No Gravados", min_value=0.0, step=0.01)
 
-    # --- CÁLCULO DINÁMICO (Se actualiza al instante) ---
     iva21 = n21 * 0.21
     iva10 = n10 * 0.105
     total_calculado = (n21 + iva21) + (n10 + iva10) + r_iva + r_gan + r_iibb + nograv
@@ -718,14 +727,12 @@ elif sel == "CARGA GASTOS":
     if tipo_f == "NOTA DE CREDITO":
         total_calculado = -total_calculado
 
-    # 3. Visualización de Resultados antes de registrar
     st.markdown("---")
     res1, res2, res3 = st.columns(3)
     res1.metric("IVA 21%", f"$ {iva21:,.2f}")
     res2.metric("IVA 10.5%", f"$ {iva10:,.2f}")
     res3.subheader(f"TOTAL: $ {total_calculado:,.2f}")
     
-    # 4. Botón de Registro Final
     if st.button("✅ REGISTRAR COMPROBANTE FINAL"):
         if prov_sel:
             ng = pd.DataFrame([[fecha_comp, prov_sel, pv, tipo_f, n21, n10, r_iva, r_gan, r_iibb, nograv, total_calculado]], 
@@ -747,9 +754,21 @@ elif sel == "CTA CTE PROVEEDOR":
 
 elif sel == "CTA CTE GENERAL PROV":
     st.header("🌎 Estado General de Proveedores")
+    # MODIFICACIÓN: Cruzar datos de compras con info bancaria del proveedor
     if not st.session_state.compras.empty:
         res_p = st.session_state.compras.groupby('Proveedor')['Total'].sum().reset_index()
+        
+        if not st.session_state.proveedores.empty:
+            info_bancaria = st.session_state.proveedores[['Razón Social', 'Alias', 'CBU']]
+            res_p = res_p.merge(info_bancaria, left_on='Proveedor', right_on='Razón Social', how='left').drop(columns=['Razón Social'])
+        
+        # Reordenar columnas para visualización clara
+        cols_order = ['Proveedor', 'Total', 'Alias', 'CBU']
+        res_p = res_p[[c for c in cols_order if c in res_p.columns]]
+        
         st.table(res_p.style.format({"Total": "$ {:,.2f}"}))
+    else:
+        st.info("No hay movimientos de compras registrados.")
 
 elif sel == "HISTORICO COMPRAS":
     st.header("📜 Comprobantes Cargados")
@@ -763,10 +782,3 @@ elif sel == "HISTORICO COMPRAS":
                 st.session_state.compras = st.session_state.compras.drop(i)
                 guardar_datos("compras", st.session_state.compras); st.rerun()
             st.divider()
-
-
-
-
-
-
-
