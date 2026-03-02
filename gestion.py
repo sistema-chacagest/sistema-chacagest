@@ -689,24 +689,36 @@ elif sel == "CARGA GASTOS":
     st.header("💸 Carga de Gastos")
     with st.form("f_gasto", clear_on_submit=True):
         prov_sel = st.selectbox("Proveedor", st.session_state.proveedores['Razón Social'].unique() if not st.session_state.proveedores.empty else [""])
-        c1, c2 = st.columns(2)
+        c1, c2, c_fecha = st.columns([1, 1, 1]) # Añadimos columna para fecha
+        fecha_comp = c_fecha.date_input("Fecha Comprobante", date.today()) # Nueva entrada de fecha [cite: 279]
         pv = c1.text_input("Punto de Venta")
         tipo_f = c2.selectbox("Tipo de Factura", ["A", "B", "C", "REMITO", "NOTA DE CREDITO", "NOTA DE DEBITO"])
+        
         c3, c4 = st.columns(2)
         n21 = c3.number_input("Importe Neto (21%)", min_value=0.0)
         n10 = c4.number_input("Importe Neto (10.5%)", min_value=0.0)
+        
         c5, c6, c7 = st.columns(3)
         r_iva = c5.number_input("Retención IVA", min_value=0.0)
         r_gan = c6.number_input("Retención Ganancia", min_value=0.0)
         r_iibb = c7.number_input("Retención IIBB", min_value=0.0)
         nograv = st.number_input("Conceptos No Gravados", min_value=0.0)
-        total = (n21 * 1.21) + (n10 * 1.105) + r_iva + r_gan + r_iibb + nograv
-        if tipo_f in ["NOTA DE CREDITO"]: total = -total
+        
+        # Cálculo del total para visualización inmediata 
+        total_calculado = (n21 * 1.21) + (n10 * 1.105) + r_iva + r_gan + r_iibb + nograv
+        if tipo_f in ["NOTA DE CREDITO"]: 
+            total_calculado = -total_calculado
+            
+        # Visualización del total antes de guardar
+        st.markdown(f"### Total a Registrar: **$ {total_calculado:,.2f}**")
+        
         if st.form_submit_button("REGISTRAR COMPROBANTE"):
-            ng = pd.DataFrame([[date.today(), prov_sel, pv, tipo_f, n21, n10, r_iva, r_gan, r_iibb, nograv, total]], columns=st.session_state.compras.columns)
+            # Se usa fecha_comp en lugar de date.today() para el registro [cite: 281]
+            ng = pd.DataFrame([[fecha_comp, prov_sel, pv, tipo_f, n21, n10, r_iva, r_gan, r_iibb, nograv, total_calculado]], columns=st.session_state.compras.columns)
             st.session_state.compras = pd.concat([st.session_state.compras, ng], ignore_index=True)
             guardar_datos("compras", st.session_state.compras)
-            st.success(f"Gasto guardado por total de $ {total:,.2f}"); st.rerun()
+            st.success(f"Gasto guardado por total de $ {total_calculado:,.2f}")
+            st.rerun()
 
 elif sel == "CTA CTE PROVEEDOR":
     st.header("📊 Cuenta Corriente Individual")
@@ -734,6 +746,7 @@ elif sel == "HISTORICO COMPRAS":
                 st.session_state.compras = st.session_state.compras.drop(i)
                 guardar_datos("compras", st.session_state.compras); st.rerun()
             st.divider()
+
 
 
 
