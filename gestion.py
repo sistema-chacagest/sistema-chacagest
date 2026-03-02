@@ -689,10 +689,12 @@ elif sel == "CARGA GASTOS":
     st.header("💸 Carga de Gastos")
     with st.form("f_gasto", clear_on_submit=True):
         prov_sel = st.selectbox("Proveedor", st.session_state.proveedores['Razón Social'].unique() if not st.session_state.proveedores.empty else [""])
-        c1, c2, c_fecha = st.columns([1, 1, 1]) # Añadimos columna para fecha
-        fecha_comp = c_fecha.date_input("Fecha Comprobante", date.today()) # Nueva entrada de fecha [cite: 279]
-        pv = c1.text_input("Punto de Venta")
-        tipo_f = c2.selectbox("Tipo de Factura", ["A", "B", "C", "REMITO", "NOTA DE CREDITO", "NOTA DE DEBITO"])
+        
+        # Nueva fila para Fecha y Punto de Venta
+        c_fec, c_pv, c_tipo = st.columns([1, 1, 1])
+        fecha_factura = c_fec.date_input("Fecha Comprobante", date.today()) # Ajuste solicitado
+        pv = c_pv.text_input("Punto de Venta")
+        tipo_f = c_tipo.selectbox("Tipo de Factura", ["A", "B", "C", "REMITO", "NOTA DE CREDITO", "NOTA DE DEBITO"])
         
         c3, c4 = st.columns(2)
         n21 = c3.number_input("Importe Neto (21%)", min_value=0.0)
@@ -703,23 +705,27 @@ elif sel == "CARGA GASTOS":
         r_gan = c6.number_input("Retención Ganancia", min_value=0.0)
         r_iibb = c7.number_input("Retención IIBB", min_value=0.0)
         nograv = st.number_input("Conceptos No Gravados", min_value=0.0)
-        
-        # Cálculo del total para visualización inmediata 
+
+        # --- CÁLCULO EN TIEMPO REAL ---
+        # El total se calcula con los valores actuales de los inputs
         total_calculado = (n21 * 1.21) + (n10 * 1.105) + r_iva + r_gan + r_iibb + nograv
-        if tipo_f in ["NOTA DE CREDITO"]: 
-            total_calculado = -total_calculado
-            
-        # Visualización del total antes de guardar
-        st.markdown(f"### Total a Registrar: **$ {total_calculado:,.2f}**")
         
+        # Lógica para Notas de Crédito (restan al saldo)
+        if tipo_f == "NOTA DE CREDITO":
+            total_calculado = -total_calculado
+
+        # VISUALIZACIÓN ANTES DEL BOTÓN
+        st.markdown(f"### 💰 Total a Registrar: **$ {total_calculado:,.2f}**")
+        st.info("Revisá el monto arriba antes de presionar el botón de registro.")
+
         if st.form_submit_button("REGISTRAR COMPROBANTE"):
-            # Se usa fecha_comp en lugar de date.today() para el registro [cite: 281]
-            ng = pd.DataFrame([[fecha_comp, prov_sel, pv, tipo_f, n21, n10, r_iva, r_gan, r_iibb, nograv, total_calculado]], columns=st.session_state.compras.columns)
+            # Se guarda con la fecha_factura seleccionada en lugar de la fecha actual
+            ng = pd.DataFrame([[fecha_factura, prov_sel, pv, tipo_f, n21, n10, r_iva, r_gan, r_iibb, nograv, total_calculado]], columns=st.session_state.compras.columns)
             st.session_state.compras = pd.concat([st.session_state.compras, ng], ignore_index=True)
             guardar_datos("compras", st.session_state.compras)
             st.success(f"Gasto guardado por total de $ {total_calculado:,.2f}")
             st.rerun()
-
+        
 elif sel == "CTA CTE PROVEEDOR":
     st.header("📊 Cuenta Corriente Individual")
     if not st.session_state.proveedores.empty:
@@ -746,6 +752,7 @@ elif sel == "HISTORICO COMPRAS":
                 st.session_state.compras = st.session_state.compras.drop(i)
                 guardar_datos("compras", st.session_state.compras); st.rerun()
             st.divider()
+
 
 
 
