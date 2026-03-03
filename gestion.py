@@ -286,7 +286,7 @@ def generar_html_presupuesto(p_data):
 # ─────────────────────────────────────────────────────────────────────────────
 USUARIOS = {
     "admin": {
-        "password": "Noroeste23",
+        "password": "chaca2026",
         "rol": "admin",
         "caja": None,           # Admin no tiene caja asignada, ve todas
         "nombre": "Administrador"
@@ -1005,9 +1005,6 @@ elif sel == "TESORERIA":
         df_ver = st.session_state.tesoreria[st.session_state.tesoreria['Caja/Banco'] == cj_v].copy()
 
         # ── Resumen desglosado por Forma ──
-        st.markdown("##### 📊 Saldo por Forma de Pago")
-
-        FORMAS_RESUMEN = ["EFECTIVO", "TRANSFERENCIA", "TARJETA DE CREDITO", "DÓLARES", "OTROS"]
         ICONOS_FORMA   = {"EFECTIVO": "💵", "TRANSFERENCIA": "🏦", "TARJETA DE CREDITO": "💳", "DÓLARES": "💲", "OTROS": "📋"}
 
         cols_formas = st.columns(len(FORMAS_RESUMEN))
@@ -1028,8 +1025,6 @@ elif sel == "TESORERIA":
                 unsafe_allow_html=True
             )
 
-        st.markdown("---")
-        st.metric(f"💰 SALDO TOTAL en {cj_v}", f"$ {total_caja:,.2f}")
         st.markdown("---")
         st.markdown("##### 📋 Detalle de Movimientos")
         st.dataframe(df_ver, use_container_width=True)
@@ -1265,4 +1260,3 @@ elif sel == "HISTORICO COMPRAS":
                 st.session_state.compras = st.session_state.compras.drop(i)
                 guardar_datos("compras", st.session_state.compras); st.rerun()
             st.divider()
-
