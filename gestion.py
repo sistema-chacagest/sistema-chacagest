@@ -2120,7 +2120,13 @@ elif sel == "CHEQUES":
                         })
 
                     if not filas:
-                        st.error("❌ No se encontraron datos válidos. Verificá que el archivo tenga las columnas correctas.")
+                        st.error("❌ No se encontraron datos válidos.")
+                        st.markdown("**🔍 Diagnóstico — headers detectados y primeras filas:**")
+                        if filas_raw:
+                            st.write("**Headers:**", list(filas_raw[0].keys()))
+                            st.dataframe(pd.DataFrame(filas_raw[:10]), use_container_width=True)
+                        else:
+                            st.warning("No se pudo leer ninguna fila.")
                     else:
                         df_preview = pd.DataFrame([{
                             'Fecha Emisión':     f['fecha_emis'],
