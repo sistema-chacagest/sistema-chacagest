@@ -1154,7 +1154,17 @@ elif sel == "TESORERIA":
             cj_v = caja_propia
             st.markdown(f"#### 🏦 {caja_propia}")
 
-        df_ver = st.session_state.tesoreria[st.session_state.tesoreria['Caja/Banco'] == cj_v].copy()
+        df_caja_full = st.session_state.tesoreria[st.session_state.tesoreria['Caja/Banco'] == cj_v].copy()
+
+        # ── Mostrar solo movimientos DESDE el último cierre (inclusive el cierre no, post-cierre) ──
+        cierres_idx = df_caja_full[df_caja_full['Tipo'] == 'CIERRE DE CAJA'].index
+        if len(cierres_idx) > 0:
+            ultimo_cierre_idx = cierres_idx[-1]
+            df_ver = df_caja_full[df_caja_full.index > ultimo_cierre_idx].copy()
+            ultimo_cierre_row = df_caja_full.loc[ultimo_cierre_idx]
+            st.caption(f"📌 Último cierre: {ultimo_cierre_row['Fecha']} — mostrando movimientos posteriores al cierre.")
+        else:
+            df_ver = df_caja_full.copy()
 
         # ── Resumen desglosado por Forma ──
         FORMAS_RESUMEN = ["EFECTIVO", "TRANSFERENCIA", "TARJETA DE CREDITO", "DÓLARES", "OTROS"]
@@ -1227,10 +1237,16 @@ elif sel == "TESORERIA":
 
             st.markdown("---")
 
-            # Preview en tiempo real
-            df_cierre = st.session_state.tesoreria[
+            # ── Base: solo movimientos desde el último cierre (igual que en tab_ver) ──
+            df_caja_base = st.session_state.tesoreria[
                 st.session_state.tesoreria['Caja/Banco'] == caja_cierre
             ].copy()
+            cierres_prev = df_caja_base[df_caja_base['Tipo'] == 'CIERRE DE CAJA'].index
+            if len(cierres_prev) > 0:
+                df_caja_base = df_caja_base[df_caja_base.index > cierres_prev[-1]].copy()
+
+            # Filtrar por período dentro de esa base
+            df_cierre = df_caja_base.copy()
             try:
                 df_cierre['Fecha_dt'] = pd.to_datetime(df_cierre['Fecha'], errors='coerce')
                 df_cierre = df_cierre[
@@ -1239,6 +1255,9 @@ elif sel == "TESORERIA":
                 ]
             except:
                 pass
+
+            # El saldo real a cerrar es el acumulado desde el último cierre (toda la base, no solo el período)
+            saldo_desde_ultimo_cierre = df_caja_base['Monto'].sum()
 
             # Preview del resumen
             FORMAS_PREV = ["EFECTIVO", "TRANSFERENCIA", "TARJETA DE CREDITO", "DÓLARES", "OTROS"]
@@ -1262,14 +1281,10 @@ elif sel == "TESORERIA":
             if st.button("🔒 GENERAR CIERRE DE CAJA", type="primary"):
                 responsable = st.session_state.nombre_usuario
 
-                # ── Saldo TOTAL acumulado de la caja (todos los movimientos, no solo el período) ──
-                saldo_total_caja = st.session_state.tesoreria[
-                    st.session_state.tesoreria['Caja/Banco'] == caja_cierre
-                ]['Monto'].sum()
-
                 # ── Registrar movimiento de cierre que lleva la caja a CERO ──
-                if saldo_total_caja != 0:
-                    ajuste = -saldo_total_caja  # si hay $500, registra -$500
+                # Usa el saldo desde el último cierre (ya calculado arriba)
+                if saldo_desde_ultimo_cierre != 0:
+                    ajuste = -saldo_desde_ultimo_cierre
                     mov_cierre = pd.DataFrame([[
                         date.today(),
                         "CIERRE DE CAJA",
@@ -1289,7 +1304,7 @@ elif sel == "TESORERIA":
                     "responsable":   responsable,
                     "movimientos":   df_cierre.drop(columns=['Fecha_dt'], errors='ignore'),
                     "total":         df_cierre['Monto'].sum(),
-                    "saldo_previo":  saldo_total_caja,
+                    "saldo_previo":  saldo_desde_ultimo_cierre,
                     "observaciones": obs_cierre.strip()
                 })
                 st.session_state.html_cierre_ready = html_cierre
