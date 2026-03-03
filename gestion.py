@@ -2095,16 +2095,25 @@ elif sel == "CHEQUES":
                         banco      = _find_col(row_d, 'banco')
                         concepto   = _find_col(row_d, 'concepto', 'descripcion', 'detalle', 'orden')
                         importe    = _find_col(row_d, 'importe', 'monto', 'valor')
+                        # Convertir importe
                         try:
                             imp_f = float(str(importe).replace('.', '').replace(',', '.')) if importe else 0
                         except:
                             imp_f = 0
-                        if imp_f <= 0 and nro is None:
+
+                        # Convertir nro — descartar filas no numéricas (cabeceras residuales, totales, etc.)
+                        try:
+                            nro_str = str(int(float(str(nro).replace('.', '').replace(',', '.')))) if nro is not None else None
+                        except (ValueError, TypeError):
+                            continue  # no es un nro de cheque válido, saltar fila
+
+                        if nro_str is None or imp_f <= 0:
                             continue
+
                         filas.append({
                             'fecha_emis': fecha_emis if fecha_emis != '-' else str(date.today()),
                             'fecha_venc': fecha_venc if fecha_venc != '-' else str(date.today()),
-                            'nro':        str(int(float(nro))) if nro is not None else '-',
+                            'nro':        nro_str,
                             'banco':      str(banco).strip() if banco else 'BANCO GALICIA',
                             'concepto':   str(concepto).strip() if concepto else '-',
                             'importe':    imp_f,
