@@ -890,22 +890,21 @@ elif sel == "TESORERIA":
 
     if es_admin:
         opc_cajas = TODAS_CAJAS
-        # Para admin: efectivo, transferencia y tarjeta aplicadas a la caja seleccionada
-        FORMAS_PAGO = ["EFECTIVO", "TRANSFERENCIA", "TARJETA DE CREDITO"]
+        FORMAS_PAGO = ["EFECTIVO", "TRANSFERENCIA", "TARJETA DE CREDITO", "DÓLARES"]
     else:
-        # Operador: solo su caja, y elige la forma de ingreso
         opc_cajas   = [caja_propia]
-        FORMAS_PAGO = ["EFECTIVO", "TRANSFERENCIA", "TARJETA DE CREDITO"]
+        FORMAS_PAGO = ["EFECTIVO", "TRANSFERENCIA", "TARJETA DE CREDITO", "DÓLARES"]
         st.info(f"🏦 Operando en: **{caja_propia}**")
 
-    # ── Tabs: Admin ve todos, Operador no ve traspasos entre cajas ni Orden de Pago ──
+    # ── Tabs: Admin ve todos, Operador no ve Traspaso ni Orden de Pago
+    #         pero SÍ ve "Pase de Efectivo" (puede pasar efectivo a otra caja) ──
     if es_admin:
-        tab_ing, tab_egr, tab_cob, tab_ver, tab_tras, tab_op = st.tabs(
-            ["📥 INGRESOS VARIOS", "📤 EGRESOS VARIOS", "🧾 COBRANZA VIAJE", "📊 VER MOVIMIENTOS", "🔄 TRASPASO", "💸 ORDEN DE PAGO"]
+        tab_ing, tab_egr, tab_cob, tab_ver, tab_pase, tab_tras, tab_op = st.tabs(
+            ["📥 INGRESOS VARIOS", "📤 EGRESOS VARIOS", "🧾 COBRANZA VIAJE", "📊 VER MOVIMIENTOS", "💱 PASE DE EFECTIVO", "🔄 TRASPASO", "💸 ORDEN DE PAGO"]
         )
     else:
-        tab_ing, tab_egr, tab_cob, tab_ver = st.tabs(
-            ["📥 INGRESOS VARIOS", "📤 EGRESOS VARIOS", "🧾 COBRANZA VIAJE", "📊 MIS MOVIMIENTOS"]
+        tab_ing, tab_egr, tab_cob, tab_ver, tab_pase = st.tabs(
+            ["📥 INGRESOS VARIOS", "📤 EGRESOS VARIOS", "🧾 COBRANZA VIAJE", "📊 MIS MOVIMIENTOS", "💱 PASE DE EFECTIVO"]
         )
         tab_tras = None
         tab_op   = None
@@ -1034,6 +1033,41 @@ elif sel == "TESORERIA":
         st.markdown("---")
         st.markdown("##### 📋 Detalle de Movimientos")
         st.dataframe(df_ver, use_container_width=True)
+
+    # ── PASE DE EFECTIVO: disponible para todos (operador pasa desde su caja, admin elige) ──
+    with tab_pase:
+        if st.session_state.get("msg_pase"):
+            st.success(st.session_state.msg_pase)
+            st.session_state.msg_pase = None
+        st.markdown("Registrá el pase de efectivo físico de una caja a otra. Se genera un egreso en la caja origen y un ingreso en la caja destino.")
+        with st.form("f_pase", clear_on_submit=True):
+            c1, c2 = st.columns(2)
+            if es_admin:
+                origen_pase  = c1.selectbox("Caja Origen (sale el efectivo)", TODAS_CAJAS, key="pase_orig")
+                destino_pase = c2.selectbox("Caja Destino (entra el efectivo)", TODAS_CAJAS, key="pase_dest")
+            else:
+                st.markdown(f"**Caja Origen:** {caja_propia}")
+                origen_pase  = caja_propia
+                # El operador puede mandar efectivo a cualquier otra caja
+                otras_cajas  = [c for c in TODAS_CAJAS if c != caja_propia]
+                destino_pase = c2.selectbox("Caja Destino (entra el efectivo)", otras_cajas, key="pase_dest")
+            forma_pase = st.selectbox("Tipo de valor", ["EFECTIVO", "DÓLARES"], key="pase_forma")
+            monto_pase = st.number_input("Monto a pasar $", min_value=0.0, key="pase_monto")
+            concepto_pase = st.text_input("Concepto (opcional)", key="pase_concepto")
+            if st.form_submit_button("💱 REGISTRAR PASE"):
+                if monto_pase > 0 and origen_pase != destino_pase:
+                    desc = concepto_pase if concepto_pase else f"Pase a {destino_pase}"
+                    desc_dest = concepto_pase if concepto_pase else f"Pase desde {origen_pase}"
+                    p1 = pd.DataFrame([[date.today(), "PASE EFECTIVO", origen_pase, forma_pase, desc,       "INTERNO", -monto_pase, "-"]], columns=COL_TESORERIA)
+                    p2 = pd.DataFrame([[date.today(), "PASE EFECTIVO", destino_pase, forma_pase, desc_dest, "INTERNO",  monto_pase, "-"]], columns=COL_TESORERIA)
+                    st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, p1, p2], ignore_index=True)
+                    guardar_datos("tesoreria", st.session_state.tesoreria)
+                    st.session_state.msg_pase = f"✅ Pase de {forma_pase} por $ {monto_pase:,.2f} de {origen_pase} → {destino_pase} registrado."
+                    st.rerun()
+                elif origen_pase == destino_pase:
+                    st.warning("La caja origen y destino no pueden ser la misma.")
+                else:
+                    st.warning("Ingresá un monto mayor a cero.")
 
     # Traspasos y Orden de Pago: SOLO ADMIN
     if tab_tras is not None:
