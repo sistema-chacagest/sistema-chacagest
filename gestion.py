@@ -392,8 +392,19 @@ def generar_html_cierre_caja(data):
     </table>
 
     <div class="total-box">
-        <span class="total-label">SALDO AL CIERRE</span>
+        <span class="total-label">SALDO DEL PERÍODO</span>
         <span class="total-monto">$ {total:,.2f}</span>
+    </div>
+
+    <div style="background:#f0f2f6;border-radius:10px;padding:16px 24px;margin-top:16px;display:flex;justify-content:space-between;align-items:center;">
+        <div>
+            <div style="font-size:12px;color:#888;font-weight:bold;">SALDO ACUMULADO ANTES DEL CIERRE</div>
+            <div style="font-size:22px;font-weight:bold;color:#5e2d61;">$ {data.get('saldo_previo', total):,.2f}</div>
+        </div>
+        <div style="text-align:right;">
+            <div style="font-size:12px;color:#888;font-weight:bold;">SALDO DESPUÉS DEL CIERRE</div>
+            <div style="font-size:22px;font-weight:bold;color:#27ae60;">$ 0,00 ✓</div>
+        </div>
     </div>
 
     {"<div style='background:#fff8e1;border:1px solid #f39c12;border-radius:8px;padding:14px;margin-top:20px;font-size:13px;'><b>📝 Observaciones:</b><br><br>" + data['observaciones'] + "</div>" if data.get('observaciones') else ""}
@@ -1250,12 +1261,35 @@ elif sel == "TESORERIA":
 
             if st.button("🔒 GENERAR CIERRE DE CAJA", type="primary"):
                 responsable = st.session_state.nombre_usuario
+
+                # ── Saldo TOTAL acumulado de la caja (todos los movimientos, no solo el período) ──
+                saldo_total_caja = st.session_state.tesoreria[
+                    st.session_state.tesoreria['Caja/Banco'] == caja_cierre
+                ]['Monto'].sum()
+
+                # ── Registrar movimiento de cierre que lleva la caja a CERO ──
+                if saldo_total_caja != 0:
+                    ajuste = -saldo_total_caja  # si hay $500, registra -$500
+                    mov_cierre = pd.DataFrame([[
+                        date.today(),
+                        "CIERRE DE CAJA",
+                        caja_cierre,
+                        "CIERRE",
+                        f"Cierre de caja — {responsable}",
+                        "INTERNO",
+                        ajuste,
+                        f"Cierre {fecha_desde}/{fecha_hasta}"
+                    ]], columns=COL_TESORERIA)
+                    st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, mov_cierre], ignore_index=True)
+                    guardar_datos("tesoreria", st.session_state.tesoreria)
+
                 html_cierre = generar_html_cierre_caja({
-                    "caja":         caja_cierre,
-                    "fecha_cierre": f"{fecha_desde} al {fecha_hasta}",
-                    "responsable":  responsable,
-                    "movimientos":  df_cierre.drop(columns=['Fecha_dt'], errors='ignore'),
-                    "total":        df_cierre['Monto'].sum(),
+                    "caja":          caja_cierre,
+                    "fecha_cierre":  f"{fecha_desde} al {fecha_hasta}",
+                    "responsable":   responsable,
+                    "movimientos":   df_cierre.drop(columns=['Fecha_dt'], errors='ignore'),
+                    "total":         df_cierre['Monto'].sum(),
+                    "saldo_previo":  saldo_total_caja,
                     "observaciones": obs_cierre.strip()
                 })
                 st.session_state.html_cierre_ready = html_cierre
