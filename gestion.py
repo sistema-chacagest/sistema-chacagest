@@ -323,7 +323,7 @@ with st.sidebar:
     except: pass
     st.markdown("---")
 
-    opciones_menu = ["DASHBOARD", "CALENDARIO", "VENTAS", "COMPRAS", "TESORERIA"]
+    opciones_menu = ["CALENDARIO", "DASHBOARD", "VENTAS", "COMPRAS", "TESORERIA"]
     iconos_menu   = ["bar-chart-line", "calendar3", "cart4", "bag-check", "safe"]
 
     menu_principal = option_menu(
@@ -1065,3 +1065,4 @@ elif sel == "HISTORICO COMPRAS":
                 st.session_state.compras = st.session_state.compras.drop(i)
                 guardar_datos("compras", st.session_state.compras); st.rerun()
             st.divider()
+
