@@ -1922,6 +1922,189 @@ elif sel == "CHEQUES":
                     else:
                         st.warning("Completá Nro de Cheque, Beneficiario e Importe.")
 
+        # ── IMPORTAR eCheqs desde XLS del banco ──
+        with st.expander("📥 IMPORTAR eCheqs DESDE ARCHIVO XLS DEL BANCO", expanded=False):
+            st.markdown("""
+            <div style='background:#fff4e6;border-left:4px solid #f39c12;padding:10px 14px;border-radius:6px;font-size:13px;'>
+                📋 <b>Cómo exportar el archivo desde tu banco:</b><br>
+                Ingresá a Banca Electrónica → eCheqs → Cheques Diferidos Emitidos → Exportar XLS.<br>
+                El archivo debe tener las columnas: <b>Fecha | Fecha Acred | Nro Cheque | Concepto | Importe</b>
+            </div>
+            """, unsafe_allow_html=True)
+
+            archivo_xls = st.file_uploader("Seleccioná el archivo XLS del banco", type=["xls", "xlsx"], key="xls_echeq_uploader")
+
+            if archivo_xls is not None:
+                try:
+                    import struct
+                    from datetime import timedelta as _td
+
+                    raw = archivo_xls.read()
+
+                    def _excel_date(serial):
+                        try:
+                            return (date(1899, 12, 30) + _td(days=int(serial))).strftime('%Y-%m-%d')
+                        except:
+                            return str(serial)
+
+                    def _parse_xls_echeq(data):
+                        # Find BOF (0x0809) to locate BIFF stream
+                        start = 0
+                        for i in range(len(data) - 4):
+                            try:
+                                if struct.unpack_from('<H', data, i)[0] == 0x0809:
+                                    rlen = struct.unpack_from('<H', data, i+2)[0]
+                                    if 4 <= rlen <= 20:
+                                        start = i; break
+                            except: pass
+
+                        data = data[start:]
+                        sst = []
+                        cells = {}
+                        xf_formats = {}
+
+                        i = 0
+                        while i < len(data) - 4:
+                            try:
+                                rtype = struct.unpack_from('<H', data, i)[0]
+                                rlen  = struct.unpack_from('<H', data, i+2)[0]
+                            except: break
+                            if rlen > 8192 or i + 4 + rlen > len(data):
+                                i += 1; continue
+                            chunk = data[i+4:i+4+rlen]
+
+                            if rtype == 0x00FC and rlen >= 8:   # SST
+                                total = struct.unpack_from('<I', chunk, 4)[0]
+                                pos = 8
+                                for _ in range(total):
+                                    if pos + 3 > len(chunk): break
+                                    nchars = struct.unpack_from('<H', chunk, pos)[0]
+                                    flags = chunk[pos+2]; pos += 3
+                                    if flags & 0x04: pos += 2
+                                    if flags & 0x08: pos += 4
+                                    if flags & 0x01:
+                                        s = chunk[pos:pos+nchars*2].decode('utf-16-le', errors='replace'); pos += nchars*2
+                                    else:
+                                        s = chunk[pos:pos+nchars].decode('latin-1', errors='replace'); pos += nchars
+                                    sst.append(s)
+                            elif rtype == 0x00FD and rlen >= 10:  # LabelSST
+                                row = struct.unpack_from('<H', chunk, 0)[0]
+                                col = struct.unpack_from('<H', chunk, 2)[0]
+                                idx = struct.unpack_from('<I', chunk, 6)[0]
+                                cells[(row,col)] = ('sst', idx)
+                            elif rtype == 0x0203 and rlen >= 14:  # Number
+                                row = struct.unpack_from('<H', chunk, 0)[0]
+                                col = struct.unpack_from('<H', chunk, 2)[0]
+                                val = struct.unpack_from('<d', chunk, 6)[0]
+                                cells[(row,col)] = ('num', val)
+                            elif rtype == 0x027E and rlen >= 10:  # RK
+                                row = struct.unpack_from('<H', chunk, 0)[0]
+                                col = struct.unpack_from('<H', chunk, 2)[0]
+                                rk  = struct.unpack_from('<I', chunk, 6)[0]
+                                if rk & 2:
+                                    val = (rk >> 2) / (100.0 if (rk & 1) else 1.0)
+                                else:
+                                    packed = struct.pack('<Q', (rk & 0xFFFFFFFC) << 32)
+                                    val = struct.unpack('<d', packed)[0]
+                                    if rk & 1: val /= 100
+                                cells[(row,col)] = ('num', val)
+                            i += 4 + rlen
+
+                        # Resolve cells to values
+                        rows_out = []
+                        max_row = max((r for r,c in cells), default=0)
+                        for row in range(5, max_row+1):
+                            r = {}
+                            for col in range(5):
+                                cell = cells.get((row,col))
+                                if cell is None: r[col] = None
+                                elif cell[0] == 'sst': r[col] = sst[cell[1]] if cell[1] < len(sst) else None
+                                elif cell[0] == 'num':
+                                    val = cell[1]
+                                    if col in (0,1) and 40000 < val < 55000:
+                                        r[col] = _excel_date(val)
+                                    elif col == 2:
+                                        r[col] = str(int(val))
+                                    else:
+                                        r[col] = val
+                            if r.get(3) and r.get(4):
+                                rows_out.append(r)
+                        return rows_out
+
+                    filas = _parse_xls_echeq(raw)
+
+                    if not filas:
+                        st.error("❌ No se encontraron datos en el archivo. Verificá que el formato sea correcto.")
+                    else:
+                        # Extract beneficiary from "Orden de Pago : NOMBRE"
+                        def _benef(concepto):
+                            if concepto and ':' in str(concepto):
+                                return str(concepto).split(':', 1)[1].strip()
+                            return str(concepto) if concepto else '-'
+
+                        # Build preview dataframe
+                        df_preview = pd.DataFrame([{
+                            'Fecha Emisión':    f.get(0, '-'),
+                            'Fecha Vencimiento':f.get(1, '-'),
+                            'Nro Cheque':       f.get(2, '-'),
+                            'Beneficiario':     _benef(f.get(3)),
+                            'Importe':          f.get(4, 0),
+                        } for f in filas])
+
+                        st.markdown(f"##### 📋 Se encontraron **{len(df_preview)} eCheqs** para importar:")
+                        st.dataframe(df_preview, use_container_width=True, hide_index=True)
+
+                        # Check which ones already exist
+                        nros_existentes = set(st.session_state.cheques_emitidos['Nro Cheque'].astype(str).tolist())
+                        nuevos = [f for f in filas if str(f.get(2,'')) not in nros_existentes]
+                        duplicados = len(filas) - len(nuevos)
+
+                        if duplicados > 0:
+                            st.info(f"ℹ️ {duplicados} cheque(s) ya existen en el sistema y serán omitidos.")
+
+                        banco_import = st.text_input("Banco de los eCheqs (ej: BANCO GALICIA)", value="BANCO GALICIA", key="banco_import_xls")
+
+                        col_imp1, col_imp2 = st.columns(2)
+                        if col_imp1.button(f"✅ IMPORTAR {len(nuevos)} eCheqs NUEVOS", key="btn_importar_echeq", disabled=(len(nuevos)==0)):
+                            importados = 0
+                            for f in nuevos:
+                                benef_val = _benef(f.get(3))
+                                imp_val   = float(f.get(4) or 0)
+                                nro_val   = str(f.get(2, '-'))
+                                f_emis    = str(f.get(0, str(date.today())))
+                                f_venc    = str(f.get(1, str(date.today())))
+
+                                if imp_val <= 0: continue
+
+                                # 1) cheques_emitidos
+                                nueva_fila = pd.DataFrame([[
+                                    f_emis, nro_val, "ECHEQ", banco_import, benef_val,
+                                    imp_val, f_venc, "PENDIENTE", "-",
+                                    f"Importado desde XLS banco"
+                                ]], columns=COL_CHEQ_EMITIDOS)
+                                st.session_state.cheques_emitidos = pd.concat(
+                                    [st.session_state.cheques_emitidos, nueva_fila], ignore_index=True)
+
+                                # 2) tesorería
+                                mov = pd.DataFrame([[
+                                    f_emis, "CHEQUE EMITIDO", "CAJA GENERAL", "CHEQUE ECHEQ",
+                                    f"eCheq #{nro_val} a {benef_val}", benef_val, -imp_val, nro_val
+                                ]], columns=COL_TESORERIA)
+                                st.session_state.tesoreria = pd.concat(
+                                    [st.session_state.tesoreria, mov], ignore_index=True)
+                                importados += 1
+
+                            guardar_datos("cheques_emitidos", st.session_state.cheques_emitidos)
+                            guardar_datos("tesoreria", st.session_state.tesoreria)
+                            st.session_state.msg_cheq_emit = f"✅ Se importaron {importados} eCheqs correctamente."
+                            st.rerun()
+
+                        if col_imp2.button("❌ Cancelar", key="btn_cancelar_echeq"):
+                            st.rerun()
+
+                except Exception as e:
+                    st.error(f"❌ Error al leer el archivo: {e}")
+
         st.markdown("---")
 
         # Filtro por estado
