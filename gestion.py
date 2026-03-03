@@ -14,12 +14,16 @@ import calendar as cal_module
 # --- 1. CONFIGURACIÓN Y CONEXIÓN ---
 st.set_page_config(page_title="CHACAGEST - GESTIÓN TOTAL", page_icon="🚛", layout="wide")
 
-COL_CLIENTES    = ["Razón Social", "CUIT / CUIL / DNI *", "Email", "Teléfono", "Dirección Fiscal", "Localidad", "Provincia", "Condición IVA", "Condición de Venta"]
-COL_VIAJES      = ["Fecha Carga", "Cliente", "Fecha Viaje", "Origen", "Destino", "Patente / Móvil", "Importe", "Tipo Comp", "Nro Comp Asoc"]
-COL_PRESUPUESTOS= ["Fecha Emisión", "Cliente", "Vencimiento", "Detalle", "Tipo Móvil", "Importe"]
-COL_TESORERIA   = ["Fecha", "Tipo", "Caja/Banco", "Forma", "Concepto", "Cliente/Proveedor", "Monto", "Ref AFIP"]
-COL_PROVEEDORES = ["Razón Social", "CUIT/DNI", "Cuenta de Gastos", "Categoría IVA", "CBU", "Alias"]
-COL_COMPRAS     = ["Fecha", "Proveedor", "Punto Venta", "Tipo Factura", "Neto 21", "Neto 10.5", "Ret IVA", "Ret Ganancia", "Ret IIBB", "No Gravados", "Total"]
+COL_CLIENTES         = ["Razón Social", "CUIT / CUIL / DNI *", "Email", "Teléfono", "Dirección Fiscal", "Localidad", "Provincia", "Condición IVA", "Condición de Venta"]
+COL_VIAJES           = ["Fecha Carga", "Cliente", "Fecha Viaje", "Origen", "Destino", "Patente / Móvil", "Importe", "Tipo Comp", "Nro Comp Asoc"]
+COL_PRESUPUESTOS     = ["Fecha Emisión", "Cliente", "Vencimiento", "Detalle", "Tipo Móvil", "Importe"]
+COL_TESORERIA        = ["Fecha", "Tipo", "Caja/Banco", "Forma", "Concepto", "Cliente/Proveedor", "Monto", "Ref AFIP"]
+COL_PROVEEDORES      = ["Razón Social", "CUIT/DNI", "Cuenta de Gastos", "Categoría IVA", "CBU", "Alias"]
+COL_COMPRAS          = ["Fecha", "Proveedor", "Punto Venta", "Tipo Factura", "Neto 21", "Neto 10.5", "Ret IVA", "Ret Ganancia", "Ret IIBB", "No Gravados", "Total"]
+# Cheques emitidos por la empresa (pagos con cheque propio)
+COL_CHEQ_EMITIDOS    = ["Fecha Emisión", "Nro Cheque", "Tipo", "Banco", "Beneficiario", "Importe", "Fecha Vencimiento", "Estado", "Fecha Conciliación", "Observaciones"]
+# Cheques de terceros recibidos en cobranzas (cartera)
+COL_CHEQ_CARTERA     = ["Fecha Recepción", "Nro Cheque", "Tipo", "Banco Librador", "Librador", "Importe", "Fecha Vencimiento", "Estado", "Destino", "Fecha Aplicación", "Observaciones"]
 
 def conectar_google():
     nombre_planilla = "Base_Chacagest"
@@ -87,9 +91,25 @@ def cargar_datos():
         except:
             df_com = pd.DataFrame(columns=COL_COMPRAS)
 
-        return df_c, df_v, df_p, df_t, df_prov, df_com
+        try:
+            ws_ce    = sh.worksheet("cheques_emitidos")
+            datos_ce = ws_ce.get_all_records()
+            df_ce    = pd.DataFrame(datos_ce) if datos_ce else pd.DataFrame(columns=COL_CHEQ_EMITIDOS)
+            df_ce['Importe'] = pd.to_numeric(df_ce['Importe'], errors='coerce').fillna(0)
+        except:
+            df_ce = pd.DataFrame(columns=COL_CHEQ_EMITIDOS)
+
+        try:
+            ws_cc    = sh.worksheet("cheques_cartera")
+            datos_cc = ws_cc.get_all_records()
+            df_cc    = pd.DataFrame(datos_cc) if datos_cc else pd.DataFrame(columns=COL_CHEQ_CARTERA)
+            df_cc['Importe'] = pd.to_numeric(df_cc['Importe'], errors='coerce').fillna(0)
+        except:
+            df_cc = pd.DataFrame(columns=COL_CHEQ_CARTERA)
+
+        return df_c, df_v, df_p, df_t, df_prov, df_com, df_ce, df_cc
     except:
-        return None, None, None, None, None, None
+        return None, None, None, None, None, None, None, None
 
 def guardar_datos(nombre_hoja, df):
     try:
@@ -500,13 +520,15 @@ caja_propia = st.session_state.caja_propia
 
 # --- 3. INICIALIZACIÓN ---
 if 'clientes' not in st.session_state or 'viajes' not in st.session_state:
-    c, v, p, t, prov, com = cargar_datos()
-    st.session_state.clientes     = c    if c    is not None else pd.DataFrame(columns=COL_CLIENTES)
-    st.session_state.viajes       = v    if v    is not None else pd.DataFrame(columns=COL_VIAJES)
-    st.session_state.presupuestos = p    if p    is not None else pd.DataFrame(columns=COL_PRESUPUESTOS)
-    st.session_state.tesoreria    = t    if t    is not None else pd.DataFrame(columns=COL_TESORERIA)
-    st.session_state.proveedores  = prov if prov is not None else pd.DataFrame(columns=COL_PROVEEDORES)
-    st.session_state.compras      = com  if com  is not None else pd.DataFrame(columns=COL_COMPRAS)
+    c, v, p, t, prov, com, ce, cc = cargar_datos()
+    st.session_state.clientes          = c    if c    is not None else pd.DataFrame(columns=COL_CLIENTES)
+    st.session_state.viajes            = v    if v    is not None else pd.DataFrame(columns=COL_VIAJES)
+    st.session_state.presupuestos      = p    if p    is not None else pd.DataFrame(columns=COL_PRESUPUESTOS)
+    st.session_state.tesoreria         = t    if t    is not None else pd.DataFrame(columns=COL_TESORERIA)
+    st.session_state.proveedores       = prov if prov is not None else pd.DataFrame(columns=COL_PROVEEDORES)
+    st.session_state.compras           = com  if com  is not None else pd.DataFrame(columns=COL_COMPRAS)
+    st.session_state.cheques_emitidos  = ce   if ce   is not None else pd.DataFrame(columns=COL_CHEQ_EMITIDOS)
+    st.session_state.cheques_cartera   = cc   if cc   is not None else pd.DataFrame(columns=COL_CHEQ_CARTERA)
 
 # --- 4. DISEÑO ---
 st.markdown("""
@@ -539,11 +561,11 @@ with st.sidebar:
 
     # ── Menú principal: Admin ve todo, Operador no ve Dashboard ──
     if es_admin:
-        opciones_menu = ["CALENDARIO", "DASHBOARD", "VENTAS", "COMPRAS", "TESORERIA"]
-        iconos_menu   = ["calendar3", "bar-chart-line", "cart4", "bag-check", "safe"]
+        opciones_menu = ["CALENDARIO", "DASHBOARD", "VENTAS", "COMPRAS", "TESORERIA", "CHEQUES"]
+        iconos_menu   = ["calendar3", "bar-chart-line", "cart4", "bag-check", "safe", "bank2"]
     else:
-        opciones_menu = ["CALENDARIO", "VENTAS", "COMPRAS", "TESORERIA"]
-        iconos_menu   = ["calendar3", "cart4", "bag-check", "safe"]
+        opciones_menu = ["CALENDARIO", "VENTAS", "COMPRAS", "TESORERIA", "CHEQUES"]
+        iconos_menu   = ["calendar3", "cart4", "bag-check", "safe", "bank2"]
 
     menu_principal = option_menu(
         menu_title=None,
@@ -608,13 +630,15 @@ with st.sidebar:
     st.markdown("---")
     if st.button("🔄 Sincronizar"):
         with st.spinner("Sincronizando..."):
-            c, v, p, t, prov, com = cargar_datos()
-            st.session_state.clientes     = c    if c    is not None else pd.DataFrame(columns=COL_CLIENTES)
-            st.session_state.viajes       = v    if v    is not None else pd.DataFrame(columns=COL_VIAJES)
-            st.session_state.presupuestos = p    if p    is not None else pd.DataFrame(columns=COL_PRESUPUESTOS)
-            st.session_state.tesoreria    = t    if t    is not None else pd.DataFrame(columns=COL_TESORERIA)
-            st.session_state.proveedores  = prov if prov is not None else pd.DataFrame(columns=COL_PROVEEDORES)
-            st.session_state.compras      = com  if com  is not None else pd.DataFrame(columns=COL_COMPRAS)
+            c, v, p, t, prov, com, ce, cc = cargar_datos()
+            st.session_state.clientes         = c    if c    is not None else pd.DataFrame(columns=COL_CLIENTES)
+            st.session_state.viajes           = v    if v    is not None else pd.DataFrame(columns=COL_VIAJES)
+            st.session_state.presupuestos     = p    if p    is not None else pd.DataFrame(columns=COL_PRESUPUESTOS)
+            st.session_state.tesoreria        = t    if t    is not None else pd.DataFrame(columns=COL_TESORERIA)
+            st.session_state.proveedores      = prov if prov is not None else pd.DataFrame(columns=COL_PROVEEDORES)
+            st.session_state.compras          = com  if com  is not None else pd.DataFrame(columns=COL_COMPRAS)
+            st.session_state.cheques_emitidos = ce   if ce   is not None else pd.DataFrame(columns=COL_CHEQ_EMITIDOS)
+            st.session_state.cheques_cartera  = cc   if cc   is not None else pd.DataFrame(columns=COL_CHEQ_CARTERA)
             st.rerun()
 
     if st.button("🚪 Cerrar Sesión"):
