@@ -17,7 +17,7 @@ st.set_page_config(page_title="CHACAGEST - GESTIÓN TOTAL", page_icon="🚛", la
 COL_CLIENTES    = ["Razón Social", "CUIT / CUIL / DNI *", "Email", "Teléfono", "Dirección Fiscal", "Localidad", "Provincia", "Condición IVA", "Condición de Venta"]
 COL_VIAJES      = ["Fecha Carga", "Cliente", "Fecha Viaje", "Origen", "Destino", "Patente / Móvil", "Importe", "Tipo Comp", "Nro Comp Asoc"]
 COL_PRESUPUESTOS= ["Fecha Emisión", "Cliente", "Vencimiento", "Detalle", "Tipo Móvil", "Importe"]
-COL_TESORERIA   = ["Fecha", "Tipo", "Caja/Banco", "Concepto", "Cliente/Proveedor", "Monto", "Ref AFIP"]
+COL_TESORERIA   = ["Fecha", "Tipo", "Caja/Banco", "Forma", "Concepto", "Cliente/Proveedor", "Monto", "Ref AFIP"]
 COL_PROVEEDORES = ["Razón Social", "CUIT/DNI", "Cuenta de Gastos", "Categoría IVA", "CBU", "Alias"]
 COL_COMPRAS     = ["Fecha", "Proveedor", "Punto Venta", "Tipo Factura", "Neto 21", "Neto 10.5", "Ret IVA", "Ret Ganancia", "Ret IIBB", "No Gravados", "Total"]
 
@@ -62,6 +62,9 @@ def cargar_datos():
             datos_t = ws_t.get_all_records()
             df_t   = pd.DataFrame(datos_t) if datos_t else pd.DataFrame(columns=COL_TESORERIA)
             df_t['Monto'] = pd.to_numeric(df_t['Monto'], errors='coerce').fillna(0)
+            # Compatibilidad: si la hoja existente no tiene columna "Forma", la agrega vacía
+            if 'Forma' not in df_t.columns:
+                df_t.insert(3, 'Forma', '-')
         except:
             df_t = pd.DataFrame(columns=COL_TESORERIA)
 
@@ -924,8 +927,8 @@ elif sel == "TESORERIA":
             mon = st.number_input("Monto $", min_value=0.0)
             if st.form_submit_button("REGISTRAR INGRESO"):
                 if mon > 0:
-                    concepto_completo = f"{con} [{forma}]" if con else forma
-                    nt = pd.DataFrame([[f, "INGRESO VARIO", cj, concepto_completo, "Varios", mon, "-"]], columns=COL_TESORERIA)
+                    concepto_completo = con if con else "-"
+                    nt = pd.DataFrame([[f, "INGRESO VARIO", cj, forma, concepto_completo, "Varios", mon, "-"]], columns=COL_TESORERIA)
                     st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
                     guardar_datos("tesoreria", st.session_state.tesoreria)
                     st.session_state.msg_ingreso = f"✅ Ingreso de $ {mon:,.2f} ({forma}) registrado en {cj}."
@@ -949,8 +952,8 @@ elif sel == "TESORERIA":
             mon = st.number_input("Monto $", min_value=0.0)
             if st.form_submit_button("REGISTRAR EGRESO"):
                 if mon > 0:
-                    concepto_completo = f"{con} [{forma}]" if con else forma
-                    nt = pd.DataFrame([[f, "EGRESO VARIO", cj, concepto_completo, "Varios", -mon, "-"]], columns=COL_TESORERIA)
+                    concepto_completo = con if con else "-"
+                    nt = pd.DataFrame([[f, "EGRESO VARIO", cj, forma, concepto_completo, "Varios", -mon, "-"]], columns=COL_TESORERIA)
                     st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
                     guardar_datos("tesoreria", st.session_state.tesoreria)
                     st.session_state.msg_egreso = f"✅ Egreso de $ {mon:,.2f} ({forma}) registrado desde {cj}."
@@ -963,16 +966,16 @@ elif sel == "TESORERIA":
         with st.form("f_cob", clear_on_submit=True):
             c_sel = st.selectbox("Cliente", st.session_state.clientes['Razón Social'].unique() if not st.session_state.clientes.empty else [""])
             if es_admin:
-                cj    = st.selectbox("Forma de Cobro / Caja", opc_cajas + ["OTROS"])
-            else:
+                cj       = st.selectbox("Caja Destino", opc_cajas)
                 forma_cob = st.selectbox("Forma de Cobro", FORMAS_PAGO + ["OTROS"])
-                cj = caja_propia
+            else:
+                cj        = caja_propia
+                forma_cob = st.selectbox("Forma de Cobro", FORMAS_PAGO + ["OTROS"])
             mon   = st.number_input("Monto $", min_value=0.0)
             afip  = st.text_input("Comprobante Asociado (AFIP/Recibo)")
             if st.form_submit_button("GENERAR COBRANZA"):
                 if c_sel and mon > 0:
-                    caja_registro = cj if es_admin else f"{caja_propia} [{forma_cob}]"
-                    nt = pd.DataFrame([[date.today(), "COBRANZA", caja_registro, "Cobro Viaje", c_sel, mon, afip]], columns=COL_TESORERIA)
+                    nt = pd.DataFrame([[date.today(), "COBRANZA", cj, forma_cob, "Cobro Viaje", c_sel, mon, afip]], columns=COL_TESORERIA)
                     nv = pd.DataFrame([[date.today(), c_sel, date.today(), "PAGO", "TESORERIA", "-", -mon, "RECIBO", afip]], columns=COL_VIAJES)
                     st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
                     st.session_state.viajes    = pd.concat([st.session_state.viajes, nv], ignore_index=True)
@@ -980,7 +983,7 @@ elif sel == "TESORERIA":
                     guardar_datos("viajes", st.session_state.viajes)
                     st.session_state.html_recibo_ready = generar_html_recibo({
                         "Fecha": date.today(), "Cliente/Proveedor": c_sel,
-                        "Concepto": "Cobro de Viaje", "Caja/Banco": caja_registro,
+                        "Concepto": "Cobro de Viaje", "Caja/Banco": f"{cj} - {forma_cob}",
                         "Monto": mon, "Ref AFIP": afip
                     })
                     st.session_state.cli_ready = c_sel
@@ -995,12 +998,41 @@ elif sel == "TESORERIA":
     with tab_ver:
         # Admin puede elegir cualquier caja. Operador solo ve la suya.
         if es_admin:
-            cj_v   = st.selectbox("Seleccionar Caja", opc_cajas)
+            cj_v = st.selectbox("Seleccionar Caja", opc_cajas)
         else:
             cj_v = caja_propia
-            st.markdown(f"#### Movimientos de: {caja_propia}")
-        df_ver = st.session_state.tesoreria[st.session_state.tesoreria['Caja/Banco'].str.startswith(cj_v if cj_v else "")]
-        st.metric(f"Saldo en {cj_v}", f"$ {df_ver['Monto'].sum():,.2f}")
+            st.markdown(f"#### 🏦 {caja_propia}")
+
+        df_ver = st.session_state.tesoreria[st.session_state.tesoreria['Caja/Banco'] == cj_v].copy()
+
+        # ── Resumen desglosado por Forma ──
+        st.markdown("##### 📊 Saldo por Forma de Pago")
+
+        FORMAS_RESUMEN = ["EFECTIVO", "TRANSFERENCIA", "TARJETA DE CREDITO", "DÓLARES", "OTROS"]
+        ICONOS_FORMA   = {"EFECTIVO": "💵", "TRANSFERENCIA": "🏦", "TARJETA DE CREDITO": "💳", "DÓLARES": "💲", "OTROS": "📋"}
+
+        cols_formas = st.columns(len(FORMAS_RESUMEN))
+        total_caja  = df_ver['Monto'].sum()
+
+        for idx, forma_r in enumerate(FORMAS_RESUMEN):
+            # Buscar coincidencia parcial para tolerar variantes (ej: "DOLAR CAJA COTI" matchea "DÓLARES")
+            mask = df_ver['Forma'].fillna('-').str.upper().str.contains(forma_r.replace("DÓLARES", "DOLAR").replace("TARJETA DE CREDITO", "TARJETA"), na=False)
+            saldo_forma = df_ver[mask]['Monto'].sum()
+            icono = ICONOS_FORMA.get(forma_r, "💰")
+            color = "#2ecc71" if saldo_forma >= 0 else "#e74c3c"
+            cols_formas[idx].markdown(
+                f"<div style='background:#f8f9fa;border-radius:10px;padding:12px;text-align:center;border-left:4px solid {color};'>"
+                f"<div style='font-size:22px;'>{icono}</div>"
+                f"<div style='font-size:11px;color:#666;font-weight:bold;'>{forma_r}</div>"
+                f"<div style='font-size:16px;font-weight:bold;color:{color};'>$ {saldo_forma:,.2f}</div>"
+                f"</div>",
+                unsafe_allow_html=True
+            )
+
+        st.markdown("---")
+        st.metric(f"💰 SALDO TOTAL en {cj_v}", f"$ {total_caja:,.2f}")
+        st.markdown("---")
+        st.markdown("##### 📋 Detalle de Movimientos")
         st.dataframe(df_ver, use_container_width=True)
 
     # Traspasos y Orden de Pago: SOLO ADMIN
@@ -1015,8 +1047,8 @@ elif sel == "TESORERIA":
                 m = st.number_input("Monto a Traspasar", min_value=0.0)
                 if st.form_submit_button("EJECUTAR"):
                     if m > 0:
-                        tr1 = pd.DataFrame([[date.today(), "TRASPASO", o, f"Hacia {d}", "INTERNO", -m, "-"]], columns=COL_TESORERIA)
-                        tr2 = pd.DataFrame([[date.today(), "TRASPASO", d, f"Desde {o}", "INTERNO",  m, "-"]], columns=COL_TESORERIA)
+                        tr1 = pd.DataFrame([[date.today(), "TRASPASO", o, "INTERNO", f"Hacia {d}", "INTERNO", -m, "-"]], columns=COL_TESORERIA)
+                        tr2 = pd.DataFrame([[date.today(), "TRASPASO", d, "INTERNO", f"Desde {o}", "INTERNO",  m, "-"]], columns=COL_TESORERIA)
                         st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, tr1, tr2], ignore_index=True)
                         guardar_datos("tesoreria", st.session_state.tesoreria)
                         st.session_state.msg_traspaso = f"✅ Traspaso de $ {m:,.2f} de {o} hacia {d} ejecutado."
@@ -1035,7 +1067,7 @@ elif sel == "TESORERIA":
                 afip_p = st.text_input("Referencia AFIP / Pago")
                 if st.form_submit_button("GENERAR ORDEN DE PAGO"):
                     if p_sel and mon_p > 0:
-                        nt = pd.DataFrame([[date.today(), "PAGO PROV", cj_p, "Orden de Pago", p_sel, -mon_p, afip_p]], columns=COL_TESORERIA)
+                        nt = pd.DataFrame([[date.today(), "PAGO PROV", cj_p, "TRANSFERENCIA", "Orden de Pago", p_sel, -mon_p, afip_p]], columns=COL_TESORERIA)
                         nc = pd.DataFrame([[date.today(), p_sel, "-", "ORDEN PAGO", 0, 0, 0, 0, 0, 0, -mon_p]], columns=COL_COMPRAS)
                         st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
                         st.session_state.compras   = pd.concat([st.session_state.compras, nc], ignore_index=True)
