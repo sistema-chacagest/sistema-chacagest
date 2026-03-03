@@ -323,8 +323,8 @@ with st.sidebar:
     except: pass
     st.markdown("---")
 
-    opciones_menu = ["DASHBOARD", "CALENDARIO", "VENTAS", "COMPRAS", "TESORERIA"]
-    iconos_menu   = ["bar-chart-line", "calendar3", "cart4", "bag-check", "safe"]
+    opciones_menu = ["CALENDARIO", "DASHBOARD", "VENTAS", "COMPRAS", "TESORERIA"]
+    iconos_menu   = ["calendar3", "bar-chart-line", "cart4", "bag-check", "safe"]
 
     menu_principal = option_menu(
         menu_title=None,
@@ -339,38 +339,80 @@ with st.sidebar:
         }
     )
 
-    sel_sub = None
+    # ── Inicializar sel_sub en session_state si no existe ──
+    if "sel_sub" not in st.session_state:
+        st.session_state.sel_sub = None
+
+    sel_sub = st.session_state.sel_sub
+
+    # ── CSS para botones del submenú ──
+    st.markdown("""
+        <style>
+        div[data-testid="stSidebar"] .submenu-btn > button {
+            background: white !important;
+            color: #333 !important;
+            border: 1px solid #ddd !important;
+            border-radius: 6px !important;
+            text-align: left !important;
+            font-size: 13px !important;
+            font-weight: normal !important;
+            padding: 6px 10px !important;
+            margin-bottom: 3px !important;
+            width: 100% !important;
+        }
+        div[data-testid="stSidebar"] .submenu-btn-active > button {
+            background: linear-gradient(to right, #f39c12, #d35400) !important;
+            color: white !important;
+            border: none !important;
+            border-radius: 6px !important;
+            text-align: left !important;
+            font-size: 13px !important;
+            font-weight: bold !important;
+            padding: 6px 10px !important;
+            margin-bottom: 3px !important;
+            width: 100% !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
     if menu_principal == "VENTAS":
-        st.markdown("<div style='margin-left: 20px; border-left: 2px solid #f39c12; padding-left: 10px;'>", unsafe_allow_html=True)
-        sel_sub = option_menu(
-            menu_title=None,
-            options=["CLIENTES", "CARGA VIAJE", "PRESUPUESTOS", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"],
-            icons=["people", "truck", "file-earmark-spreadsheet", "person-vcard", "globe", "file-text"],
-            default_index=0,
-            key="menu_s",
-            styles={
-                "container": {"background-color": "transparent", "padding": "0px"},
-                "nav-link": {"font-size": "13px", "text-align": "left", "margin": "2px"},
-                "nav-link-selected": {"background-color": "#f39c12", "color": "white"},
-            }
-        )
-        st.markdown("</div>", unsafe_allow_html=True)
+        with st.expander("📂 VENTAS — Submenú", expanded=True):
+            items_ventas = [
+                ("👥 Clientes",           "CLIENTES"),
+                ("🚛 Carga de Viaje",     "CARGA VIAJE"),
+                ("📝 Presupuestos",       "PRESUPUESTOS"),
+                ("📑 Cta Cte Individual", "CTA CTE INDIVIDUAL"),
+                ("🌎 Cta Cte General",    "CTA CTE GENERAL"),
+                ("📜 Comprobantes",       "COMPROBANTES"),
+            ]
+            for label, key in items_ventas:
+                css_class = "submenu-btn-active" if sel_sub == key else "submenu-btn"
+                st.markdown(f'<div class="{css_class}">', unsafe_allow_html=True)
+                if st.button(label, key=f"sb_{key}", use_container_width=True):
+                    st.session_state.sel_sub = key
+                    sel_sub = key
+                st.markdown('</div>', unsafe_allow_html=True)
 
     elif menu_principal == "COMPRAS":
-        st.markdown("<div style='margin-left: 20px; border-left: 2px solid #f39c12; padding-left: 10px;'>", unsafe_allow_html=True)
-        sel_sub = option_menu(
-            menu_title=None,
-            options=["CARGA PROVEEDOR", "CARGA GASTOS", "CTA CTE PROVEEDOR", "CTA CTE GENERAL PROV", "HISTORICO COMPRAS"],
-            icons=["person-plus", "receipt", "person-vcard", "globe", "clock-history"],
-            default_index=0,
-            key="menu_c",
-            styles={
-                "container": {"background-color": "transparent", "padding": "0px"},
-                "nav-link": {"font-size": "13px", "text-align": "left", "margin": "2px"},
-                "nav-link-selected": {"background-color": "#f39c12", "color": "white"},
-            }
-        )
-        st.markdown("</div>", unsafe_allow_html=True)
+        with st.expander("📂 COMPRAS — Submenú", expanded=True):
+            items_compras = [
+                ("👤 Carga Proveedor",      "CARGA PROVEEDOR"),
+                ("💸 Carga de Gastos",      "CARGA GASTOS"),
+                ("📊 Cta Cte Proveedor",    "CTA CTE PROVEEDOR"),
+                ("🌎 Cta Cte Gral Proveed.", "CTA CTE GENERAL PROV"),
+                ("🕐 Histórico Compras",    "HISTORICO COMPRAS"),
+            ]
+            for label, key in items_compras:
+                css_class = "submenu-btn-active" if sel_sub == key else "submenu-btn"
+                st.markdown(f'<div class="{css_class}">', unsafe_allow_html=True)
+                if st.button(label, key=f"sb_{key}", use_container_width=True):
+                    st.session_state.sel_sub = key
+                    sel_sub = key
+                st.markdown('</div>', unsafe_allow_html=True)
+    else:
+        # Al cambiar a otro menú principal limpiamos el submenú guardado
+        st.session_state.sel_sub = None
+        sel_sub = None
 
     st.markdown("---")
     if st.button("🔄 Sincronizar"):
@@ -390,7 +432,7 @@ with st.sidebar:
 
 # ── Definición de sel ── SIEMPRE después del sidebar
 if menu_principal in ["VENTAS", "COMPRAS"]:
-    sel = sel_sub
+    sel = sel_sub if sel_sub else None
 else:
     sel = menu_principal
 
