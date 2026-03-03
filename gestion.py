@@ -1657,3 +1657,342 @@ elif sel == "HISTORICO COMPRAS":
                 st.session_state.compras = st.session_state.compras.drop(i)
                 guardar_datos("compras", st.session_state.compras); st.rerun()
             st.divider()
+
+# =============================================================
+# CHEQUES
+# =============================================================
+elif sel == "CHEQUES":
+    st.header("🏦 Gestión de Cheques")
+
+    hoy = date.today()
+
+    # ── Helper: badge de estado con color ──
+    def badge_estado(estado):
+        colores = {
+            "PENDIENTE":    ("#fff3cd", "#856404", "⏳"),
+            "CONCILIADO":   ("#d1e7dd", "#0f5132", "✅"),
+            "RECHAZADO":    ("#f8d7da", "#842029", "❌"),
+            "EN CARTERA":   ("#cff4fc", "#055160", "📂"),
+            "DEPOSITADO":   ("#d1e7dd", "#0f5132", "🏦"),
+            "APLICADO PAGO":("#e2d9f3", "#4a235a", "💸"),
+            "VENCIDO":      ("#f8d7da", "#842029", "⚠️"),
+        }
+        bg, fg, ico = colores.get(estado, ("#f0f2f6","#333","•"))
+        return f"<span style='background:{bg};color:{fg};padding:3px 10px;border-radius:12px;font-size:12px;font-weight:bold;'>{ico} {estado}</span>"
+
+    # ── Helper: días para vencer ──
+    def dias_vencer(fecha_str):
+        try:
+            fv = pd.to_datetime(fecha_str).date()
+            return (fv - hoy).days
+        except:
+            return None
+
+    # ── Alertas globales: cheques próximos a vencer (≤7 días) ──
+    alertas = []
+    if not st.session_state.cheques_emitidos.empty:
+        for _, r in st.session_state.cheques_emitidos[st.session_state.cheques_emitidos['Estado'] == 'PENDIENTE'].iterrows():
+            d = dias_vencer(r['Fecha Vencimiento'])
+            if d is not None and 0 <= d <= 7:
+                alertas.append(f"⚠️ **Cheque emitido #{r['Nro Cheque']}** a {r['Beneficiario']} vence en **{d} día(s)** — $ {float(r['Importe']):,.2f}")
+    if not st.session_state.cheques_cartera.empty:
+        for _, r in st.session_state.cheques_cartera[st.session_state.cheques_cartera['Estado'] == 'EN CARTERA'].iterrows():
+            d = dias_vencer(r['Fecha Vencimiento'])
+            if d is not None and 0 <= d <= 7:
+                alertas.append(f"📂 **Cheque en cartera #{r['Nro Cheque']}** de {r['Librador']} vence en **{d} día(s)** — $ {float(r['Importe']):,.2f}")
+            if d is not None and d < 0:
+                alertas.append(f"🔴 **Cheque VENCIDO #{r['Nro Cheque']}** de {r['Librador']} venció hace **{abs(d)} día(s)** — $ {float(r['Importe']):,.2f}")
+
+    if alertas:
+        with st.expander(f"🚨 {len(alertas)} alerta(s) de vencimiento", expanded=True):
+            for a in alertas:
+                st.warning(a)
+
+    tab_emit, tab_cart, tab_venc = st.tabs(["📤 CHEQUES EMITIDOS", "📂 CHEQUES EN CARTERA", "📅 PRÓXIMOS VENCIMIENTOS"])
+
+    # ══════════════════════════════════════════════════════
+    # TAB 1 — CHEQUES EMITIDOS
+    # ══════════════════════════════════════════════════════
+    with tab_emit:
+        if st.session_state.get("msg_cheq_emit"):
+            st.success(st.session_state.msg_cheq_emit)
+            st.session_state.msg_cheq_emit = None
+
+        with st.expander("➕ REGISTRAR NUEVO CHEQUE EMITIDO", expanded=False):
+            with st.form("f_cheq_emit", clear_on_submit=True):
+                ce1, ce2, ce3 = st.columns(3)
+                nro_ch   = ce1.text_input("Nro de Cheque")
+                tipo_ch  = ce2.selectbox("Tipo", ["FÍSICO", "ECHEQ"])
+                banco_ch = ce3.text_input("Banco Emisor")
+                ce4, ce5 = st.columns(2)
+                benef    = ce4.text_input("Beneficiario (Proveedor / Persona)")
+                imp_ch   = ce5.number_input("Importe $", min_value=0.0, step=0.01)
+                ce6, ce7 = st.columns(2)
+                f_emis   = ce6.date_input("Fecha de Emisión", value=hoy)
+                f_venc   = ce7.date_input("Fecha de Vencimiento", value=hoy + timedelta(days=30))
+                obs_ch   = st.text_input("Observaciones (opcional)")
+                if st.form_submit_button("✅ REGISTRAR CHEQUE"):
+                    if nro_ch and benef and imp_ch > 0:
+                        nueva_fila = pd.DataFrame([[
+                            str(f_emis), nro_ch, tipo_ch, banco_ch, benef,
+                            imp_ch, str(f_venc), "PENDIENTE", "-", obs_ch
+                        ]], columns=COL_CHEQ_EMITIDOS)
+                        st.session_state.cheques_emitidos = pd.concat([st.session_state.cheques_emitidos, nueva_fila], ignore_index=True)
+                        guardar_datos("cheques_emitidos", st.session_state.cheques_emitidos)
+                        # Registrar egreso en tesorería
+                        mov = pd.DataFrame([[
+                            str(f_emis), "CHEQUE EMITIDO", "CAJA GENERAL", f"CHEQUE {tipo_ch}",
+                            f"Cheque #{nro_ch} a {benef}", benef, -imp_ch, nro_ch
+                        ]], columns=COL_TESORERIA)
+                        st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, mov], ignore_index=True)
+                        guardar_datos("tesoreria", st.session_state.tesoreria)
+                        st.session_state.msg_cheq_emit = f"✅ Cheque #{nro_ch} emitido a {benef} por $ {imp_ch:,.2f} registrado."
+                        st.rerun()
+                    else:
+                        st.warning("Completá Nro de Cheque, Beneficiario e Importe.")
+
+        st.markdown("---")
+
+        # Filtro por estado
+        filtro_emit = st.radio("Mostrar", ["PENDIENTES", "CONCILIADOS", "TODOS"], horizontal=True, key="filtro_emit")
+        df_emit = st.session_state.cheques_emitidos.copy()
+        if filtro_emit == "PENDIENTES":
+            df_emit = df_emit[df_emit['Estado'] == 'PENDIENTE']
+        elif filtro_emit == "CONCILIADOS":
+            df_emit = df_emit[df_emit['Estado'] == 'CONCILIADO']
+
+        if df_emit.empty:
+            st.info("No hay cheques en esta categoría.")
+        else:
+            for i, row in df_emit.iterrows():
+                d_venc = dias_vencer(row['Fecha Vencimiento'])
+                alerta_color = ""
+                if row['Estado'] == 'PENDIENTE' and d_venc is not None:
+                    if d_venc < 0:   alerta_color = "border-left:4px solid #e74c3c;"
+                    elif d_venc <= 7: alerta_color = "border-left:4px solid #f39c12;"
+                    else:             alerta_color = "border-left:4px solid #2ecc71;"
+
+                with st.container():
+                    col_inf, col_acc = st.columns([0.82, 0.18])
+                    col_inf.markdown(
+                        f"<div style='background:#f8f9fa;border-radius:8px;padding:12px 16px;{alerta_color}'>"
+                        f"<b>#{row['Nro Cheque']}</b> — {row['Tipo']} — {row['Banco']} &nbsp;|&nbsp; "
+                        f"Beneficiario: <b>{row['Beneficiario']}</b><br>"
+                        f"Emisión: {row['Fecha Emisión']} &nbsp;·&nbsp; Vencimiento: <b>{row['Fecha Vencimiento']}</b>"
+                        f"{'&nbsp;·&nbsp; <b style=color:#e74c3c>VENCIDO</b>' if d_venc is not None and d_venc < 0 else (f'&nbsp;·&nbsp; <b style=color:#f39c12>{d_venc}d</b>' if d_venc is not None and d_venc<=7 else '')}"
+                        f"&nbsp;&nbsp; {badge_estado(row['Estado'])}<br>"
+                        f"<b style='font-size:17px;color:#5e2d61;'>$ {float(row['Importe']):,.2f}</b>"
+                        f"{'&nbsp;&nbsp;<small>' + str(row['Observaciones']) + '</small>' if str(row['Observaciones']) not in ['-',''] else ''}"
+                        f"</div>", unsafe_allow_html=True
+                    )
+                    if row['Estado'] == 'PENDIENTE':
+                        if col_acc.button("✅ Conciliar", key=f"conc_{i}"):
+                            st.session_state.cheques_emitidos.loc[i, 'Estado'] = 'CONCILIADO'
+                            st.session_state.cheques_emitidos.loc[i, 'Fecha Conciliación'] = str(hoy)
+                            guardar_datos("cheques_emitidos", st.session_state.cheques_emitidos)
+                            st.session_state.msg_cheq_emit = f"✅ Cheque #{row['Nro Cheque']} conciliado."
+                            st.rerun()
+                        if col_acc.button("❌ Rechazar", key=f"rech_{i}"):
+                            st.session_state.cheques_emitidos.loc[i, 'Estado'] = 'RECHAZADO'
+                            guardar_datos("cheques_emitidos", st.session_state.cheques_emitidos)
+                            st.rerun()
+                    st.divider()
+
+    # ══════════════════════════════════════════════════════
+    # TAB 2 — CHEQUES EN CARTERA (de terceros)
+    # ══════════════════════════════════════════════════════
+    with tab_cart:
+        if st.session_state.get("msg_cheq_cart"):
+            st.success(st.session_state.msg_cheq_cart)
+            st.session_state.msg_cheq_cart = None
+
+        with st.expander("➕ INGRESAR CHEQUE DE TERCERO A CARTERA", expanded=False):
+            with st.form("f_cheq_cart", clear_on_submit=True):
+                cc1, cc2, cc3 = st.columns(3)
+                nro_cc   = cc1.text_input("Nro de Cheque")
+                tipo_cc  = cc2.selectbox("Tipo", ["FÍSICO", "ECHEQ"])
+                banco_cc = cc3.text_input("Banco Librador")
+                cc4, cc5 = st.columns(2)
+                librador = cc4.text_input("Librador (quien entregó el cheque)")
+                imp_cc   = cc5.number_input("Importe $", min_value=0.0, step=0.01)
+                cc6, cc7 = st.columns(2)
+                f_rec    = cc6.date_input("Fecha de Recepción", value=hoy)
+                f_venc_c = cc7.date_input("Fecha de Vencimiento", value=hoy + timedelta(days=30))
+                obs_cc   = st.text_input("Observaciones (opcional)")
+                if st.form_submit_button("✅ AGREGAR A CARTERA"):
+                    if nro_cc and librador and imp_cc > 0:
+                        nueva_cc = pd.DataFrame([[
+                            str(f_rec), nro_cc, tipo_cc, banco_cc, librador,
+                            imp_cc, str(f_venc_c), "EN CARTERA", "-", "-", obs_cc
+                        ]], columns=COL_CHEQ_CARTERA)
+                        st.session_state.cheques_cartera = pd.concat([st.session_state.cheques_cartera, nueva_cc], ignore_index=True)
+                        guardar_datos("cheques_cartera", st.session_state.cheques_cartera)
+                        st.session_state.msg_cheq_cart = f"✅ Cheque #{nro_cc} de {librador} ingresado a cartera por $ {imp_cc:,.2f}."
+                        st.rerun()
+                    else:
+                        st.warning("Completá Nro de Cheque, Librador e Importe.")
+
+        st.markdown("---")
+
+        filtro_cart = st.radio("Mostrar", ["EN CARTERA", "APLICADOS/DEPOSITADOS", "TODOS"], horizontal=True, key="filtro_cart")
+        df_cart = st.session_state.cheques_cartera.copy()
+        if filtro_cart == "EN CARTERA":
+            df_cart = df_cart[df_cart['Estado'] == 'EN CARTERA']
+        elif filtro_cart == "APLICADOS/DEPOSITADOS":
+            df_cart = df_cart[df_cart['Estado'].isin(['DEPOSITADO', 'APLICADO PAGO'])]
+
+        if df_cart.empty:
+            st.info("No hay cheques en esta categoría.")
+        else:
+            for i, row in df_cart.iterrows():
+                d_venc_c = dias_vencer(row['Fecha Vencimiento'])
+                alerta_c = ""
+                if row['Estado'] == 'EN CARTERA' and d_venc_c is not None:
+                    if d_venc_c < 0:    alerta_c = "border-left:4px solid #e74c3c;"
+                    elif d_venc_c <= 7: alerta_c = "border-left:4px solid #f39c12;"
+                    else:               alerta_c = "border-left:4px solid #2ecc71;"
+
+                with st.container():
+                    col_ci, col_ca = st.columns([0.75, 0.25])
+                    col_ci.markdown(
+                        f"<div style='background:#f8f9fa;border-radius:8px;padding:12px 16px;{alerta_c}'>"
+                        f"<b>#{row['Nro Cheque']}</b> — {row['Tipo']} — {row['Banco Librador']} &nbsp;|&nbsp; "
+                        f"Librador: <b>{row['Librador']}</b><br>"
+                        f"Recibido: {row['Fecha Recepción']} &nbsp;·&nbsp; Vencimiento: <b>{row['Fecha Vencimiento']}</b>"
+                        f"{'&nbsp;·&nbsp; <b style=color:#e74c3c>VENCIDO</b>' if d_venc_c is not None and d_venc_c < 0 else (f'&nbsp;·&nbsp; <b style=color:#f39c12>{d_venc_c}d para vencer</b>' if d_venc_c is not None and d_venc_c<=7 else '')}"
+                        f"&nbsp;&nbsp; {badge_estado(row['Estado'])}<br>"
+                        f"<b style='font-size:17px;color:#5e2d61;'>$ {float(row['Importe']):,.2f}</b>"
+                        f"{'&nbsp;&nbsp; → ' + str(row['Destino']) if str(row['Destino']) not in ['-',''] else ''}"
+                        f"</div>", unsafe_allow_html=True
+                    )
+                    if row['Estado'] == 'EN CARTERA':
+                        # Depositar en banco
+                        if col_ca.button("🏦 Depositar", key=f"dep_{i}"):
+                            st.session_state[f"accion_cart_{i}"] = "depositar"
+                        # Aplicar como pago a proveedor
+                        if col_ca.button("💸 Pagar c/cheque", key=f"pag_{i}"):
+                            st.session_state[f"accion_cart_{i}"] = "pagar"
+
+                        accion = st.session_state.get(f"accion_cart_{i}")
+                        if accion == "depositar":
+                            with st.form(f"f_dep_{i}"):
+                                banco_dep = st.selectbox("Banco donde depositar", ["BANCO GALICIA", "BANCO PROVINCIA", "BANCO SUPERVIELLE", "OTRO"])
+                                if st.form_submit_button("✅ CONFIRMAR DEPÓSITO"):
+                                    st.session_state.cheques_cartera.loc[i, 'Estado']          = 'DEPOSITADO'
+                                    st.session_state.cheques_cartera.loc[i, 'Destino']         = banco_dep
+                                    st.session_state.cheques_cartera.loc[i, 'Fecha Aplicación']= str(hoy)
+                                    guardar_datos("cheques_cartera", st.session_state.cheques_cartera)
+                                    # Ingreso en tesorería del banco
+                                    mov_dep = pd.DataFrame([[
+                                        str(hoy), "DEPÓSITO CHEQUE", banco_dep, "CHEQUE TERCERO",
+                                        f"Depósito cheque #{row['Nro Cheque']} de {row['Librador']}",
+                                        row['Librador'], float(row['Importe']), row['Nro Cheque']
+                                    ]], columns=COL_TESORERIA)
+                                    st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, mov_dep], ignore_index=True)
+                                    guardar_datos("tesoreria", st.session_state.tesoreria)
+                                    st.session_state[f"accion_cart_{i}"] = None
+                                    st.session_state.msg_cheq_cart = f"✅ Cheque #{row['Nro Cheque']} depositado en {banco_dep}."
+                                    st.rerun()
+                                if st.form_submit_button("❌ Cancelar"):
+                                    st.session_state[f"accion_cart_{i}"] = None; st.rerun()
+
+                        elif accion == "pagar":
+                            with st.form(f"f_pag_{i}"):
+                                prov_pag = st.selectbox("Proveedor a pagar", st.session_state.proveedores['Razón Social'].unique() if not st.session_state.proveedores.empty else [""])
+                                if st.form_submit_button("✅ CONFIRMAR PAGO"):
+                                    st.session_state.cheques_cartera.loc[i, 'Estado']          = 'APLICADO PAGO'
+                                    st.session_state.cheques_cartera.loc[i, 'Destino']         = prov_pag
+                                    st.session_state.cheques_cartera.loc[i, 'Fecha Aplicación']= str(hoy)
+                                    guardar_datos("cheques_cartera", st.session_state.cheques_cartera)
+                                    # Egreso en tesorería
+                                    mov_pag = pd.DataFrame([[
+                                        str(hoy), "PAGO CHEQUE TERCERO", "CARTERA", "CHEQUE TERCERO",
+                                        f"Pago a {prov_pag} con cheque #{row['Nro Cheque']} de {row['Librador']}",
+                                        prov_pag, -float(row['Importe']), row['Nro Cheque']
+                                    ]], columns=COL_TESORERIA)
+                                    st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, mov_pag], ignore_index=True)
+                                    guardar_datos("tesoreria", st.session_state.tesoreria)
+                                    st.session_state[f"accion_cart_{i}"] = None
+                                    st.session_state.msg_cheq_cart = f"✅ Cheque #{row['Nro Cheque']} aplicado como pago a {prov_pag}."
+                                    st.rerun()
+                                if st.form_submit_button("❌ Cancelar"):
+                                    st.session_state[f"accion_cart_{i}"] = None; st.rerun()
+                    st.divider()
+
+    # ══════════════════════════════════════════════════════
+    # TAB 3 — PRÓXIMOS VENCIMIENTOS (ambos tipos)
+    # ══════════════════════════════════════════════════════
+    with tab_venc:
+        st.markdown("##### Cheques con vencimiento en los próximos 30 días")
+        dias_filtro = st.slider("Días hacia adelante", 7, 60, 30, key="dias_venc_slider")
+
+        filas_venc = []
+
+        if not st.session_state.cheques_emitidos.empty:
+            for _, r in st.session_state.cheques_emitidos[st.session_state.cheques_emitidos['Estado'] == 'PENDIENTE'].iterrows():
+                d = dias_vencer(r['Fecha Vencimiento'])
+                if d is not None and d <= dias_filtro:
+                    filas_venc.append({
+                        "Tipo": "📤 EMITIDO",
+                        "Nro Cheque": r['Nro Cheque'],
+                        "Modalidad": r['Tipo'],
+                        "Banco": r['Banco'],
+                        "Contraparte": r['Beneficiario'],
+                        "Importe": float(r['Importe']),
+                        "Vencimiento": r['Fecha Vencimiento'],
+                        "Días": d,
+                        "Estado": r['Estado']
+                    })
+
+        if not st.session_state.cheques_cartera.empty:
+            for _, r in st.session_state.cheques_cartera[st.session_state.cheques_cartera['Estado'] == 'EN CARTERA'].iterrows():
+                d = dias_vencer(r['Fecha Vencimiento'])
+                if d is not None and d <= dias_filtro:
+                    filas_venc.append({
+                        "Tipo": "📂 CARTERA",
+                        "Nro Cheque": r['Nro Cheque'],
+                        "Modalidad": r['Tipo'],
+                        "Banco": r['Banco Librador'],
+                        "Contraparte": r['Librador'],
+                        "Importe": float(r['Importe']),
+                        "Vencimiento": r['Fecha Vencimiento'],
+                        "Días": d,
+                        "Estado": r['Estado']
+                    })
+
+        if filas_venc:
+            df_venc = pd.DataFrame(filas_venc).sort_values("Días")
+            total_emit_pend = df_venc[df_venc['Tipo'] == '📤 EMITIDO']['Importe'].sum()
+            total_cart_pend = df_venc[df_venc['Tipo'] == '📂 CARTERA']['Importe'].sum()
+
+            kv1, kv2, kv3 = st.columns(3)
+            kv1.metric("Total cheques", len(df_venc))
+            kv2.metric("📤 A pagar (emitidos)", f"$ {total_emit_pend:,.2f}")
+            kv3.metric("📂 A cobrar/depositar", f"$ {total_cart_pend:,.2f}")
+            st.markdown("---")
+
+            for _, r in df_venc.iterrows():
+                if r['Días'] < 0:
+                    color_d = "#e74c3c"; label_d = f"VENCIDO hace {abs(int(r['Días']))}d"
+                elif r['Días'] == 0:
+                    color_d = "#e74c3c"; label_d = "VENCE HOY"
+                elif r['Días'] <= 3:
+                    color_d = "#e74c3c"; label_d = f"Vence en {int(r['Días'])}d"
+                elif r['Días'] <= 7:
+                    color_d = "#f39c12"; label_d = f"Vence en {int(r['Días'])}d"
+                else:
+                    color_d = "#2ecc71"; label_d = f"Vence en {int(r['Días'])}d"
+
+                st.markdown(
+                    f"<div style='background:#f8f9fa;border-radius:8px;padding:12px 16px;margin-bottom:8px;"
+                    f"border-left:5px solid {color_d};display:flex;justify-content:space-between;align-items:center;'>"
+                    f"<div>{r['Tipo']} &nbsp; <b>#{r['Nro Cheque']}</b> &nbsp;·&nbsp; {r['Modalidad']} &nbsp;·&nbsp; {r['Banco']}<br>"
+                    f"Contraparte: <b>{r['Contraparte']}</b> &nbsp;·&nbsp; Vence: <b>{r['Vencimiento']}</b></div>"
+                    f"<div style='text-align:right;'>"
+                    f"<div style='font-size:18px;font-weight:bold;color:#5e2d61;'>$ {r['Importe']:,.2f}</div>"
+                    f"<div style='font-size:13px;font-weight:bold;color:{color_d};'>{label_d}</div>"
+                    f"</div></div>",
+                    unsafe_allow_html=True
+                )
+        else:
+            st.success(f"✅ No hay cheques con vencimiento en los próximos {dias_filtro} días.")
