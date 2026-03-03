@@ -1936,154 +1936,218 @@ elif sel == "CHEQUES":
 
             if archivo_xls is not None:
                 try:
-                    import struct
+                    import io, struct
                     from datetime import timedelta as _td
 
-                    raw = archivo_xls.read()
-
-                    def _excel_date(serial):
+                    # ── Helpers ────────────────────────────────────────────
+                    def _fmt_fecha(v):
+                        """Convierte serial Excel o string a 'YYYY-MM-DD'."""
+                        if v is None or str(v).strip() in ('', '-', 'None'):
+                            return '-'
                         try:
-                            return (date(1899, 12, 30) + _td(days=int(serial))).strftime('%Y-%m-%d')
+                            f = float(str(v).replace(',', '.'))
+                            if 30000 < f < 60000:
+                                return (date(1899, 12, 30) + _td(days=int(f))).strftime('%Y-%m-%d')
                         except:
-                            return str(serial)
-
-                    def _parse_xls_echeq(data):
-                        # Find BOF (0x0809) to locate BIFF stream
-                        start = 0
-                        for i in range(len(data) - 4):
+                            pass
+                        # ya es string con formato reconocible
+                        s = str(v).strip()
+                        for fmt in ('%d/%m/%Y', '%Y-%m-%d', '%d-%m-%Y', '%m/%d/%Y'):
                             try:
-                                if struct.unpack_from('<H', data, i)[0] == 0x0809:
-                                    rlen = struct.unpack_from('<H', data, i+2)[0]
-                                    if 4 <= rlen <= 20:
-                                        start = i; break
-                            except: pass
+                                from datetime import datetime as _dt
+                                return _dt.strptime(s, fmt).strftime('%Y-%m-%d')
+                            except:
+                                pass
+                        return s
 
-                        data = data[start:]
-                        sst = []
-                        cells = {}
-                        xf_formats = {}
+                    def _benef(concepto):
+                        if concepto and ':' in str(concepto):
+                            return str(concepto).split(':', 1)[1].strip()
+                        return str(concepto).strip() if concepto else '-'
 
-                        i = 0
-                        while i < len(data) - 4:
-                            try:
-                                rtype = struct.unpack_from('<H', data, i)[0]
-                                rlen  = struct.unpack_from('<H', data, i+2)[0]
-                            except: break
-                            if rlen > 8192 or i + 4 + rlen > len(data):
-                                i += 1; continue
-                            chunk = data[i+4:i+4+rlen]
+                    # ── Leer el archivo con openpyxl (xlsx) o parser BIFF (xls) ──
+                    nombre = archivo_xls.name.lower()
+                    raw    = archivo_xls.read()
+                    filas_raw = []   # lista de dicts con claves = nombre columna (lower)
 
-                            if rtype == 0x00FC and rlen >= 8:   # SST
-                                total = struct.unpack_from('<I', chunk, 4)[0]
-                                pos = 8
-                                for _ in range(total):
-                                    if pos + 3 > len(chunk): break
-                                    nchars = struct.unpack_from('<H', chunk, pos)[0]
-                                    flags = chunk[pos+2]; pos += 3
-                                    if flags & 0x04: pos += 2
-                                    if flags & 0x08: pos += 4
-                                    if flags & 0x01:
-                                        s = chunk[pos:pos+nchars*2].decode('utf-16-le', errors='replace'); pos += nchars*2
+                    if nombre.endswith('.xlsx'):
+                        import openpyxl
+                        wb = openpyxl.load_workbook(io.BytesIO(raw), data_only=True)
+                        ws_xl = wb.active
+                        rows_iter = list(ws_xl.iter_rows(values_only=True))
+                        # buscar fila de cabecera (la primera que tenga "fecha" o "cheque")
+                        header_row = 0
+                        for ri, row in enumerate(rows_iter):
+                            cells_str = [str(c).lower() if c is not None else '' for c in row]
+                            if any('fecha' in c or 'cheque' in c or 'nro' in c for c in cells_str):
+                                header_row = ri; break
+                        headers = [str(c).strip().lower() if c is not None else f'col{ci}'
+                                   for ci, c in enumerate(rows_iter[header_row])]
+                        for row in rows_iter[header_row+1:]:
+                            if all(c is None for c in row): continue
+                            filas_raw.append({headers[ci]: row[ci] for ci in range(len(headers))})
+
+                    else:   # .xls — parser BIFF8
+                        def _parse_biff(data):
+                            start = 0
+                            for i in range(len(data) - 4):
+                                try:
+                                    if struct.unpack_from('<H', data, i)[0] == 0x0809:
+                                        if 4 <= struct.unpack_from('<H', data, i+2)[0] <= 20:
+                                            start = i; break
+                                except: pass
+                            data = data[start:]
+                            sst, cells = [], {}
+                            i = 0
+                            while i < len(data) - 4:
+                                try:
+                                    rtype = struct.unpack_from('<H', data, i)[0]
+                                    rlen  = struct.unpack_from('<H', data, i+2)[0]
+                                except: break
+                                if rlen > 8192 or i + 4 + rlen > len(data):
+                                    i += 1; continue
+                                chunk = data[i+4:i+4+rlen]
+                                if rtype == 0x00FC and rlen >= 8:      # SST
+                                    total = struct.unpack_from('<I', chunk, 4)[0]
+                                    pos = 8
+                                    for _ in range(total):
+                                        if pos + 3 > len(chunk): break
+                                        nchars = struct.unpack_from('<H', chunk, pos)[0]
+                                        flags  = chunk[pos+2]; pos += 3
+                                        if flags & 0x04: pos += 2
+                                        if flags & 0x08: pos += 4
+                                        if flags & 0x01:
+                                            s = chunk[pos:pos+nchars*2].decode('utf-16-le', errors='replace'); pos += nchars*2
+                                        else:
+                                            s = chunk[pos:pos+nchars].decode('latin-1', errors='replace'); pos += nchars
+                                        sst.append(s)
+                                elif rtype == 0x00FD and rlen >= 10:   # LabelSST
+                                    r = struct.unpack_from('<H', chunk, 0)[0]
+                                    c = struct.unpack_from('<H', chunk, 2)[0]
+                                    cells[(r,c)] = ('sst', struct.unpack_from('<I', chunk, 6)[0])
+                                elif rtype == 0x0203 and rlen >= 14:   # Number
+                                    r = struct.unpack_from('<H', chunk, 0)[0]
+                                    c = struct.unpack_from('<H', chunk, 2)[0]
+                                    cells[(r,c)] = ('num', struct.unpack_from('<d', chunk, 6)[0])
+                                elif rtype == 0x027E and rlen >= 10:   # RK
+                                    r  = struct.unpack_from('<H', chunk, 0)[0]
+                                    c  = struct.unpack_from('<H', chunk, 2)[0]
+                                    rk = struct.unpack_from('<I', chunk, 6)[0]
+                                    if rk & 2:
+                                        val = (rk >> 2) / (100.0 if (rk & 1) else 1.0)
                                     else:
-                                        s = chunk[pos:pos+nchars].decode('latin-1', errors='replace'); pos += nchars
-                                    sst.append(s)
-                            elif rtype == 0x00FD and rlen >= 10:  # LabelSST
-                                row = struct.unpack_from('<H', chunk, 0)[0]
-                                col = struct.unpack_from('<H', chunk, 2)[0]
-                                idx = struct.unpack_from('<I', chunk, 6)[0]
-                                cells[(row,col)] = ('sst', idx)
-                            elif rtype == 0x0203 and rlen >= 14:  # Number
-                                row = struct.unpack_from('<H', chunk, 0)[0]
-                                col = struct.unpack_from('<H', chunk, 2)[0]
-                                val = struct.unpack_from('<d', chunk, 6)[0]
-                                cells[(row,col)] = ('num', val)
-                            elif rtype == 0x027E and rlen >= 10:  # RK
-                                row = struct.unpack_from('<H', chunk, 0)[0]
-                                col = struct.unpack_from('<H', chunk, 2)[0]
-                                rk  = struct.unpack_from('<I', chunk, 6)[0]
-                                if rk & 2:
-                                    val = (rk >> 2) / (100.0 if (rk & 1) else 1.0)
-                                else:
-                                    packed = struct.pack('<Q', (rk & 0xFFFFFFFC) << 32)
-                                    val = struct.unpack('<d', packed)[0]
-                                    if rk & 1: val /= 100
-                                cells[(row,col)] = ('num', val)
-                            i += 4 + rlen
+                                        packed = struct.pack('<Q', (rk & 0xFFFFFFFC) << 32)
+                                        val = struct.unpack('<d', packed)[0]
+                                        if rk & 1: val /= 100
+                                    cells[(r,c)] = ('num', val)
+                                elif rtype == 0x0204 and rlen >= 8:    # Label (cadena directa)
+                                    r = struct.unpack_from('<H', chunk, 0)[0]
+                                    c = struct.unpack_from('<H', chunk, 2)[0]
+                                    slen = struct.unpack_from('<H', chunk, 6)[0]
+                                    s = chunk[8:8+slen].decode('latin-1', errors='replace')
+                                    cells[(r,c)] = ('str', s)
+                                i += 4 + rlen
+                            return sst, cells
 
-                        # Resolve cells to values
-                        rows_out = []
+                        sst, cells = _parse_biff(raw)
+
+                        def _cell_val(sst, cells, row, col):
+                            cell = cells.get((row, col))
+                            if cell is None: return None
+                            if cell[0] == 'sst': return sst[cell[1]] if cell[1] < len(sst) else None
+                            if cell[0] == 'str': return cell[1]
+                            return cell[1]  # num
+
                         max_row = max((r for r,c in cells), default=0)
-                        for row in range(5, max_row+1):
-                            r = {}
-                            for col in range(6):   # 6 columnas: 0=Fecha 1=FechaAcred 2=Nro 3=Banco 4=Concepto 5=Importe
-                                cell = cells.get((row,col))
-                                if cell is None: r[col] = None
-                                elif cell[0] == 'sst': r[col] = sst[cell[1]] if cell[1] < len(sst) else None
-                                elif cell[0] == 'num':
-                                    val = cell[1]
-                                    if col in (0,1) and 40000 < val < 55000:
-                                        r[col] = _excel_date(val)
-                                    elif col == 2:
-                                        r[col] = str(int(val))
-                                    else:
-                                        r[col] = val
-                            if r.get(4) and r.get(5):   # Concepto(4) e Importe(5) deben existir
-                                rows_out.append(r)
-                        return rows_out
+                        max_col = max((c for r,c in cells), default=0)
 
-                    filas = _parse_xls_echeq(raw)
+                        # buscar fila de cabecera
+                        header_row = 0
+                        for ri in range(min(15, max_row+1)):
+                            row_vals = [str(_cell_val(sst, cells, ri, ci) or '').lower()
+                                        for ci in range(max_col+1)]
+                            if any('fecha' in v or 'cheque' in v or 'nro' in v for v in row_vals):
+                                header_row = ri; break
+
+                        headers = [str(_cell_val(sst, cells, header_row, ci) or f'col{ci}').strip().lower()
+                                   for ci in range(max_col+1)]
+
+                        for ri in range(header_row+1, max_row+1):
+                            row_d = {headers[ci]: _cell_val(sst, cells, ri, ci)
+                                     for ci in range(len(headers))}
+                            if any(v is not None for v in row_d.values()):
+                                filas_raw.append(row_d)
+
+                    # ── Mapear columnas por nombre (flexible) ──────────────
+                    def _find_col(row_d, *keywords):
+                        """Busca la primera clave del dict que contenga alguna keyword."""
+                        for kw in keywords:
+                            for k in row_d.keys():
+                                if kw in k:
+                                    return row_d[k]
+                        return None
+
+                    filas = []
+                    for row_d in filas_raw:
+                        fecha_emis = _fmt_fecha(_find_col(row_d, 'fecha emis', 'fecha emisi', 'f. emis', 'fecha\n', 'fecha '))
+                        fecha_venc = _fmt_fecha(_find_col(row_d, 'acred', 'venc', 'pago', 'fecha acred'))
+                        nro        = _find_col(row_d, 'nro', 'número', 'numero', 'cheque')
+                        banco      = _find_col(row_d, 'banco')
+                        concepto   = _find_col(row_d, 'concepto', 'descripcion', 'detalle', 'orden')
+                        importe    = _find_col(row_d, 'importe', 'monto', 'valor')
+                        try:
+                            imp_f = float(str(importe).replace('.', '').replace(',', '.')) if importe else 0
+                        except:
+                            imp_f = 0
+                        if imp_f <= 0 and nro is None:
+                            continue
+                        filas.append({
+                            'fecha_emis': fecha_emis if fecha_emis != '-' else str(date.today()),
+                            'fecha_venc': fecha_venc if fecha_venc != '-' else str(date.today()),
+                            'nro':        str(int(float(nro))) if nro is not None else '-',
+                            'banco':      str(banco).strip() if banco else 'BANCO GALICIA',
+                            'concepto':   str(concepto).strip() if concepto else '-',
+                            'importe':    imp_f,
+                        })
 
                     if not filas:
-                        st.error("❌ No se encontraron datos en el archivo. Verificá que el formato sea correcto.")
+                        st.error("❌ No se encontraron datos válidos. Verificá que el archivo tenga las columnas correctas.")
                     else:
-                        # Extract beneficiary from "Orden de Pago : NOMBRE"
-                        def _benef(concepto):
-                            if concepto and ':' in str(concepto):
-                                return str(concepto).split(':', 1)[1].strip()
-                            return str(concepto) if concepto else '-'
-
-                        # Build preview dataframe
-                        # Columnas: 0=Fecha, 1=Fecha Acred, 2=Nro Cheque, 3=Banco Emisor, 4=Concepto, 5=Importe
                         df_preview = pd.DataFrame([{
-                            'Fecha Emisión':    f.get(0, '-'),
-                            'Fecha Vencimiento':f.get(1, '-'),
-                            'Nro Cheque':       f.get(2, '-'),
-                            'Banco Emisor':     f.get(3, '-'),
-                            'Beneficiario':     _benef(f.get(4)),
-                            'Importe':          f.get(5, 0),
+                            'Fecha Emisión':     f['fecha_emis'],
+                            'Fecha Vencimiento': f['fecha_venc'],
+                            'Nro Cheque':        f['nro'],
+                            'Banco':             f['banco'],
+                            'Beneficiario':      _benef(f['concepto']),
+                            'Importe':           f['importe'],
                         } for f in filas])
 
                         st.markdown(f"##### 📋 Se encontraron **{len(df_preview)} eCheqs** para importar:")
                         st.dataframe(df_preview, use_container_width=True, hide_index=True)
 
-                        # Check which ones already exist
                         nros_existentes = set(st.session_state.cheques_emitidos['Nro Cheque'].astype(str).tolist())
-                        nuevos = [f for f in filas if str(f.get(2,'')) not in nros_existentes]
+                        nuevos     = [f for f in filas if f['nro'] not in nros_existentes]
                         duplicados = len(filas) - len(nuevos)
 
                         if duplicados > 0:
                             st.info(f"ℹ️ {duplicados} cheque(s) ya existen en el sistema y serán omitidos.")
 
-                        banco_import = st.text_input("Banco (se usa el del archivo; podés sobreescribirlo)", value="BANCO GALICIA", key="banco_import_xls")
-
                         col_imp1, col_imp2 = st.columns(2)
                         if col_imp1.button(f"✅ IMPORTAR {len(nuevos)} eCheqs NUEVOS", key="btn_importar_echeq", disabled=(len(nuevos)==0)):
                             importados = 0
                             for f in nuevos:
-                                benef_val  = _benef(f.get(4))
-                                imp_val    = float(f.get(5) or 0)
-                                nro_val    = str(f.get(2, '-'))
-                                f_emis     = str(f.get(0, str(date.today())))
-                                f_venc     = str(f.get(1, str(date.today())))
-                                banco_val  = str(f.get(3, banco_import)) if f.get(3) else banco_import
-
-                                if imp_val <= 0: continue
+                                benef_val = _benef(f['concepto'])
+                                imp_val   = f['importe']
+                                nro_val   = f['nro']
+                                f_emis    = f['fecha_emis']
+                                f_venc    = f['fecha_venc']
+                                banco_val = f['banco']
 
                                 # 1) cheques_emitidos
                                 nueva_fila = pd.DataFrame([[
                                     f_emis, nro_val, "ECHEQ", banco_val, benef_val,
                                     imp_val, f_venc, "PENDIENTE", "-",
-                                    f"Importado desde XLS banco"
+                                    "Importado desde XLS banco"
                                 ]], columns=COL_CHEQ_EMITIDOS)
                                 st.session_state.cheques_emitidos = pd.concat(
                                     [st.session_state.cheques_emitidos, nueva_fila], ignore_index=True)
@@ -2107,6 +2171,8 @@ elif sel == "CHEQUES":
 
                 except Exception as e:
                     st.error(f"❌ Error al leer el archivo: {e}")
+                    import traceback
+                    st.code(traceback.format_exc())
 
         st.markdown("---")
 
