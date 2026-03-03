@@ -286,7 +286,7 @@ def generar_html_presupuesto(p_data):
 # ─────────────────────────────────────────────────────────────────────────────
 USUARIOS = {
     "admin": {
-        "password": "Noroeste23",
+        "password": "chaca2026",
         "rol": "admin",
         "caja": None,           # Admin no tiene caja asignada, ve todas
         "nombre": "Administrador"
@@ -1132,20 +1132,7 @@ elif sel == "CTA CTE GENERAL":
         res = res[res['Importe'].round(2) != 0]
         st.table(res.style.format({"Importe": "$ {:,.2f}"}))
 
-elif sel == "COMPROBANTES":
-    st.header("📜 Historial de Comprobantes")
-    if not st.session_state.viajes.empty:
-        for i in reversed(st.session_state.viajes.index):
-            row = st.session_state.viajes.loc[i]
-            c1, c2, c3 = st.columns([0.2, 0.6, 0.1])
-            c1.write(f"📅 {row['Fecha Viaje']}")
-            c2.write(f"👤 **{row['Cliente']}** | {row['Origen']} a {row['Destino']} | **${row['Importe']}**")
-            if c3.button("🗑️", key=f"del_{i}"):
-                st.session_state.viajes = st.session_state.viajes.drop(i)
-                guardar_datos("viajes", st.session_state.viajes); st.rerun()
-            st.divider()
-
-elif sel == "CARGA PROVEEDOR":
+elif sel == "CTA CTE PROVEEDOR":
     st.header("👤 Gestión de Proveedores")
     if st.session_state.get("msg_proveedor"):
         st.success(st.session_state.msg_proveedor)
@@ -1203,32 +1190,137 @@ elif sel == "CARGA GASTOS":
     if st.session_state.get("msg_gasto"):
         st.success(st.session_state.msg_gasto)
         st.session_state.msg_gasto = None
-    with st.form("f_gasto", clear_on_submit=True):
-        prov_sel = st.selectbox("Proveedor", st.session_state.proveedores['Razón Social'].unique() if not st.session_state.proveedores.empty else [""])
-        c1, c2   = st.columns(2)
-        pv       = c1.text_input("Punto de Venta")
-        tipo_f   = c2.selectbox("Tipo de Factura", ["A", "B", "C", "REMITO", "NOTA DE CREDITO", "NOTA DE DEBITO"])
-        c3, c4   = st.columns(2)
-        n21      = c3.number_input("Importe Neto (21%)", min_value=0.0)
-        n10      = c4.number_input("Importe Neto (10.5%)", min_value=0.0)
-        c5, c6, c7 = st.columns(3)
-        r_iva    = c5.number_input("Retención IVA", min_value=0.0)
-        r_gan    = c6.number_input("Retención Ganancia", min_value=0.0)
-        r_iibb   = c7.number_input("Retención IIBB", min_value=0.0)
-        nograv   = st.number_input("Conceptos No Gravados", min_value=0.0)
-        total    = (n21 * 1.21) + (n10 * 1.105) + r_iva + r_gan + r_iibb + nograv
-        if tipo_f in ["NOTA DE CREDITO"]: total = -total
-        if st.form_submit_button("REGISTRAR COMPROBANTE"):
-            if total != 0:
-                ng = pd.DataFrame([[date.today(), prov_sel, pv, tipo_f, n21, n10, r_iva, r_gan, r_iibb, nograv, total]], columns=COL_COMPRAS)
-                st.session_state.compras = pd.concat([st.session_state.compras, ng], ignore_index=True)
-                guardar_datos("compras", st.session_state.compras)
-                st.session_state.msg_gasto = f"✅ Comprobante de '{prov_sel}' guardado por $ {total:,.2f}."
-                st.rerun()
-            else:
-                st.warning("Ingresá al menos un importe para registrar el comprobante.")
 
-elif sel == "CTA CTE PROVEEDOR":
+    # ── Inputs fuera del form para que el total se actualice en tiempo real ──
+    prov_sel = st.selectbox("Proveedor", st.session_state.proveedores['Razón Social'].unique() if not st.session_state.proveedores.empty else [""])
+    c1, c2   = st.columns(2)
+    pv       = c1.text_input("Punto de Venta")
+    tipo_f   = c2.selectbox("Tipo de Factura", ["A", "B", "C", "REMITO", "NOTA DE CREDITO", "NOTA DE DEBITO"])
+    c3, c4   = st.columns(2)
+    n21      = c3.number_input("Importe Neto (21%)", min_value=0.0, step=0.01, key="g_n21")
+    n10      = c4.number_input("Importe Neto (10.5%)", min_value=0.0, step=0.01, key="g_n10")
+    c5, c6, c7 = st.columns(3)
+    r_iva    = c5.number_input("Retención IVA", min_value=0.0, step=0.01, key="g_riva")
+    r_gan    = c6.number_input("Retención Ganancia", min_value=0.0, step=0.01, key="g_rgan")
+    r_iibb   = c7.number_input("Retención IIBB", min_value=0.0, step=0.01, key="g_riibb")
+    nograv   = st.number_input("Conceptos No Gravados", min_value=0.0, step=0.01, key="g_nograv")
+
+    # ── Total en tiempo real ──
+    total = (n21 * 1.21) + (n10 * 1.105) + r_iva + r_gan + r_iibb + nograv
+    if tipo_f == "NOTA DE CREDITO": total = -total
+
+    color_total = "#2ecc71" if total >= 0 else "#e74c3c"
+    signo = "-" if total < 0 else ""
+    st.markdown(
+        f"<div style='background:#f0f2f6;border-radius:10px;padding:16px 24px;margin:12px 0;"
+        f"border-left:5px solid {color_total};display:flex;align-items:center;gap:16px;'>"
+        f"<span style='font-size:14px;color:#555;font-weight:bold;'>TOTAL DEL COMPROBANTE</span>"
+        f"<span style='font-size:28px;font-weight:bold;color:{color_total};'>{signo}$ {abs(total):,.2f}</span>"
+        f"</div>",
+        unsafe_allow_html=True
+    )
+
+    if st.button("✅ REGISTRAR COMPROBANTE", type="primary"):
+        if total != 0:
+            ng = pd.DataFrame([[date.today(), prov_sel, pv, tipo_f, n21, n10, r_iva, r_gan, r_iibb, nograv, total]], columns=COL_COMPRAS)
+            st.session_state.compras = pd.concat([st.session_state.compras, ng], ignore_index=True)
+            guardar_datos("compras", st.session_state.compras)
+            st.session_state.msg_gasto = f"✅ Comprobante de '{prov_sel}' guardado por $ {total:,.2f}."
+            st.rerun()
+        else:
+            st.warning("Ingresá al menos un importe para registrar el comprobante.")
+
+elif sel == "COMPROBANTES":
+    st.header("📜 Historial de Viajes")
+
+    tab_ver_comp, tab_editar = st.tabs(["📋 VER Y ELIMINAR", "✏️ EDITAR VIAJE"])
+
+    with tab_ver_comp:
+        if not st.session_state.viajes.empty:
+            for i in reversed(st.session_state.viajes.index):
+                row = st.session_state.viajes.loc[i]
+                c1, c2, c3 = st.columns([0.2, 0.6, 0.1])
+                c1.write(f"📅 {row['Fecha Viaje']}")
+                c2.write(f"👤 **{row['Cliente']}** | {row['Origen']} a {row['Destino']} | **${row['Importe']}**")
+                if c3.button("🗑️", key=f"del_{i}"):
+                    st.session_state.viajes = st.session_state.viajes.drop(i)
+                    guardar_datos("viajes", st.session_state.viajes); st.rerun()
+                st.divider()
+        else:
+            st.info("No hay viajes registrados.")
+
+    with tab_editar:
+        if st.session_state.viajes.empty:
+            st.info("No hay viajes para editar.")
+        else:
+            # Filtros para encontrar el viaje rápido
+            col_f1, col_f2 = st.columns(2)
+            clientes_unicos = ["(Todos)"] + sorted(st.session_state.viajes['Cliente'].unique().tolist())
+            filtro_cli = col_f1.selectbox("Filtrar por cliente", clientes_unicos, key="edit_filtro_cli")
+            filtro_txt = col_f2.text_input("Buscar por origen / destino", key="edit_filtro_txt").strip().lower()
+
+            df_edit = st.session_state.viajes.copy()
+            if filtro_cli != "(Todos)":
+                df_edit = df_edit[df_edit['Cliente'] == filtro_cli]
+            if filtro_txt:
+                df_edit = df_edit[
+                    df_edit['Origen'].str.lower().str.contains(filtro_txt, na=False) |
+                    df_edit['Destino'].str.lower().str.contains(filtro_txt, na=False)
+                ]
+
+            if df_edit.empty:
+                st.info("No se encontraron viajes con ese filtro.")
+            else:
+                st.markdown(f"**{len(df_edit)} viaje(s) encontrado(s)**")
+                for i in reversed(df_edit.index):
+                    row = st.session_state.viajes.loc[i]
+                    with st.container():
+                        # Encabezado del viaje
+                        col_info, col_btn = st.columns([0.85, 0.15])
+                        col_info.markdown(
+                            f"📅 `{row['Fecha Viaje']}` — **{row['Cliente']}** | "
+                            f"{row['Origen']} ➔ {row['Destino']} | **$ {row['Importe']:,.2f}**"
+                        )
+                        if col_btn.button("✏️ Editar", key=f"abrir_edit_{i}"):
+                            st.session_state[f"modo_edit_viaje_{i}"] = not st.session_state.get(f"modo_edit_viaje_{i}", False)
+                            st.rerun()
+
+                        # Formulario de edición inline
+                        if st.session_state.get(f"modo_edit_viaje_{i}", False):
+                            with st.form(f"form_edit_viaje_{i}"):
+                                st.markdown(f"##### ✏️ Editando viaje #{i}")
+                                ec1, ec2 = st.columns(2)
+                                # Parsear fecha correctamente
+                                try:
+                                    fecha_actual = pd.to_datetime(row['Fecha Viaje']).date()
+                                except:
+                                    fecha_actual = date.today()
+                                n_fecha  = ec1.date_input("Fecha Viaje", value=fecha_actual)
+                                n_cli    = ec2.selectbox("Cliente", st.session_state.clientes['Razón Social'].unique() if not st.session_state.clientes.empty else [""], index=list(st.session_state.clientes['Razón Social'].unique()).index(row['Cliente']) if row['Cliente'] in st.session_state.clientes['Razón Social'].unique() else 0)
+                                ec3, ec4 = st.columns(2)
+                                n_orig   = ec3.text_input("Origen", value=str(row['Origen']))
+                                n_dest   = ec4.text_input("Destino", value=str(row['Destino']))
+                                ec5, ec6 = st.columns(2)
+                                n_pat    = ec5.text_input("Patente / Móvil", value=str(row['Patente / Móvil']))
+                                n_imp    = ec6.number_input("Importe $", value=float(row['Importe']), min_value=0.0, step=0.01)
+                                n_tipo   = st.selectbox("Tipo Comprobante", ["Factura (Cuenta Corriente)", "Factura (Contado)", "RECIBO", "REMITO"], index=0)
+                                sb1, sb2 = st.columns(2)
+                                if sb1.form_submit_button("💾 GUARDAR CAMBIOS", type="primary"):
+                                    st.session_state.viajes.loc[i, 'Fecha Viaje']    = str(n_fecha)
+                                    st.session_state.viajes.loc[i, 'Cliente']        = n_cli
+                                    st.session_state.viajes.loc[i, 'Origen']         = n_orig
+                                    st.session_state.viajes.loc[i, 'Destino']        = n_dest
+                                    st.session_state.viajes.loc[i, 'Patente / Móvil']= n_pat
+                                    st.session_state.viajes.loc[i, 'Importe']        = n_imp
+                                    st.session_state.viajes.loc[i, 'Tipo Comp']      = n_tipo
+                                    guardar_datos("viajes", st.session_state.viajes)
+                                    st.session_state[f"modo_edit_viaje_{i}"] = False
+                                    st.session_state.msg_viaje = f"✅ Viaje #{i} actualizado correctamente."
+                                    st.rerun()
+                                if sb2.form_submit_button("❌ Cancelar"):
+                                    st.session_state[f"modo_edit_viaje_{i}"] = False
+                                    st.rerun()
+                    st.divider()
     st.header("📊 Cuenta Corriente Individual")
     if not st.session_state.proveedores.empty:
         p_sel = st.selectbox("Seleccionar Proveedor", st.session_state.proveedores['Razón Social'].unique())
