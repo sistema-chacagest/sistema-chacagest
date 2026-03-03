@@ -1928,7 +1928,7 @@ elif sel == "CHEQUES":
             <div style='background:#fff4e6;border-left:4px solid #f39c12;padding:10px 14px;border-radius:6px;font-size:13px;'>
                 📋 <b>Cómo exportar el archivo desde tu banco:</b><br>
                 Ingresá a Banca Electrónica → eCheqs → Cheques Diferidos Emitidos → Exportar XLS.<br>
-                El archivo debe tener las columnas: <b>Fecha | Fecha Acred | Nro Cheque | Concepto | Importe</b>
+                El archivo debe tener las columnas: <b>Fecha | Fecha Acred | Nro Cheque | Banco Emisor | Concepto | Importe</b>
             </div>
             """, unsafe_allow_html=True)
 
@@ -2015,7 +2015,7 @@ elif sel == "CHEQUES":
                         max_row = max((r for r,c in cells), default=0)
                         for row in range(5, max_row+1):
                             r = {}
-                            for col in range(5):
+                            for col in range(6):   # 6 columnas: 0=Fecha 1=FechaAcred 2=Nro 3=Banco 4=Concepto 5=Importe
                                 cell = cells.get((row,col))
                                 if cell is None: r[col] = None
                                 elif cell[0] == 'sst': r[col] = sst[cell[1]] if cell[1] < len(sst) else None
@@ -2027,7 +2027,7 @@ elif sel == "CHEQUES":
                                         r[col] = str(int(val))
                                     else:
                                         r[col] = val
-                            if r.get(3) and r.get(4):
+                            if r.get(4) and r.get(5):   # Concepto(4) e Importe(5) deben existir
                                 rows_out.append(r)
                         return rows_out
 
@@ -2043,12 +2043,14 @@ elif sel == "CHEQUES":
                             return str(concepto) if concepto else '-'
 
                         # Build preview dataframe
+                        # Columnas: 0=Fecha, 1=Fecha Acred, 2=Nro Cheque, 3=Banco Emisor, 4=Concepto, 5=Importe
                         df_preview = pd.DataFrame([{
                             'Fecha Emisión':    f.get(0, '-'),
                             'Fecha Vencimiento':f.get(1, '-'),
                             'Nro Cheque':       f.get(2, '-'),
-                            'Beneficiario':     _benef(f.get(3)),
-                            'Importe':          f.get(4, 0),
+                            'Banco Emisor':     f.get(3, '-'),
+                            'Beneficiario':     _benef(f.get(4)),
+                            'Importe':          f.get(5, 0),
                         } for f in filas])
 
                         st.markdown(f"##### 📋 Se encontraron **{len(df_preview)} eCheqs** para importar:")
@@ -2062,23 +2064,24 @@ elif sel == "CHEQUES":
                         if duplicados > 0:
                             st.info(f"ℹ️ {duplicados} cheque(s) ya existen en el sistema y serán omitidos.")
 
-                        banco_import = st.text_input("Banco de los eCheqs (ej: BANCO GALICIA)", value="BANCO GALICIA", key="banco_import_xls")
+                        banco_import = st.text_input("Banco (se usa el del archivo; podés sobreescribirlo)", value="BANCO GALICIA", key="banco_import_xls")
 
                         col_imp1, col_imp2 = st.columns(2)
                         if col_imp1.button(f"✅ IMPORTAR {len(nuevos)} eCheqs NUEVOS", key="btn_importar_echeq", disabled=(len(nuevos)==0)):
                             importados = 0
                             for f in nuevos:
-                                benef_val = _benef(f.get(3))
-                                imp_val   = float(f.get(4) or 0)
-                                nro_val   = str(f.get(2, '-'))
-                                f_emis    = str(f.get(0, str(date.today())))
-                                f_venc    = str(f.get(1, str(date.today())))
+                                benef_val  = _benef(f.get(4))
+                                imp_val    = float(f.get(5) or 0)
+                                nro_val    = str(f.get(2, '-'))
+                                f_emis     = str(f.get(0, str(date.today())))
+                                f_venc     = str(f.get(1, str(date.today())))
+                                banco_val  = str(f.get(3, banco_import)) if f.get(3) else banco_import
 
                                 if imp_val <= 0: continue
 
                                 # 1) cheques_emitidos
                                 nueva_fila = pd.DataFrame([[
-                                    f_emis, nro_val, "ECHEQ", banco_import, benef_val,
+                                    f_emis, nro_val, "ECHEQ", banco_val, benef_val,
                                     imp_val, f_venc, "PENDIENTE", "-",
                                     f"Importado desde XLS banco"
                                 ]], columns=COL_CHEQ_EMITIDOS)
