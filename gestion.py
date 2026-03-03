@@ -28,10 +28,9 @@ def conectar_google():
 def cargar_datos():
     col_c = ["Razón Social", "CUIT / CUIL / DNI *", "Email", "Teléfono", "Dirección Fiscal", "Localidad", "Provincia", "Condición IVA", "Condición de Venta"]
     col_v = ["Fecha Carga", "Cliente", "Fecha Viaje", "Origen", "Destino", "Patente / Móvil", "Importe", "Tipo Comp", "Nro Comp Asoc"]
-    col_p = ["Fecha Emisión", "Cliente", "Vencimiento", "Detalle", "Tipo Móvil", "Importe", "Detalle"]
+    col_p = ["Fecha Emisión", "Cliente", "Vencimiento", "Detalle", "Tipo Móvil", "Importe"]
     col_t = ["Fecha", "Tipo", "Caja/Banco", "Concepto", "Cliente/Proveedor", "Monto", "Ref AFIP"]
-    # SE AGREGAN CBU Y ALIAS A LA ESTRUCTURA
-    col_prov = ["Razón Social", "CUIT/DNI", "Cuenta de Gastos", "Categoría IVA", "CBU", "Alias"]
+    col_prov = ["Razón Social", "CUIT/DNI", "Cuenta de Gastos", "Categoría IVA"]
     col_compras = ["Fecha", "Proveedor", "Punto Venta", "Tipo Factura", "Neto 21", "Neto 10.5", "Ret IVA", "Ret Ganancia", "Ret IIBB", "No Gravados", "Total"]
 
     try:
@@ -478,22 +477,13 @@ elif sel == "CARGA VIAJE":
         cli = st.selectbox("Seleccionar Cliente", st.session_state.clientes['Razón Social'].unique() if not st.session_state.clientes.empty else [""])
         c1, c2 = st.columns(2)
         f_v = c1.date_input("Fecha")
-        pat = c2.text_input("Patente / Móvil")
-        
-        o, d = st.columns(2)
-        orig = o.text_input("Origen")
-        dest = d.text_input("Destino")
-        
-        # NUEVO CAMPO DETALLE
-        det_viaje = st.text_area("Detalle del viaje (opcional)")
-        
+        pat = c2.text_input("Patente")
+        orig = st.text_input("Origen")
+        dest = st.text_input("Destino")
         imp = st.number_input("Importe Neto $", min_value=0.0)
         cond = st.selectbox("Tipo de Pago", ["Cuenta Corriente", "Contado"])
-        
         if st.form_submit_button("GUARDAR VIAJE"):
-            # Se añade det_viaje al final de la lista de valores
-            nv = pd.DataFrame([[date.today(), cli, f_v, orig, dest, pat, imp, f"Factura ({cond})", "-", det_viaje]], 
-                              columns=st.session_state.viajes.columns)
+            nv = pd.DataFrame([[date.today(), cli, f_v, orig, dest, pat, imp, f"Factura ({cond})", "-"]], columns=st.session_state.viajes.columns)
             st.session_state.viajes = pd.concat([st.session_state.viajes, nv], ignore_index=True)
             guardar_datos("viajes", st.session_state.viajes)
             st.success("Viaje registrado"); st.rerun()
@@ -537,7 +527,7 @@ elif sel == "PRESUPUESTOS":
 
 elif sel == "TESORERIA":
     st.header("💰 Tesorería")
-    opc_cajas = ["CAJA COTI", "CAJA TATO", "BANCO GALICIA", "BANCO PROVINCIA", "TARJETA DE CREDITO", "BANCO SUPERVIELLE", "DOLAR CAJA COTI", "DOLAR CAJA TATO", "BANCO PERSONAL TATO"]
+    opc_cajas = ["CAJA COTI", "CAJA TATO", "BANCO GALICIA", "BANCO PROVINCIA", "TARJETA DE CREDITO", "BANCO SUPERVIELLE", "DOLAR CAJA COTI", "DOLAR CAJA TATO"]
     t1, t2, t3, t4, t5, t6 = st.tabs(["📥 INGRESOS VARIOS", "📤 EGRESOS VARIOS", "🧾 COBRANZA VIAJE", "📊 VER MOVIMIENTOS", "🔄 TRASPASO", "💸 ORDEN DE PAGO"])
     
     with t1:
@@ -642,56 +632,17 @@ elif sel == "CTA CTE GENERAL":
         st.table(res.style.format({"Importe": "$ {:,.2f}"}))
 
 elif sel == "COMPROBANTES":
-    st.header("📜 Historial de Viajes y Comprobantes")
+    st.header("📜 Historial de Comprobantes")
     if not st.session_state.viajes.empty:
-        # Usamos reverse para ver lo más nuevo arriba
         for i in reversed(st.session_state.viajes.index):
             row = st.session_state.viajes.loc[i]
-            
-            # Saltamos las filas que son "PAGO" de tesorería si quieres ver solo viajes
-            if row['Origen'] == "TESORERIA": continue 
-
-            with st.container():
-                c1, c2, c3, c4 = st.columns([0.15, 0.55, 0.15, 0.15])
-                c1.write(f"📅 {row['Fecha Viaje']}")
-                c2.markdown(f"👤 **{row['Cliente']}** | {row['Origen']} ➔ {row['Destino']}")
-                c2.caption(f"💰 ${row['Importe']:,.2f} | 🚛 {row['Patente / Móvil']} | 📝 {row.get('Detalle', '-')}")
-                
-                if c3.button("📝 Editar", key=f"edit_v_{i}"):
-                    st.session_state[f"edit_v_mode_{i}"] = True
-                
-                if c4.button("🗑️", key=f"del_v_{i}"):
-                    st.session_state.viajes = st.session_state.viajes.drop(i)
-                    guardar_datos("viajes", st.session_state.viajes)
-                    st.rerun()
-
-                # FORMULARIO DE EDICIÓN (Se activa al presionar Editar)
-                if st.session_state.get(f"edit_v_mode_{i}", False):
-                    with st.form(f"f_edit_v_{i}"):
-                        st.subheader("Editar Datos del Viaje")
-                        ce1, ce2 = st.columns(2)
-                        n_orig = ce1.text_input("Origen", value=row['Origen'])
-                        n_dest = ce2.text_input("Destino", value=row['Destino'])
-                        n_pat = ce1.text_input("Patente / Móvil", value=row['Patente / Móvil'])
-                        n_imp = ce2.number_input("Importe", value=float(row['Importe']))
-                        n_det = st.text_area("Detalle", value=row.get('Detalle', '-'))
-                        
-                        be1, be2 = st.columns(2)
-                        if be1.form_submit_button("✅ Guardar Cambios"):
-                            st.session_state.viajes.at[i, 'Origen'] = n_orig
-                            st.session_state.viajes.at[i, 'Destino'] = n_dest
-                            st.session_state.viajes.at[i, 'Patente / Móvil'] = n_pat
-                            st.session_state.viajes.at[i, 'Importe'] = n_imp
-                            st.session_state.viajes.at[i, 'Detalle'] = n_det
-                            guardar_datos("viajes", st.session_state.viajes)
-                            st.session_state[f"edit_v_mode_{i}"] = False
-                            st.rerun()
-                        if be2.form_submit_button("❌ Cancelar"):
-                            st.session_state[f"edit_v_mode_{i}"] = False
-                            st.rerun()
-                st.divider()
-    else:
-        st.info("No hay viajes registrados.")
+            c1, c2, c3 = st.columns([0.2, 0.6, 0.1])
+            c1.write(f"📅 {row['Fecha Viaje']}")
+            c2.write(f"👤 **{row['Cliente']}** | {row['Origen']} a {row['Destino']} | **${row['Importe']}**")
+            if c3.button("🗑️", key=f"del_{i}"):
+                st.session_state.viajes = st.session_state.viajes.drop(i)
+                guardar_datos("viajes", st.session_state.viajes); st.rerun()
+            st.divider()
 
 elif sel == "CARGA PROVEEDOR":
     st.header("👤 Gestión de Proveedores")
@@ -702,12 +653,9 @@ elif sel == "CARGA PROVEEDOR":
             doc = c2.text_input("CUIT o DNI")
             cuenta = c1.selectbox("Cuenta de Gastos", ["COMBUSTIBLE", "REPARACION", "REPUESTO", "SERVICIO LUZ, GAS",  "VARIOS"])
             cat_iva = c2.selectbox("Categoría IVA", ["Responsable Inscripto", "Exento en IVA", "Consumidor Final", "Monotributista", "No Inscripto"])
-            # SE AGREGAN INPUTS DE CBU Y ALIAS
-            cbu = c1.text_input("CBU / CVU")
-            alias = c2.text_input("Alias")
             if st.form_submit_button("REGISTRAR PROVEEDOR"):
                 if rs and doc:
-                    np = pd.DataFrame([[rs, doc, cuenta, cat_iva, cbu, alias]], columns=st.session_state.proveedores.columns)
+                    np = pd.DataFrame([[rs, doc, cuenta, cat_iva]], columns=st.session_state.proveedores.columns)
                     st.session_state.proveedores = pd.concat([st.session_state.proveedores, np], ignore_index=True)
                     guardar_datos("proveedores", st.session_state.proveedores)
                     st.success("Proveedor registrado"); st.rerun()
@@ -717,8 +665,7 @@ elif sel == "CARGA PROVEEDOR":
             with st.container():
                 c_inf, c_ed, c_el = st.columns([0.7, 0.15, 0.15])
                 c_inf.markdown(f"**{row['Razón Social']}** | CUIT: {row['CUIT/DNI']}")
-                # SE VISUALIZAN CBU Y ALIAS EN LA LISTA
-                c_inf.caption(f"📂 Cuenta: {row['Cuenta de Gastos']} | {row['Categoría IVA']} | 🏦 CBU: {row.get('CBU','-')} | ✨ Alias: {row.get('Alias','-')}")
+                c_inf.caption(f"📂 Cuenta: {row['Cuenta de Gastos']} | {row['Categoría IVA']}")
                 if c_ed.button("📝 Editar", key=f"edit_p_{i}"): st.session_state[f"edit_p_mode_{i}"] = True
                 if c_el.button("🗑️", key=f"del_p_{i}"):
                     tiene_compras = not st.session_state.compras[st.session_state.compras['Proveedor'] == row['Razón Social']].empty
@@ -732,60 +679,34 @@ elif sel == "CARGA PROVEEDOR":
                         ce1, ce2 = st.columns(2)
                         n_rs = ce1.text_input("Razón Social", value=row['Razón Social'])
                         n_doc = ce2.text_input("CUIT/DNI", value=row['CUIT/DNI'])
-                        n_cbu = ce1.text_input("CBU", value=row.get('CBU',''))
-                        n_alias = ce2.text_input("Alias", value=row.get('Alias',''))
                         if st.form_submit_button("✅ Guardar"):
-                            st.session_state.proveedores.loc[i] = [n_rs, n_doc, row['Cuenta de Gastos'], row['Categoría IVA'], n_cbu, n_alias]
+                            st.session_state.proveedores.loc[i] = [n_rs, n_doc, row['Cuenta de Gastos'], row['Categoría IVA']]
                             guardar_datos("proveedores", st.session_state.proveedores)
                             st.session_state[f"edit_p_mode_{i}"] = False; st.rerun()
             st.divider()
 
 elif sel == "CARGA GASTOS":
     st.header("💸 Carga de Gastos")
-    
-    prov_sel = st.selectbox("Proveedor", st.session_state.proveedores['Razón Social'].unique() if not st.session_state.proveedores.empty else [""])
-    
-    col_f1, col_f2, col_f3 = st.columns(3)
-    fecha_comp = col_f1.date_input("Fecha Comprobante", date.today())
-    pv = col_f2.text_input("Punto de Venta")
-    tipo_f = col_f3.selectbox("Tipo de Factura", ["A", "B", "C", "REMITO", "NOTA DE CREDITO", "NOTA DE DEBITO"])
-    
-    st.divider()
-    
-    c1, c2 = st.columns(2)
-    n21 = c1.number_input("Importe Neto (21%)", min_value=0.0, step=0.01)
-    n10 = c2.number_input("Importe Neto (10.5%)", min_value=0.0, step=0.01)
-    
-    c3, c4, c5 = st.columns(3)
-    r_iva = c3.number_input("Retención IVA", min_value=0.0, step=0.01)
-    r_gan = c4.number_input("Retención Ganancia", min_value=0.0, step=0.01)
-    r_iibb = c5.number_input("Retención IIBB", min_value=0.0, step=0.01)
-    
-    nograv = st.number_input("Conceptos No Gravados", min_value=0.0, step=0.01)
-
-    iva21 = n21 * 0.21
-    iva10 = n10 * 0.105
-    total_calculado = (n21 + iva21) + (n10 + iva10) + r_iva + r_gan + r_iibb + nograv
-    
-    if tipo_f == "NOTA DE CREDITO":
-        total_calculado = -total_calculado
-
-    st.markdown("---")
-    res1, res2, res3 = st.columns(3)
-    res1.metric("IVA 21%", f"$ {iva21:,.2f}")
-    res2.metric("IVA 10.5%", f"$ {iva10:,.2f}")
-    res3.subheader(f"TOTAL: $ {total_calculado:,.2f}")
-    
-    if st.button("✅ REGISTRAR COMPROBANTE FINAL"):
-        if prov_sel:
-            ng = pd.DataFrame([[fecha_comp, prov_sel, pv, tipo_f, n21, n10, r_iva, r_gan, r_iibb, nograv, total_calculado]], 
-                              columns=st.session_state.compras.columns)
+    with st.form("f_gasto", clear_on_submit=True):
+        prov_sel = st.selectbox("Proveedor", st.session_state.proveedores['Razón Social'].unique() if not st.session_state.proveedores.empty else [""])
+        c1, c2 = st.columns(2)
+        pv = c1.text_input("Punto de Venta")
+        tipo_f = c2.selectbox("Tipo de Factura", ["A", "B", "C", "REMITO", "NOTA DE CREDITO", "NOTA DE DEBITO"])
+        c3, c4 = st.columns(2)
+        n21 = c3.number_input("Importe Neto (21%)", min_value=0.0)
+        n10 = c4.number_input("Importe Neto (10.5%)", min_value=0.0)
+        c5, c6, c7 = st.columns(3)
+        r_iva = c5.number_input("Retención IVA", min_value=0.0)
+        r_gan = c6.number_input("Retención Ganancia", min_value=0.0)
+        r_iibb = c7.number_input("Retención IIBB", min_value=0.0)
+        nograv = st.number_input("Conceptos No Gravados", min_value=0.0)
+        total = (n21 * 1.21) + (n10 * 1.105) + r_iva + r_gan + r_iibb + nograv
+        if tipo_f in ["NOTA DE CREDITO"]: total = -total
+        if st.form_submit_button("REGISTRAR COMPROBANTE"):
+            ng = pd.DataFrame([[date.today(), prov_sel, pv, tipo_f, n21, n10, r_iva, r_gan, r_iibb, nograv, total]], columns=st.session_state.compras.columns)
             st.session_state.compras = pd.concat([st.session_state.compras, ng], ignore_index=True)
             guardar_datos("compras", st.session_state.compras)
-            st.success(f"Gasto guardado por total de $ {total_calculado:,.2f}")
-            st.rerun()
-        else:
-            st.error("Por favor, seleccione un proveedor.")
+            st.success(f"Gasto guardado por total de $ {total:,.2f}"); st.rerun()
 
 elif sel == "CTA CTE PROVEEDOR":
     st.header("📊 Cuenta Corriente Individual")
@@ -798,15 +719,7 @@ elif sel == "CTA CTE PROVEEDOR":
 elif sel == "CTA CTE GENERAL PROV":
     st.header("🌎 Estado General de Proveedores")
     if not st.session_state.compras.empty:
-        # AGRUPAR SALDOS Y UNIR CON DATOS BANCARIOS
         res_p = st.session_state.compras.groupby('Proveedor')['Total'].sum().reset_index()
-        if not st.session_state.proveedores.empty:
-            res_p = res_p.merge(
-                st.session_state.proveedores[['Razón Social', 'CBU', 'Alias']], 
-                left_on='Proveedor', 
-                right_on='Razón Social', 
-                how='left'
-            ).drop(columns=['Razón Social'])
         st.table(res_p.style.format({"Total": "$ {:,.2f}"}))
 
 elif sel == "HISTORICO COMPRAS":
@@ -821,6 +734,8 @@ elif sel == "HISTORICO COMPRAS":
                 st.session_state.compras = st.session_state.compras.drop(i)
                 guardar_datos("compras", st.session_state.compras); st.rerun()
             st.divider()
+
+
 
 
 
