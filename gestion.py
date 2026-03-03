@@ -472,21 +472,35 @@ elif sel == "CLIENTES":
     else: st.info("No hay clientes registrados.")
 
 elif sel == "CARGA VIAJE":
-    st.header("🚛 Registro de Viaje")
+    st.header("🚛 Registro de Comprobante de Venta")
     with st.form("f_v"):
         cli = st.selectbox("Seleccionar Cliente", st.session_state.clientes['Razón Social'].unique() if not st.session_state.clientes.empty else [""])
         c1, c2 = st.columns(2)
         f_v = c1.date_input("Fecha")
-        pat = c2.text_input("Patente")
-        orig = st.text_input("Origen")
+        pat = c2.text_input("Patente / Interno")
+        
+        # Selección de tipo de comprobante para asociación AFIP
+        tipo_c = st.selectbox("Tipo de Comprobante", ["Factura", "Nota de Crédito", "Nota de Débito"])
+        
+        orig = st.text_input("Origen / Concepto")
         dest = st.text_input("Destino")
         imp = st.number_input("Importe Neto $", min_value=0.0)
-        cond = st.selectbox("Tipo de Pago", ["Cuenta Corriente", "Contado"])
-        if st.form_submit_button("GUARDAR VIAJE"):
-            nv = pd.DataFrame([[date.today(), cli, f_v, orig, dest, pat, imp, f"Factura ({cond})", "-"]], columns=st.session_state.viajes.columns)
-            st.session_state.viajes = pd.concat([st.session_state.viajes, nv], ignore_index=True)
-            guardar_datos("viajes", st.session_state.viajes)
-            st.success("Viaje registrado"); st.rerun()
+        
+        # Referencia AFIP obligatoria para NC/ND
+        ref_afip = st.text_input("Nro. Comprobante AFIP (Asociado si es NC/ND)")
+        
+        cond = st.selectbox("Condición de Pago", ["Cuenta Corriente", "Contado"])
+        
+        if st.form_submit_button("GUARDAR COMPROBANTE"):
+            if cli and imp > 0:
+                # Ajuste de signo: NC resta del saldo
+                valor_final = -imp if tipo_c == "Nota de Crédito" else imp
+                
+                nv = pd.DataFrame([[date.today(), cli, f_v, orig, dest, pat, valor_final, f"{tipo_c} ({cond})", ref_afip]], 
+                                  columns=st.session_state.viajes.columns)
+                st.session_state.viajes = pd.concat([st.session_state.viajes, nv], ignore_index=True)
+                guardar_datos("viajes", st.session_state.viajes)
+                st.success(f"{tipo_c} registrada con éxito."); st.rerun()
 
 elif sel == "PRESUPUESTOS":
     st.header("📝 Gestión de Presupuestos")
@@ -561,6 +575,7 @@ elif sel == "TESORERIA":
             afip = st.text_input("Comprobante Asociado (AFIP/Recibo)")
             if st.form_submit_button("GENERAR COBRANZA"):
                 nt = pd.DataFrame([[date.today(), "COBRANZA", cj, "Cobro Viaje", c_sel, mon, afip]], columns=st.session_state.tesoreria.columns)
+                # Registro en cta cte restando el saldo cobrado
                 nv = pd.DataFrame([[date.today(), c_sel, date.today(), "PAGO", "TESORERIA", "-", -mon, "RECIBO", afip]], columns=st.session_state.viajes.columns)
                 st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
                 st.session_state.viajes = pd.concat([st.session_state.viajes, nv], ignore_index=True)
@@ -638,7 +653,7 @@ elif sel == "COMPROBANTES":
             row = st.session_state.viajes.loc[i]
             c1, c2, c3 = st.columns([0.2, 0.6, 0.1])
             c1.write(f"📅 {row['Fecha Viaje']}")
-            c2.write(f"👤 **{row['Cliente']}** | {row['Origen']} a {row['Destino']} | **${row['Importe']}**")
+            c2.write(f"👤 **{row['Cliente']}** | {row['Tipo Comp']} | {row['Origen']} a {row['Destino']} | **${row['Importe']}**")
             if c3.button("🗑️", key=f"del_{i}"):
                 st.session_state.viajes = st.session_state.viajes.drop(i)
                 guardar_datos("viajes", st.session_state.viajes); st.rerun()
@@ -688,17 +703,15 @@ elif sel == "CARGA PROVEEDOR":
 elif sel == "CARGA GASTOS":
     st.header("💸 Carga de Gastos")
     
-    # 1. Campos de identificación (Fuera del form para permitir actualización instantánea)
     prov_sel = st.selectbox("Proveedor", st.session_state.proveedores['Razón Social'].unique() if not st.session_state.proveedores.empty else [""])
     
     col_f1, col_f2, col_f3 = st.columns(3)
-    fecha_comp = col_f1.date_input("Fecha Comprobante", date.today()) # Nueva fecha solicitada
-    pv = col_f2.text_input("Punto de Venta")
-    tipo_f = col_f3.selectbox("Tipo de Factura", ["A", "B", "C", "REMITO", "NOTA DE CREDITO", "NOTA DE DEBITO"])
+    fecha_comp = col_f1.date_input("Fecha Comprobante", date.today())
+    pv = col_f2.text_input("Punto de Venta / Nro")
+    tipo_f = col_f3.selectbox("Tipo de Factura", ["Factura A", "Factura B", "Factura C", "REMITO", "NOTA DE CREDITO", "NOTA DE DEBITO"])
     
     st.divider()
     
-    # 2. Campos numéricos
     c1, c2 = st.columns(2)
     n21 = c1.number_input("Importe Neto (21%)", min_value=0.0, step=0.01)
     n10 = c2.number_input("Importe Neto (10.5%)", min_value=0.0, step=0.01)
@@ -710,22 +723,23 @@ elif sel == "CARGA GASTOS":
     
     nograv = st.number_input("Conceptos No Gravados", min_value=0.0, step=0.01)
 
-    # --- CÁLCULO DINÁMICO (Se actualiza al instante) ---
+    # --- CÁLCULO DINÁMICO ---
     iva21 = n21 * 0.21
     iva10 = n10 * 0.105
     total_calculado = (n21 + iva21) + (n10 + iva10) + r_iva + r_gan + r_iibb + nograv
     
+    # Asociación AFIP: NC resta, ND suma
     if tipo_f == "NOTA DE CREDITO":
-        total_calculado = -total_calculado
+        total_calculado = -abs(total_calculado)
+    elif tipo_f == "NOTA DE DEBITO":
+        total_calculado = abs(total_calculado)
 
-    # 3. Visualización de Resultados antes de registrar
     st.markdown("---")
     res1, res2, res3 = st.columns(3)
     res1.metric("IVA 21%", f"$ {iva21:,.2f}")
     res2.metric("IVA 10.5%", f"$ {iva10:,.2f}")
     res3.subheader(f"TOTAL: $ {total_calculado:,.2f}")
     
-    # 4. Botón de Registro Final
     if st.button("✅ REGISTRAR COMPROBANTE FINAL"):
         if prov_sel:
             ng = pd.DataFrame([[fecha_comp, prov_sel, pv, tipo_f, n21, n10, r_iva, r_gan, r_iibb, nograv, total_calculado]], 
@@ -763,10 +777,3 @@ elif sel == "HISTORICO COMPRAS":
                 st.session_state.compras = st.session_state.compras.drop(i)
                 guardar_datos("compras", st.session_state.compras); st.rerun()
             st.divider()
-
-
-
-
-
-
-
