@@ -11,12 +11,11 @@ import base64
 # --- 1. CONFIGURACIÓN Y CONEXIÓN ---
 st.set_page_config(page_title="CHACAGEST - GESTIÓN TOTAL", page_icon="🚛", layout="wide")
 
-# Columnas definidas como constantes para uso global
 COL_CLIENTES = ["Razón Social", "CUIT / CUIL / DNI *", "Email", "Teléfono", "Dirección Fiscal", "Localidad", "Provincia", "Condición IVA", "Condición de Venta"]
 COL_VIAJES = ["Fecha Carga", "Cliente", "Fecha Viaje", "Origen", "Destino", "Patente / Móvil", "Importe", "Tipo Comp", "Nro Comp Asoc"]
 COL_PRESUPUESTOS = ["Fecha Emisión", "Cliente", "Vencimiento", "Detalle", "Tipo Móvil", "Importe"]
 COL_TESORERIA = ["Fecha", "Tipo", "Caja/Banco", "Concepto", "Cliente/Proveedor", "Monto", "Ref AFIP"]
-COL_PROVEEDORES = ["Razón Social", "CUIT/DNI", "Cuenta de Gastos", "Categoría IVA", "CBU", "Alias"]  # ← AGREGADO CBU y Alias
+COL_PROVEEDORES = ["Razón Social", "CUIT/DNI", "Cuenta de Gastos", "Categoría IVA", "CBU", "Alias"]
 COL_COMPRAS = ["Fecha", "Proveedor", "Punto Venta", "Tipo Factura", "Neto 21", "Neto 10.5", "Ret IVA", "Ret Ganancia", "Ret IIBB", "No Gravados", "Total"]
 
 def conectar_google():
@@ -67,7 +66,6 @@ def cargar_datos():
             ws_prov = sh.worksheet("proveedores")
             datos_prov = ws_prov.get_all_records()
             df_prov = pd.DataFrame(datos_prov) if datos_prov else pd.DataFrame(columns=COL_PROVEEDORES)
-            # Si la hoja existente no tiene CBU/Alias, las agrega vacías
             for col in ["CBU", "Alias"]:
                 if col not in df_prov.columns:
                     df_prov[col] = "-"
@@ -423,8 +421,12 @@ if sel == "CALENDARIO":
 
 elif sel == "CLIENTES":
     st.header("👤 Gestión de Clientes")
+    # ── Mensaje de confirmación fuera del form para que sea visible tras el rerun ──
+    if st.session_state.get("msg_cliente"):
+        st.success(st.session_state.msg_cliente)
+        st.session_state.msg_cliente = None
     with st.expander("➕ ALTA DE NUEVO CLIENTE", expanded=False):
-        with st.form("f_cli", clear_on_submit=True):
+        with st.form("f_cli", clear_on_submit=True):    # clear_on_submit limpia los campos
             c1, c2 = st.columns(2)
             r      = c1.text_input("Razón Social *")
             cuit   = c2.text_input("CUIT *")
@@ -440,8 +442,10 @@ elif sel == "CLIENTES":
                     nueva_fila = pd.DataFrame([[r, cuit, mail, tel, dir_f, loc, prov, c_iva, c_vta]], columns=COL_CLIENTES)
                     st.session_state.clientes = pd.concat([st.session_state.clientes, nueva_fila], ignore_index=True)
                     guardar_datos("clientes", st.session_state.clientes)
-                    st.success("Cliente guardado")
+                    st.session_state.msg_cliente = f"✅ Cliente '{r}' registrado correctamente."
                     st.rerun()
+                else:
+                    st.warning("Completá Razón Social y CUIT para continuar.")
     st.subheader("📋 Base de Clientes")
     if not st.session_state.clientes.empty:
         for i, row in st.session_state.clientes.iterrows():
@@ -478,7 +482,10 @@ elif sel == "CLIENTES":
 
 elif sel == "CARGA VIAJE":
     st.header("🚛 Registro de Viaje")
-    with st.form("f_v"):
+    if st.session_state.get("msg_viaje"):
+        st.success(st.session_state.msg_viaje)
+        st.session_state.msg_viaje = None
+    with st.form("f_v", clear_on_submit=True):          # ← clear_on_submit agregado
         cli  = st.selectbox("Seleccionar Cliente", st.session_state.clientes['Razón Social'].unique() if not st.session_state.clientes.empty else [""])
         c1, c2 = st.columns(2)
         f_v  = c1.date_input("Fecha")
@@ -488,15 +495,22 @@ elif sel == "CARGA VIAJE":
         imp  = st.number_input("Importe Neto $", min_value=0.0)
         cond = st.selectbox("Tipo de Pago", ["Cuenta Corriente", "Contado"])
         if st.form_submit_button("GUARDAR VIAJE"):
-            nv = pd.DataFrame([[date.today(), cli, f_v, orig, dest, pat, imp, f"Factura ({cond})", "-"]], columns=COL_VIAJES)
-            st.session_state.viajes = pd.concat([st.session_state.viajes, nv], ignore_index=True)
-            guardar_datos("viajes", st.session_state.viajes)
-            st.success("Viaje registrado"); st.rerun()
+            if cli and imp > 0:
+                nv = pd.DataFrame([[date.today(), cli, f_v, orig, dest, pat, imp, f"Factura ({cond})", "-"]], columns=COL_VIAJES)
+                st.session_state.viajes = pd.concat([st.session_state.viajes, nv], ignore_index=True)
+                guardar_datos("viajes", st.session_state.viajes)
+                st.session_state.msg_viaje = f"✅ Viaje de '{cli}' registrado correctamente por $ {imp:,.2f}."
+                st.rerun()
+            else:
+                st.warning("Seleccioná un cliente y completá el importe.")
 
 elif sel == "PRESUPUESTOS":
     st.header("📝 Gestión de Presupuestos")
     tab_crear, tab_historial = st.tabs(["🆕 Crear Presupuesto", "📂 Historial y Descargas"])
     with tab_crear:
+        if st.session_state.get("msg_presupuesto"):
+            st.success(st.session_state.msg_presupuesto)
+            st.session_state.msg_presupuesto = None
         with st.form("f_presu", clear_on_submit=True):
             c1, c2   = st.columns(2)
             p_cli    = c1.selectbox("Cliente", st.session_state.clientes['Razón Social'].unique() if not st.session_state.clientes.empty else [""])
@@ -511,7 +525,10 @@ elif sel == "PRESUPUESTOS":
                     nuevo_p = pd.DataFrame([[p_f_emi, p_cli, p_f_venc, p_det, p_movil, p_imp]], columns=COL_PRESUPUESTOS)
                     st.session_state.presupuestos = pd.concat([st.session_state.presupuestos, nuevo_p], ignore_index=True)
                     guardar_datos("presupuestos", st.session_state.presupuestos)
-                    st.success("Presupuesto guardado con éxito"); st.rerun()
+                    st.session_state.msg_presupuesto = f"✅ Presupuesto para '{p_cli}' guardado por $ {p_imp:,.2f}."
+                    st.rerun()
+                else:
+                    st.warning("Seleccioná cliente y completá el importe.")
     with tab_historial:
         if not st.session_state.presupuestos.empty:
             for i in reversed(st.session_state.presupuestos.index):
@@ -536,32 +553,46 @@ elif sel == "TESORERIA":
     tab_ing, tab_egr, tab_cob, tab_ver, tab_tras, tab_op = st.tabs(["📥 INGRESOS VARIOS", "📤 EGRESOS VARIOS", "🧾 COBRANZA VIAJE", "📊 VER MOVIMIENTOS", "🔄 TRASPASO", "💸 ORDEN DE PAGO"])
 
     with tab_ing:
-        with st.form("f_ing_var"):
+        if st.session_state.get("msg_ingreso"):
+            st.success(st.session_state.msg_ingreso)
+            st.session_state.msg_ingreso = None
+        with st.form("f_ing_var", clear_on_submit=True):   # ← clear_on_submit agregado
             f   = st.date_input("Fecha", date.today())
             cj  = st.selectbox("Caja Destino", opc_cajas)
             con = st.text_input("Concepto")
             mon = st.number_input("Monto $", min_value=0.0)
             if st.form_submit_button("REGISTRAR INGRESO"):
-                nt = pd.DataFrame([[f, "INGRESO VARIO", cj, con, "Varios", mon, "-"]], columns=COL_TESORERIA)
-                st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
-                guardar_datos("tesoreria", st.session_state.tesoreria)
-                st.success("Registrado"); st.rerun()
+                if mon > 0:
+                    nt = pd.DataFrame([[f, "INGRESO VARIO", cj, con, "Varios", mon, "-"]], columns=COL_TESORERIA)
+                    st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
+                    guardar_datos("tesoreria", st.session_state.tesoreria)
+                    st.session_state.msg_ingreso = f"✅ Ingreso de $ {mon:,.2f} registrado en {cj}."
+                    st.rerun()
+                else:
+                    st.warning("Ingresá un monto mayor a cero.")
 
     with tab_egr:
-        with st.form("f_egr_var"):
+        if st.session_state.get("msg_egreso"):
+            st.success(st.session_state.msg_egreso)
+            st.session_state.msg_egreso = None
+        with st.form("f_egr_var", clear_on_submit=True):   # ← clear_on_submit agregado
             f   = st.date_input("Fecha", date.today())
             cj  = st.selectbox("Caja Origen", opc_cajas)
             con = st.text_input("Concepto")
             mon = st.number_input("Monto $", min_value=0.0)
             if st.form_submit_button("REGISTRAR EGRESO"):
-                nt = pd.DataFrame([[f, "EGRESO VARIO", cj, con, "Varios", -mon, "-"]], columns=COL_TESORERIA)
-                st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
-                guardar_datos("tesoreria", st.session_state.tesoreria)
-                st.success("Registrado"); st.rerun()
+                if mon > 0:
+                    nt = pd.DataFrame([[f, "EGRESO VARIO", cj, con, "Varios", -mon, "-"]], columns=COL_TESORERIA)
+                    st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
+                    guardar_datos("tesoreria", st.session_state.tesoreria)
+                    st.session_state.msg_egreso = f"✅ Egreso de $ {mon:,.2f} registrado desde {cj}."
+                    st.rerun()
+                else:
+                    st.warning("Ingresá un monto mayor a cero.")
 
     with tab_cob:
         if "html_recibo_ready" not in st.session_state: st.session_state.html_recibo_ready = None
-        with st.form("f_cob"):
+        with st.form("f_cob", clear_on_submit=True):       # ← clear_on_submit agregado
             c_sel = st.selectbox("Cliente", st.session_state.clientes['Razón Social'].unique() if not st.session_state.clientes.empty else [""])
             cj    = st.selectbox("Forma de Cobro", opc_cajas + ["OTROS"])
             mon   = st.number_input("Monto $", min_value=0.0)
@@ -584,7 +615,7 @@ elif sel == "TESORERIA":
                 else:
                     st.warning("Completá el cliente y el monto antes de continuar.")
         if st.session_state.html_recibo_ready:
-            st.success("Cobranza realizada con éxito.")
+            st.success(f"✅ Cobranza de '{st.session_state.cli_ready}' registrada con éxito.")
             st.download_button("🖨️ IMPRIMIR RECIBO PDF/HTML", st.session_state.html_recibo_ready, file_name=f"Recibo_{st.session_state.cli_ready}.html", mime="text/html")
             if st.button("Limpiar"): st.session_state.html_recibo_ready = None; st.rerun()
 
@@ -595,21 +626,28 @@ elif sel == "TESORERIA":
         st.dataframe(df_ver, use_container_width=True)
 
     with tab_tras:
-        with st.form("f_tras"):
+        if st.session_state.get("msg_traspaso"):
+            st.success(st.session_state.msg_traspaso)
+            st.session_state.msg_traspaso = None
+        with st.form("f_tras", clear_on_submit=True):      # ← clear_on_submit agregado
             o = st.selectbox("Desde", opc_cajas)
             d = st.selectbox("Hacia", opc_cajas)
             m = st.number_input("Monto a Traspasar", min_value=0.0)
             if st.form_submit_button("EJECUTAR"):
-                tr1 = pd.DataFrame([[date.today(), "TRASPASO", o, f"Hacia {d}", "INTERNO", -m, "-"]], columns=COL_TESORERIA)
-                tr2 = pd.DataFrame([[date.today(), "TRASPASO", d, f"Desde {o}", "INTERNO",  m, "-"]], columns=COL_TESORERIA)
-                st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, tr1, tr2], ignore_index=True)
-                guardar_datos("tesoreria", st.session_state.tesoreria)
-                st.rerun()
+                if m > 0:
+                    tr1 = pd.DataFrame([[date.today(), "TRASPASO", o, f"Hacia {d}", "INTERNO", -m, "-"]], columns=COL_TESORERIA)
+                    tr2 = pd.DataFrame([[date.today(), "TRASPASO", d, f"Desde {o}", "INTERNO",  m, "-"]], columns=COL_TESORERIA)
+                    st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, tr1, tr2], ignore_index=True)
+                    guardar_datos("tesoreria", st.session_state.tesoreria)
+                    st.session_state.msg_traspaso = f"✅ Traspaso de $ {m:,.2f} de {o} hacia {d} ejecutado."
+                    st.rerun()
+                else:
+                    st.warning("Ingresá un monto mayor a cero.")
 
     with tab_op:
         st.subheader("Generar Orden de Pago a Proveedor")
         if "html_op_ready" not in st.session_state: st.session_state.html_op_ready = None
-        with st.form("f_op"):
+        with st.form("f_op", clear_on_submit=True):        # ← clear_on_submit agregado
             p_sel  = st.selectbox("Seleccionar Proveedor", st.session_state.proveedores['Razón Social'].unique() if not st.session_state.proveedores.empty else [""])
             cj_p   = st.selectbox("Caja de Salida", opc_cajas)
             mon_p  = st.number_input("Monto $", min_value=0.0)
@@ -629,8 +667,10 @@ elif sel == "TESORERIA":
                     })
                     st.session_state.prov_ready = p_sel
                     st.rerun()
+                else:
+                    st.warning("Seleccioná proveedor y completá el monto.")
         if st.session_state.html_op_ready:
-            st.success("Orden de Pago registrada con éxito.")
+            st.success(f"✅ Orden de Pago para '{st.session_state.prov_ready}' registrada con éxito.")
             st.download_button("🖨️ IMPRIMIR ORDEN DE PAGO", st.session_state.html_op_ready, file_name=f"OrdenPago_{st.session_state.prov_ready}.html", mime="text/html")
             if st.button("Limpiar OP"): st.session_state.html_op_ready = None; st.rerun()
 
@@ -666,6 +706,9 @@ elif sel == "COMPROBANTES":
 
 elif sel == "CARGA PROVEEDOR":
     st.header("👤 Gestión de Proveedores")
+    if st.session_state.get("msg_proveedor"):
+        st.success(st.session_state.msg_proveedor)
+        st.session_state.msg_proveedor = None
     with st.expander("➕ ALTA DE NUEVO PROVEEDOR", expanded=False):
         with st.form("f_prov", clear_on_submit=True):
             c1, c2  = st.columns(2)
@@ -674,14 +717,17 @@ elif sel == "CARGA PROVEEDOR":
             cuenta  = c1.selectbox("Cuenta de Gastos", ["COMBUSTIBLE", "REPARACION", "REPUESTO", "SERVICIO LUZ, GAS", "VARIOS"])
             cat_iva = c2.selectbox("Categoría IVA", ["Responsable Inscripto", "Exento en IVA", "Consumidor Final", "Monotributista", "No Inscripto"])
             c3, c4  = st.columns(2)
-            cbu     = c3.text_input("CBU")        # ← NUEVO
-            alias   = c4.text_input("Alias")      # ← NUEVO
+            cbu     = c3.text_input("CBU")
+            alias   = c4.text_input("Alias")
             if st.form_submit_button("REGISTRAR PROVEEDOR"):
                 if rs and doc:
                     np_row = pd.DataFrame([[rs, doc, cuenta, cat_iva, cbu, alias]], columns=COL_PROVEEDORES)
                     st.session_state.proveedores = pd.concat([st.session_state.proveedores, np_row], ignore_index=True)
                     guardar_datos("proveedores", st.session_state.proveedores)
-                    st.success("Proveedor registrado"); st.rerun()
+                    st.session_state.msg_proveedor = f"✅ Proveedor '{rs}' registrado correctamente."
+                    st.rerun()
+                else:
+                    st.warning("Completá Razón Social y CUIT/DNI para continuar.")
     st.subheader("📋 Base de Proveedores")
     if not st.session_state.proveedores.empty:
         for i, row in st.session_state.proveedores.iterrows():
@@ -703,8 +749,8 @@ elif sel == "CARGA PROVEEDOR":
                         n_rs    = ce1.text_input("Razón Social", value=row['Razón Social'])
                         n_doc   = ce2.text_input("CUIT/DNI", value=row['CUIT/DNI'])
                         ce3, ce4 = st.columns(2)
-                        n_cbu   = ce3.text_input("CBU", value=row['CBU'])       # ← NUEVO
-                        n_alias = ce4.text_input("Alias", value=row['Alias'])   # ← NUEVO
+                        n_cbu   = ce3.text_input("CBU", value=row['CBU'])
+                        n_alias = ce4.text_input("Alias", value=row['Alias'])
                         if st.form_submit_button("✅ Guardar"):
                             st.session_state.proveedores.loc[i] = [n_rs, n_doc, row['Cuenta de Gastos'], row['Categoría IVA'], n_cbu, n_alias]
                             guardar_datos("proveedores", st.session_state.proveedores)
@@ -713,6 +759,9 @@ elif sel == "CARGA PROVEEDOR":
 
 elif sel == "CARGA GASTOS":
     st.header("💸 Carga de Gastos")
+    if st.session_state.get("msg_gasto"):
+        st.success(st.session_state.msg_gasto)
+        st.session_state.msg_gasto = None
     with st.form("f_gasto", clear_on_submit=True):
         prov_sel = st.selectbox("Proveedor", st.session_state.proveedores['Razón Social'].unique() if not st.session_state.proveedores.empty else [""])
         c1, c2   = st.columns(2)
@@ -729,10 +778,14 @@ elif sel == "CARGA GASTOS":
         total    = (n21 * 1.21) + (n10 * 1.105) + r_iva + r_gan + r_iibb + nograv
         if tipo_f in ["NOTA DE CREDITO"]: total = -total
         if st.form_submit_button("REGISTRAR COMPROBANTE"):
-            ng = pd.DataFrame([[date.today(), prov_sel, pv, tipo_f, n21, n10, r_iva, r_gan, r_iibb, nograv, total]], columns=COL_COMPRAS)
-            st.session_state.compras = pd.concat([st.session_state.compras, ng], ignore_index=True)
-            guardar_datos("compras", st.session_state.compras)
-            st.success(f"Gasto guardado por total de $ {total:,.2f}"); st.rerun()
+            if total != 0:
+                ng = pd.DataFrame([[date.today(), prov_sel, pv, tipo_f, n21, n10, r_iva, r_gan, r_iibb, nograv, total]], columns=COL_COMPRAS)
+                st.session_state.compras = pd.concat([st.session_state.compras, ng], ignore_index=True)
+                guardar_datos("compras", st.session_state.compras)
+                st.session_state.msg_gasto = f"✅ Comprobante de '{prov_sel}' guardado por $ {total:,.2f}."
+                st.rerun()
+            else:
+                st.warning("Ingresá al menos un importe para registrar el comprobante.")
 
 elif sel == "CTA CTE PROVEEDOR":
     st.header("📊 Cuenta Corriente Individual")
@@ -743,13 +796,9 @@ elif sel == "CTA CTE PROVEEDOR":
         st.dataframe(df_p, use_container_width=True)
 
 elif sel == "CTA CTE GENERAL PROV":
-    # ══════════════════════════════════════════════════════
-    # MODIFICADO: se agrega CBU y Alias al estado general
-    # ══════════════════════════════════════════════════════
     st.header("🌎 Estado General de Proveedores")
     if not st.session_state.compras.empty:
         res_p = st.session_state.compras.groupby('Proveedor')['Total'].sum().reset_index()
-        # Merge con proveedores para traer CBU y Alias
         res_p = res_p.merge(
             st.session_state.proveedores[['Razón Social', 'CBU', 'Alias']],
             left_on='Proveedor', right_on='Razón Social', how='left'
