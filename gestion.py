@@ -323,117 +323,54 @@ with st.sidebar:
     except: pass
     st.markdown("---")
 
-    # ── CSS del menú ──
-    st.markdown("""
-        <style>
-        .menu-btn > button {
-            background: transparent !important;
-            color: #333 !important;
-            border: none !important;
-            border-radius: 8px !important;
-            text-align: left !important;
-            font-size: 15px !important;
-            font-weight: bold !important;
-            padding: 8px 12px !important;
-            width: 100% !important;
-            margin-bottom: 2px !important;
+    opciones_menu = ["DASHBOARD", "CALENDARIO", "VENTAS", "COMPRAS", "TESORERIA"]
+    iconos_menu   = ["bar-chart-line", "calendar3", "cart4", "bag-check", "safe"]
+
+    menu_principal = option_menu(
+        menu_title=None,
+        options=opciones_menu,
+        icons=iconos_menu,
+        default_index=0,
+        key="menu_p",
+        styles={
+            "container": {"padding": "0px", "background-color": "#f0f2f6"},
+            "nav-link": {"font-size": "15px", "font-weight": "bold"},
+            "nav-link-selected": {"background-color": "#5e2d61"},
         }
-        .menu-btn > button:hover { background: #e8e0f0 !important; }
-        .menu-btn-active > button {
-            background: #5e2d61 !important;
-            color: white !important;
-            border: none !important;
-            border-radius: 8px !important;
-            text-align: left !important;
-            font-size: 15px !important;
-            font-weight: bold !important;
-            padding: 8px 12px !important;
-            width: 100% !important;
-            margin-bottom: 2px !important;
-        }
-        .sub-btn > button {
-            background: white !important;
-            color: #444 !important;
-            border: 1px solid #e0e0e0 !important;
-            border-radius: 6px !important;
-            text-align: left !important;
-            font-size: 13px !important;
-            font-weight: normal !important;
-            padding: 5px 10px !important;
-            width: 100% !important;
-            margin-bottom: 2px !important;
-        }
-        .sub-btn-active > button {
-            background: linear-gradient(to right, #f39c12, #d35400) !important;
-            color: white !important;
-            border: none !important;
-            border-radius: 6px !important;
-            text-align: left !important;
-            font-size: 13px !important;
-            font-weight: bold !important;
-            padding: 5px 10px !important;
-            width: 100% !important;
-            margin-bottom: 2px !important;
-        }
-        </style>
-    """, unsafe_allow_html=True)
+    )
 
-    # ── Inicializar estado ──
-    if "menu_activo" not in st.session_state:
-        st.session_state.menu_activo = "CALENDARIO"
-    if "sub_activo" not in st.session_state:
-        st.session_state.sub_activo = None
-
-    def boton_menu(label, key):
-        activo = st.session_state.menu_activo == key
-        css = "menu-btn-active" if activo else "menu-btn"
-        st.markdown(f'<div class="{css}">', unsafe_allow_html=True)
-        if st.button(label, key=f"m_{key}", use_container_width=True):
-            st.session_state.menu_activo = key
-            st.session_state.sub_activo  = None
-            st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    def boton_sub(label, key):
-        activo = st.session_state.sub_activo == key
-        css = "sub-btn-active" if activo else "sub-btn"
-        st.markdown(f'<div class="{css}">', unsafe_allow_html=True)
-        if st.button(label, key=f"s_{key}", use_container_width=True):
-            st.session_state.sub_activo = key
-            st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    # ── Renderizar menú ──
-    boton_menu("📅  CALENDARIO", "CALENDARIO")
-    boton_menu("📊  DASHBOARD",  "DASHBOARD")
-
-    # VENTAS (con submenú inline)
-    boton_menu("🛒  VENTAS",     "VENTAS")
-    if st.session_state.menu_activo == "VENTAS":
-        st.markdown("<div style='margin-left:12px; border-left:3px solid #f39c12; padding-left:8px; margin-bottom:4px;'>", unsafe_allow_html=True)
-        boton_sub("👥 Clientes",            "CLIENTES")
-        boton_sub("🚛 Carga de Viaje",      "CARGA VIAJE")
-        boton_sub("📝 Presupuestos",        "PRESUPUESTOS")
-        boton_sub("📑 Cta Cte Individual",  "CTA CTE INDIVIDUAL")
-        boton_sub("🌎 Cta Cte General",     "CTA CTE GENERAL")
-        boton_sub("📜 Comprobantes",        "COMPROBANTES")
+    sel_sub = None
+    if menu_principal == "VENTAS":
+        st.markdown("<div style='margin-left: 20px; border-left: 2px solid #f39c12; padding-left: 10px;'>", unsafe_allow_html=True)
+        sel_sub = option_menu(
+            menu_title=None,
+            options=["CLIENTES", "CARGA VIAJE", "PRESUPUESTOS", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"],
+            icons=["people", "truck", "file-earmark-spreadsheet", "person-vcard", "globe", "file-text"],
+            default_index=0,
+            key="menu_s",
+            styles={
+                "container": {"background-color": "transparent", "padding": "0px"},
+                "nav-link": {"font-size": "13px", "text-align": "left", "margin": "2px"},
+                "nav-link-selected": {"background-color": "#f39c12", "color": "white"},
+            }
+        )
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # COMPRAS (con submenú inline)
-    boton_menu("🛍️  COMPRAS",    "COMPRAS")
-    if st.session_state.menu_activo == "COMPRAS":
-        st.markdown("<div style='margin-left:12px; border-left:3px solid #f39c12; padding-left:8px; margin-bottom:4px;'>", unsafe_allow_html=True)
-        boton_sub("👤 Carga Proveedor",       "CARGA PROVEEDOR")
-        boton_sub("💸 Carga de Gastos",       "CARGA GASTOS")
-        boton_sub("📊 Cta Cte Proveedor",     "CTA CTE PROVEEDOR")
-        boton_sub("🌎 Cta Cte Gral Proveed.", "CTA CTE GENERAL PROV")
-        boton_sub("🕐 Histórico Compras",     "HISTORICO COMPRAS")
+    elif menu_principal == "COMPRAS":
+        st.markdown("<div style='margin-left: 20px; border-left: 2px solid #f39c12; padding-left: 10px;'>", unsafe_allow_html=True)
+        sel_sub = option_menu(
+            menu_title=None,
+            options=["CARGA PROVEEDOR", "CARGA GASTOS", "CTA CTE PROVEEDOR", "CTA CTE GENERAL PROV", "HISTORICO COMPRAS"],
+            icons=["person-plus", "receipt", "person-vcard", "globe", "clock-history"],
+            default_index=0,
+            key="menu_c",
+            styles={
+                "container": {"background-color": "transparent", "padding": "0px"},
+                "nav-link": {"font-size": "13px", "text-align": "left", "margin": "2px"},
+                "nav-link-selected": {"background-color": "#f39c12", "color": "white"},
+            }
+        )
         st.markdown("</div>", unsafe_allow_html=True)
-
-    boton_menu("💰  TESORERIA",  "TESORERIA")
-
-    menu_principal = st.session_state.menu_activo
-    sel_sub        = st.session_state.sub_activo
 
     st.markdown("---")
     if st.button("🔄 Sincronizar"):
@@ -453,7 +390,7 @@ with st.sidebar:
 
 # ── Definición de sel ── SIEMPRE después del sidebar
 if menu_principal in ["VENTAS", "COMPRAS"]:
-    sel = sel_sub if sel_sub else None
+    sel = sel_sub
 else:
     sel = menu_principal
 
@@ -462,7 +399,7 @@ else:
 # =============================================================
 # DASHBOARD
 # =============================================================
-elif sel == "DASHBOARD":
+if sel == "DASHBOARD":
     st.header("📊 Dashboard de Control Financiero")
 
     MESES_NOMBRES = {
@@ -703,7 +640,7 @@ elif sel == "DASHBOARD":
 # =============================================================
 # CALENDARIO
 # =============================================================
-if sel == "CALENDARIO":
+elif sel == "CALENDARIO":
     st.header("📅 Agenda de Viajes")
     if "viaje_ver" not in st.session_state:
         st.session_state.viaje_ver = None
