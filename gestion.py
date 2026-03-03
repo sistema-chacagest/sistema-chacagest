@@ -16,7 +16,7 @@ COL_CLIENTES = ["Razón Social", "CUIT / CUIL / DNI *", "Email", "Teléfono", "D
 COL_VIAJES = ["Fecha Carga", "Cliente", "Fecha Viaje", "Origen", "Destino", "Patente / Móvil", "Importe", "Tipo Comp", "Nro Comp Asoc"]
 COL_PRESUPUESTOS = ["Fecha Emisión", "Cliente", "Vencimiento", "Detalle", "Tipo Móvil", "Importe"]
 COL_TESORERIA = ["Fecha", "Tipo", "Caja/Banco", "Concepto", "Cliente/Proveedor", "Monto", "Ref AFIP"]
-COL_PROVEEDORES = ["Razón Social", "CUIT/DNI", "Cuenta de Gastos", "Categoría IVA"]
+COL_PROVEEDORES = ["Razón Social", "CUIT/DNI", "Cuenta de Gastos", "Categoría IVA", "CBU", "Alias"]  # ← AGREGADO CBU y Alias
 COL_COMPRAS = ["Fecha", "Proveedor", "Punto Venta", "Tipo Factura", "Neto 21", "Neto 10.5", "Ret IVA", "Ret Ganancia", "Ret IIBB", "No Gravados", "Total"]
 
 def conectar_google():
@@ -67,6 +67,10 @@ def cargar_datos():
             ws_prov = sh.worksheet("proveedores")
             datos_prov = ws_prov.get_all_records()
             df_prov = pd.DataFrame(datos_prov) if datos_prov else pd.DataFrame(columns=COL_PROVEEDORES)
+            # Si la hoja existente no tiene CBU/Alias, las agrega vacías
+            for col in ["CBU", "Alias"]:
+                if col not in df_prov.columns:
+                    df_prov[col] = "-"
         except:
             df_prov = pd.DataFrame(columns=COL_PROVEEDORES)
 
@@ -556,11 +560,6 @@ elif sel == "TESORERIA":
                 st.success("Registrado"); st.rerun()
 
     with tab_cob:
-        # ══════════════════════════════════════════════════════
-        # FIX: Se usan COL_TESORERIA y COL_VIAJES (constantes)
-        # en lugar de .columns del DataFrame vacío → bug fixed
-        # Se agrega validación: cliente seleccionado y monto > 0
-        # ══════════════════════════════════════════════════════
         if "html_recibo_ready" not in st.session_state: st.session_state.html_recibo_ready = None
         with st.form("f_cob"):
             c_sel = st.selectbox("Cliente", st.session_state.clientes['Razón Social'].unique() if not st.session_state.clientes.empty else [""])
@@ -674,9 +673,12 @@ elif sel == "CARGA PROVEEDOR":
             doc     = c2.text_input("CUIT o DNI")
             cuenta  = c1.selectbox("Cuenta de Gastos", ["COMBUSTIBLE", "REPARACION", "REPUESTO", "SERVICIO LUZ, GAS", "VARIOS"])
             cat_iva = c2.selectbox("Categoría IVA", ["Responsable Inscripto", "Exento en IVA", "Consumidor Final", "Monotributista", "No Inscripto"])
+            c3, c4  = st.columns(2)
+            cbu     = c3.text_input("CBU")        # ← NUEVO
+            alias   = c4.text_input("Alias")      # ← NUEVO
             if st.form_submit_button("REGISTRAR PROVEEDOR"):
                 if rs and doc:
-                    np_row = pd.DataFrame([[rs, doc, cuenta, cat_iva]], columns=COL_PROVEEDORES)
+                    np_row = pd.DataFrame([[rs, doc, cuenta, cat_iva, cbu, alias]], columns=COL_PROVEEDORES)
                     st.session_state.proveedores = pd.concat([st.session_state.proveedores, np_row], ignore_index=True)
                     guardar_datos("proveedores", st.session_state.proveedores)
                     st.success("Proveedor registrado"); st.rerun()
@@ -686,7 +688,7 @@ elif sel == "CARGA PROVEEDOR":
             with st.container():
                 c_inf, c_ed, c_el = st.columns([0.7, 0.15, 0.15])
                 c_inf.markdown(f"**{row['Razón Social']}** | CUIT: {row['CUIT/DNI']}")
-                c_inf.caption(f"📂 Cuenta: {row['Cuenta de Gastos']} | {row['Categoría IVA']}")
+                c_inf.caption(f"📂 Cuenta: {row['Cuenta de Gastos']} | {row['Categoría IVA']} | 🏦 CBU: {row['CBU']} | Alias: {row['Alias']}")
                 if c_ed.button("📝 Editar", key=f"edit_p_{i}"): st.session_state[f"edit_p_mode_{i}"] = True
                 if c_el.button("🗑️", key=f"del_p_{i}"):
                     tiene_compras = not st.session_state.compras[st.session_state.compras['Proveedor'] == row['Razón Social']].empty
@@ -698,10 +700,13 @@ elif sel == "CARGA PROVEEDOR":
                 if st.session_state.get(f"edit_p_mode_{i}", False):
                     with st.form(f"f_edit_p_{i}"):
                         ce1, ce2 = st.columns(2)
-                        n_rs  = ce1.text_input("Razón Social", value=row['Razón Social'])
-                        n_doc = ce2.text_input("CUIT/DNI", value=row['CUIT/DNI'])
+                        n_rs    = ce1.text_input("Razón Social", value=row['Razón Social'])
+                        n_doc   = ce2.text_input("CUIT/DNI", value=row['CUIT/DNI'])
+                        ce3, ce4 = st.columns(2)
+                        n_cbu   = ce3.text_input("CBU", value=row['CBU'])       # ← NUEVO
+                        n_alias = ce4.text_input("Alias", value=row['Alias'])   # ← NUEVO
                         if st.form_submit_button("✅ Guardar"):
-                            st.session_state.proveedores.loc[i] = [n_rs, n_doc, row['Cuenta de Gastos'], row['Categoría IVA']]
+                            st.session_state.proveedores.loc[i] = [n_rs, n_doc, row['Cuenta de Gastos'], row['Categoría IVA'], n_cbu, n_alias]
                             guardar_datos("proveedores", st.session_state.proveedores)
                             st.session_state[f"edit_p_mode_{i}"] = False; st.rerun()
             st.divider()
@@ -738,10 +743,22 @@ elif sel == "CTA CTE PROVEEDOR":
         st.dataframe(df_p, use_container_width=True)
 
 elif sel == "CTA CTE GENERAL PROV":
+    # ══════════════════════════════════════════════════════
+    # MODIFICADO: se agrega CBU y Alias al estado general
+    # ══════════════════════════════════════════════════════
     st.header("🌎 Estado General de Proveedores")
     if not st.session_state.compras.empty:
         res_p = st.session_state.compras.groupby('Proveedor')['Total'].sum().reset_index()
-        st.table(res_p.style.format({"Total": "$ {:,.2f}"}))
+        # Merge con proveedores para traer CBU y Alias
+        res_p = res_p.merge(
+            st.session_state.proveedores[['Razón Social', 'CBU', 'Alias']],
+            left_on='Proveedor', right_on='Razón Social', how='left'
+        ).drop(columns='Razón Social')
+        res_p = res_p[['Proveedor', 'CBU', 'Alias', 'Total']]
+        st.dataframe(
+            res_p.style.format({"Total": "$ {:,.2f}"}),
+            use_container_width=True
+        )
 
 elif sel == "HISTORICO COMPRAS":
     st.header("📜 Comprobantes Cargados")
