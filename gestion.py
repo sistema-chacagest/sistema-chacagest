@@ -271,9 +271,50 @@ def generar_html_presupuesto(p_data):
     </html>
     """
 
-# --- 2. LOGIN ---
+# --- 2. SISTEMA DE USUARIOS Y ROLES ---
+# ─────────────────────────────────────────────────────────────────────────────
+# USUARIOS DEL SISTEMA
+# Estructura: "usuario": {"password": "...", "rol": "admin"/"operador", "caja": "NOMBRE CAJA"}
+# rol "admin"   → acceso total (Dashboard, todas las cajas, todo el sistema)
+# rol "operador"→ acceso a su caja propia, carga viajes/gastos/clientes/proveedores, sin Dashboard
+#
+# Para agregar un nuevo usuario: copiar uno de los bloques de operador y editar.
+# Las cajas de operadores deben coincidir con los nombres en opc_cajas (más abajo).
+# ─────────────────────────────────────────────────────────────────────────────
+USUARIOS = {
+    "admin": {
+        "password": "chaca2026",
+        "rol": "admin",
+        "caja": None,           # Admin no tiene caja asignada, ve todas
+        "nombre": "Administrador"
+    },
+    "coti": {
+        "password": "coti2026",
+        "rol": "operador",
+        "caja": "CAJA COTI",    # Solo puede ver y operar CAJA COTI
+        "nombre": "Coti"
+    },
+    "tato": {
+        "password": "tato2026",
+        "rol": "operador",
+        "caja": "CAJA TATO",    # Solo puede ver y operar CAJA TATO
+        "nombre": "Tato"
+    },
+    # ── Para agregar más usuarios, descomentá y editá el bloque: ──
+    # "nuevo_usuario": {
+    #     "password": "password123",
+    #     "rol": "operador",
+    #     "caja": "CAJA NUEVO",
+    #     "nombre": "Nombre Visible"
+    # },
+}
+
 if "autenticado" not in st.session_state:
     st.session_state.autenticado = False
+    st.session_state.usuario_actual = None
+    st.session_state.rol_actual = None
+    st.session_state.caja_propia = None
+    st.session_state.nombre_usuario = None
 
 if not st.session_state.autenticado:
     col1, col2, col3 = st.columns([1, 1, 1])
@@ -284,11 +325,23 @@ if not st.session_state.autenticado:
         u = st.text_input("Usuario")
         p = st.text_input("Contraseña", type="password")
         if st.button("INGRESAR"):
-            if u == "admin" and p == "chaca2026":
-                st.session_state.autenticado = True
+            u_lower = u.strip().lower()
+            if u_lower in USUARIOS and USUARIOS[u_lower]["password"] == p.strip():
+                datos_usuario = USUARIOS[u_lower]
+                st.session_state.autenticado    = True
+                st.session_state.usuario_actual = u_lower
+                st.session_state.rol_actual     = datos_usuario["rol"]
+                st.session_state.caja_propia    = datos_usuario["caja"]
+                st.session_state.nombre_usuario = datos_usuario["nombre"]
                 st.rerun()
-            else: st.error("Acceso denegado")
+            else:
+                st.error("Usuario o contraseña incorrectos")
     st.stop()
+
+# Helpers de rol
+es_admin    = st.session_state.rol_actual == "admin"
+es_operador = st.session_state.rol_actual == "operador"
+caja_propia = st.session_state.caja_propia
 
 # --- 3. INICIALIZACIÓN ---
 if 'clientes' not in st.session_state or 'viajes' not in st.session_state:
@@ -323,8 +376,19 @@ with st.sidebar:
     except: pass
     st.markdown("---")
 
-    opciones_menu = ["CALENDARIO", "DASHBOARD", "VENTAS", "COMPRAS", "TESORERIA"]
-    iconos_menu   = ["bar-chart-line", "calendar3", "cart4", "bag-check", "safe"]
+    # ── Badge de usuario logueado ──
+    rol_badge = "🔑 Admin" if es_admin else f"👤 {st.session_state.nombre_usuario}"
+    caja_badge = "" if es_admin else f" | 🏦 {caja_propia}"
+    st.markdown(f"<div style='background:#5e2d61;color:white;padding:8px 12px;border-radius:8px;font-size:13px;font-weight:bold;margin-bottom:8px;'>{rol_badge}{caja_badge}</div>", unsafe_allow_html=True)
+    st.markdown("---")
+
+    # ── Menú principal: Admin ve todo, Operador no ve Dashboard ──
+    if es_admin:
+        opciones_menu = ["CALENDARIO", "DASHBOARD", "VENTAS", "COMPRAS", "TESORERIA"]
+        iconos_menu   = ["calendar3", "bar-chart-line", "cart4", "bag-check", "safe"]
+    else:
+        opciones_menu = ["CALENDARIO", "VENTAS", "COMPRAS", "TESORERIA"]
+        iconos_menu   = ["calendar3", "cart4", "bag-check", "safe"]
 
     menu_principal = option_menu(
         menu_title=None,
@@ -342,10 +406,17 @@ with st.sidebar:
     sel_sub = None
     if menu_principal == "VENTAS":
         st.markdown("<div style='margin-left: 20px; border-left: 2px solid #f39c12; padding-left: 10px;'>", unsafe_allow_html=True)
+        # Operadores no ven CTA CTE GENERAL ni COMPROBANTES (movimientos de otros)
+        if es_admin:
+            opciones_ventas = ["CLIENTES", "CARGA VIAJE", "PRESUPUESTOS", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"]
+            iconos_ventas   = ["people", "truck", "file-earmark-spreadsheet", "person-vcard", "globe", "file-text"]
+        else:
+            opciones_ventas = ["CLIENTES", "CARGA VIAJE", "PRESUPUESTOS", "CTA CTE INDIVIDUAL", "COMPROBANTES"]
+            iconos_ventas   = ["people", "truck", "file-earmark-spreadsheet", "person-vcard", "file-text"]
         sel_sub = option_menu(
             menu_title=None,
-            options=["CLIENTES", "CARGA VIAJE", "PRESUPUESTOS", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"],
-            icons=["people", "truck", "file-earmark-spreadsheet", "person-vcard", "globe", "file-text"],
+            options=opciones_ventas,
+            icons=iconos_ventas,
             default_index=0,
             key="menu_s",
             styles={
@@ -358,10 +429,17 @@ with st.sidebar:
 
     elif menu_principal == "COMPRAS":
         st.markdown("<div style='margin-left: 20px; border-left: 2px solid #f39c12; padding-left: 10px;'>", unsafe_allow_html=True)
+        # Operadores no ven CTA CTE GENERAL PROV (estados globales)
+        if es_admin:
+            opciones_compras = ["CARGA PROVEEDOR", "CARGA GASTOS", "CTA CTE PROVEEDOR", "CTA CTE GENERAL PROV", "HISTORICO COMPRAS"]
+            iconos_compras   = ["person-plus", "receipt", "person-vcard", "globe", "clock-history"]
+        else:
+            opciones_compras = ["CARGA PROVEEDOR", "CARGA GASTOS", "CTA CTE PROVEEDOR", "HISTORICO COMPRAS"]
+            iconos_compras   = ["person-plus", "receipt", "person-vcard", "clock-history"]
         sel_sub = option_menu(
             menu_title=None,
-            options=["CARGA PROVEEDOR", "CARGA GASTOS", "CTA CTE PROVEEDOR", "CTA CTE GENERAL PROV", "HISTORICO COMPRAS"],
-            icons=["person-plus", "receipt", "person-vcard", "globe", "clock-history"],
+            options=opciones_compras,
+            icons=iconos_compras,
             default_index=0,
             key="menu_c",
             styles={
@@ -385,7 +463,8 @@ with st.sidebar:
             st.rerun()
 
     if st.button("🚪 Cerrar Sesión"):
-        st.session_state.autenticado = False
+        for key in ["autenticado", "usuario_actual", "rol_actual", "caja_propia", "nombre_usuario"]:
+            st.session_state[key] = False if key == "autenticado" else None
         st.rerun()
 
 # ── Definición de sel ── SIEMPRE después del sidebar
@@ -393,6 +472,11 @@ if menu_principal in ["VENTAS", "COMPRAS"]:
     sel = sel_sub
 else:
     sel = menu_principal
+
+# ── Bloqueo de seguridad: si operador intenta acceder a DASHBOARD vía URL ──
+if sel == "DASHBOARD" and es_operador:
+    st.error("🚫 Acceso denegado. Solo el administrador puede ver el Dashboard.")
+    st.stop()
 
 # --- 6. MÓDULOS ---
 
@@ -796,8 +880,32 @@ elif sel == "PRESUPUESTOS":
 
 elif sel == "TESORERIA":
     st.header("💰 Tesorería")
-    opc_cajas = ["CAJA COTI", "CAJA TATO", "BANCO GALICIA", "BANCO PROVINCIA", "TARJETA DE CREDITO", "BANCO SUPERVIELLE", "DOLAR CAJA COTI", "DOLAR CAJA TATO"]
-    tab_ing, tab_egr, tab_cob, tab_ver, tab_tras, tab_op = st.tabs(["📥 INGRESOS VARIOS", "📤 EGRESOS VARIOS", "🧾 COBRANZA VIAJE", "📊 VER MOVIMIENTOS", "🔄 TRASPASO", "💸 ORDEN DE PAGO"])
+
+    # ── Cajas disponibles según rol ──
+    # Admin ve todas. Operador solo ve su caja asignada.
+    TODAS_CAJAS = ["CAJA COTI", "CAJA TATO", "BANCO GALICIA", "BANCO PROVINCIA", "TARJETA DE CREDITO", "BANCO SUPERVIELLE", "DOLAR CAJA COTI", "DOLAR CAJA TATO"]
+
+    if es_admin:
+        opc_cajas = TODAS_CAJAS
+        # Para admin: efectivo, transferencia y tarjeta aplicadas a la caja seleccionada
+        FORMAS_PAGO = ["EFECTIVO", "TRANSFERENCIA", "TARJETA DE CREDITO"]
+    else:
+        # Operador: solo su caja, y elige la forma de ingreso
+        opc_cajas   = [caja_propia]
+        FORMAS_PAGO = ["EFECTIVO", "TRANSFERENCIA", "TARJETA DE CREDITO"]
+        st.info(f"🏦 Operando en: **{caja_propia}**")
+
+    # ── Tabs: Admin ve todos, Operador no ve traspasos entre cajas ni Orden de Pago ──
+    if es_admin:
+        tab_ing, tab_egr, tab_cob, tab_ver, tab_tras, tab_op = st.tabs(
+            ["📥 INGRESOS VARIOS", "📤 EGRESOS VARIOS", "🧾 COBRANZA VIAJE", "📊 VER MOVIMIENTOS", "🔄 TRASPASO", "💸 ORDEN DE PAGO"]
+        )
+    else:
+        tab_ing, tab_egr, tab_cob, tab_ver = st.tabs(
+            ["📥 INGRESOS VARIOS", "📤 EGRESOS VARIOS", "🧾 COBRANZA VIAJE", "📊 MIS MOVIMIENTOS"]
+        )
+        tab_tras = None
+        tab_op   = None
 
     with tab_ing:
         if st.session_state.get("msg_ingreso"):
@@ -805,15 +913,22 @@ elif sel == "TESORERIA":
             st.session_state.msg_ingreso = None
         with st.form("f_ing_var", clear_on_submit=True):
             f   = st.date_input("Fecha", date.today())
-            cj  = st.selectbox("Caja Destino", opc_cajas)
+            # Admin elige caja; operador tiene la suya fija
+            if es_admin:
+                cj  = st.selectbox("Caja Destino", opc_cajas)
+            else:
+                st.markdown(f"**Caja:** {caja_propia}")
+                cj = caja_propia
+            forma = st.selectbox("Forma de Ingreso", FORMAS_PAGO)
             con = st.text_input("Concepto")
             mon = st.number_input("Monto $", min_value=0.0)
             if st.form_submit_button("REGISTRAR INGRESO"):
                 if mon > 0:
-                    nt = pd.DataFrame([[f, "INGRESO VARIO", cj, con, "Varios", mon, "-"]], columns=COL_TESORERIA)
+                    concepto_completo = f"{con} [{forma}]" if con else forma
+                    nt = pd.DataFrame([[f, "INGRESO VARIO", cj, concepto_completo, "Varios", mon, "-"]], columns=COL_TESORERIA)
                     st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
                     guardar_datos("tesoreria", st.session_state.tesoreria)
-                    st.session_state.msg_ingreso = f"✅ Ingreso de $ {mon:,.2f} registrado en {cj}."
+                    st.session_state.msg_ingreso = f"✅ Ingreso de $ {mon:,.2f} ({forma}) registrado en {cj}."
                     st.rerun()
                 else:
                     st.warning("Ingresá un monto mayor a cero.")
@@ -824,15 +939,21 @@ elif sel == "TESORERIA":
             st.session_state.msg_egreso = None
         with st.form("f_egr_var", clear_on_submit=True):
             f   = st.date_input("Fecha", date.today())
-            cj  = st.selectbox("Caja Origen", opc_cajas)
+            if es_admin:
+                cj  = st.selectbox("Caja Origen", opc_cajas)
+            else:
+                st.markdown(f"**Caja:** {caja_propia}")
+                cj = caja_propia
+            forma = st.selectbox("Forma de Egreso", FORMAS_PAGO)
             con = st.text_input("Concepto")
             mon = st.number_input("Monto $", min_value=0.0)
             if st.form_submit_button("REGISTRAR EGRESO"):
                 if mon > 0:
-                    nt = pd.DataFrame([[f, "EGRESO VARIO", cj, con, "Varios", -mon, "-"]], columns=COL_TESORERIA)
+                    concepto_completo = f"{con} [{forma}]" if con else forma
+                    nt = pd.DataFrame([[f, "EGRESO VARIO", cj, concepto_completo, "Varios", -mon, "-"]], columns=COL_TESORERIA)
                     st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
                     guardar_datos("tesoreria", st.session_state.tesoreria)
-                    st.session_state.msg_egreso = f"✅ Egreso de $ {mon:,.2f} registrado desde {cj}."
+                    st.session_state.msg_egreso = f"✅ Egreso de $ {mon:,.2f} ({forma}) registrado desde {cj}."
                     st.rerun()
                 else:
                     st.warning("Ingresá un monto mayor a cero.")
@@ -841,12 +962,17 @@ elif sel == "TESORERIA":
         if "html_recibo_ready" not in st.session_state: st.session_state.html_recibo_ready = None
         with st.form("f_cob", clear_on_submit=True):
             c_sel = st.selectbox("Cliente", st.session_state.clientes['Razón Social'].unique() if not st.session_state.clientes.empty else [""])
-            cj    = st.selectbox("Forma de Cobro", opc_cajas + ["OTROS"])
+            if es_admin:
+                cj    = st.selectbox("Forma de Cobro / Caja", opc_cajas + ["OTROS"])
+            else:
+                forma_cob = st.selectbox("Forma de Cobro", FORMAS_PAGO + ["OTROS"])
+                cj = caja_propia
             mon   = st.number_input("Monto $", min_value=0.0)
             afip  = st.text_input("Comprobante Asociado (AFIP/Recibo)")
             if st.form_submit_button("GENERAR COBRANZA"):
                 if c_sel and mon > 0:
-                    nt = pd.DataFrame([[date.today(), "COBRANZA", cj, "Cobro Viaje", c_sel, mon, afip]], columns=COL_TESORERIA)
+                    caja_registro = cj if es_admin else f"{caja_propia} [{forma_cob}]"
+                    nt = pd.DataFrame([[date.today(), "COBRANZA", caja_registro, "Cobro Viaje", c_sel, mon, afip]], columns=COL_TESORERIA)
                     nv = pd.DataFrame([[date.today(), c_sel, date.today(), "PAGO", "TESORERIA", "-", -mon, "RECIBO", afip]], columns=COL_VIAJES)
                     st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
                     st.session_state.viajes    = pd.concat([st.session_state.viajes, nv], ignore_index=True)
@@ -854,7 +980,7 @@ elif sel == "TESORERIA":
                     guardar_datos("viajes", st.session_state.viajes)
                     st.session_state.html_recibo_ready = generar_html_recibo({
                         "Fecha": date.today(), "Cliente/Proveedor": c_sel,
-                        "Concepto": "Cobro de Viaje", "Caja/Banco": cj,
+                        "Concepto": "Cobro de Viaje", "Caja/Banco": caja_registro,
                         "Monto": mon, "Ref AFIP": afip
                     })
                     st.session_state.cli_ready = c_sel
@@ -867,59 +993,67 @@ elif sel == "TESORERIA":
             if st.button("Limpiar"): st.session_state.html_recibo_ready = None; st.rerun()
 
     with tab_ver:
-        cj_v   = st.selectbox("Seleccionar Caja", opc_cajas)
-        df_ver = st.session_state.tesoreria[st.session_state.tesoreria['Caja/Banco'] == cj_v]
+        # Admin puede elegir cualquier caja. Operador solo ve la suya.
+        if es_admin:
+            cj_v   = st.selectbox("Seleccionar Caja", opc_cajas)
+        else:
+            cj_v = caja_propia
+            st.markdown(f"#### Movimientos de: {caja_propia}")
+        df_ver = st.session_state.tesoreria[st.session_state.tesoreria['Caja/Banco'].str.startswith(cj_v if cj_v else "")]
         st.metric(f"Saldo en {cj_v}", f"$ {df_ver['Monto'].sum():,.2f}")
         st.dataframe(df_ver, use_container_width=True)
 
-    with tab_tras:
-        if st.session_state.get("msg_traspaso"):
-            st.success(st.session_state.msg_traspaso)
-            st.session_state.msg_traspaso = None
-        with st.form("f_tras", clear_on_submit=True):
-            o = st.selectbox("Desde", opc_cajas)
-            d = st.selectbox("Hacia", opc_cajas)
-            m = st.number_input("Monto a Traspasar", min_value=0.0)
-            if st.form_submit_button("EJECUTAR"):
-                if m > 0:
-                    tr1 = pd.DataFrame([[date.today(), "TRASPASO", o, f"Hacia {d}", "INTERNO", -m, "-"]], columns=COL_TESORERIA)
-                    tr2 = pd.DataFrame([[date.today(), "TRASPASO", d, f"Desde {o}", "INTERNO",  m, "-"]], columns=COL_TESORERIA)
-                    st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, tr1, tr2], ignore_index=True)
-                    guardar_datos("tesoreria", st.session_state.tesoreria)
-                    st.session_state.msg_traspaso = f"✅ Traspaso de $ {m:,.2f} de {o} hacia {d} ejecutado."
-                    st.rerun()
-                else:
-                    st.warning("Ingresá un monto mayor a cero.")
+    # Traspasos y Orden de Pago: SOLO ADMIN
+    if tab_tras is not None:
+        with tab_tras:
+            if st.session_state.get("msg_traspaso"):
+                st.success(st.session_state.msg_traspaso)
+                st.session_state.msg_traspaso = None
+            with st.form("f_tras", clear_on_submit=True):
+                o = st.selectbox("Desde", opc_cajas)
+                d = st.selectbox("Hacia", opc_cajas)
+                m = st.number_input("Monto a Traspasar", min_value=0.0)
+                if st.form_submit_button("EJECUTAR"):
+                    if m > 0:
+                        tr1 = pd.DataFrame([[date.today(), "TRASPASO", o, f"Hacia {d}", "INTERNO", -m, "-"]], columns=COL_TESORERIA)
+                        tr2 = pd.DataFrame([[date.today(), "TRASPASO", d, f"Desde {o}", "INTERNO",  m, "-"]], columns=COL_TESORERIA)
+                        st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, tr1, tr2], ignore_index=True)
+                        guardar_datos("tesoreria", st.session_state.tesoreria)
+                        st.session_state.msg_traspaso = f"✅ Traspaso de $ {m:,.2f} de {o} hacia {d} ejecutado."
+                        st.rerun()
+                    else:
+                        st.warning("Ingresá un monto mayor a cero.")
 
-    with tab_op:
-        st.subheader("Generar Orden de Pago a Proveedor")
-        if "html_op_ready" not in st.session_state: st.session_state.html_op_ready = None
-        with st.form("f_op", clear_on_submit=True):
-            p_sel  = st.selectbox("Seleccionar Proveedor", st.session_state.proveedores['Razón Social'].unique() if not st.session_state.proveedores.empty else [""])
-            cj_p   = st.selectbox("Caja de Salida", opc_cajas)
-            mon_p  = st.number_input("Monto $", min_value=0.0)
-            afip_p = st.text_input("Referencia AFIP / Pago")
-            if st.form_submit_button("GENERAR ORDEN DE PAGO"):
-                if p_sel and mon_p > 0:
-                    nt = pd.DataFrame([[date.today(), "PAGO PROV", cj_p, "Orden de Pago", p_sel, -mon_p, afip_p]], columns=COL_TESORERIA)
-                    nc = pd.DataFrame([[date.today(), p_sel, "-", "ORDEN PAGO", 0, 0, 0, 0, 0, 0, -mon_p]], columns=COL_COMPRAS)
-                    st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
-                    st.session_state.compras   = pd.concat([st.session_state.compras, nc], ignore_index=True)
-                    guardar_datos("tesoreria", st.session_state.tesoreria)
-                    guardar_datos("compras", st.session_state.compras)
-                    st.session_state.html_op_ready = generar_html_orden_pago({
-                        "Fecha": date.today(), "Proveedor": p_sel,
-                        "Concepto": "Pago Proveedor", "Caja/Banco": cj_p,
-                        "Monto": mon_p, "Ref AFIP": afip_p
-                    })
-                    st.session_state.prov_ready = p_sel
-                    st.rerun()
-                else:
-                    st.warning("Seleccioná proveedor y completá el monto.")
-        if st.session_state.html_op_ready:
-            st.success(f"✅ Orden de Pago para '{st.session_state.prov_ready}' registrada con éxito.")
-            st.download_button("🖨️ IMPRIMIR ORDEN DE PAGO", st.session_state.html_op_ready, file_name=f"OrdenPago_{st.session_state.prov_ready}.html", mime="text/html")
-            if st.button("Limpiar OP"): st.session_state.html_op_ready = None; st.rerun()
+    if tab_op is not None:
+        with tab_op:
+            st.subheader("Generar Orden de Pago a Proveedor")
+            if "html_op_ready" not in st.session_state: st.session_state.html_op_ready = None
+            with st.form("f_op", clear_on_submit=True):
+                p_sel  = st.selectbox("Seleccionar Proveedor", st.session_state.proveedores['Razón Social'].unique() if not st.session_state.proveedores.empty else [""])
+                cj_p   = st.selectbox("Caja de Salida", opc_cajas)
+                mon_p  = st.number_input("Monto $", min_value=0.0)
+                afip_p = st.text_input("Referencia AFIP / Pago")
+                if st.form_submit_button("GENERAR ORDEN DE PAGO"):
+                    if p_sel and mon_p > 0:
+                        nt = pd.DataFrame([[date.today(), "PAGO PROV", cj_p, "Orden de Pago", p_sel, -mon_p, afip_p]], columns=COL_TESORERIA)
+                        nc = pd.DataFrame([[date.today(), p_sel, "-", "ORDEN PAGO", 0, 0, 0, 0, 0, 0, -mon_p]], columns=COL_COMPRAS)
+                        st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
+                        st.session_state.compras   = pd.concat([st.session_state.compras, nc], ignore_index=True)
+                        guardar_datos("tesoreria", st.session_state.tesoreria)
+                        guardar_datos("compras", st.session_state.compras)
+                        st.session_state.html_op_ready = generar_html_orden_pago({
+                            "Fecha": date.today(), "Proveedor": p_sel,
+                            "Concepto": "Pago Proveedor", "Caja/Banco": cj_p,
+                            "Monto": mon_p, "Ref AFIP": afip_p
+                        })
+                        st.session_state.prov_ready = p_sel
+                        st.rerun()
+                    else:
+                        st.warning("Seleccioná proveedor y completá el monto.")
+            if st.session_state.html_op_ready:
+                st.success(f"✅ Orden de Pago para '{st.session_state.prov_ready}' registrada con éxito.")
+                st.download_button("🖨️ IMPRIMIR ORDEN DE PAGO", st.session_state.html_op_ready, file_name=f"OrdenPago_{st.session_state.prov_ready}.html", mime="text/html")
+                if st.button("Limpiar OP"): st.session_state.html_op_ready = None; st.rerun()
 
 elif sel == "CTA CTE INDIVIDUAL":
     st.header("📑 Cuenta Corriente por Cliente")
@@ -1065,4 +1199,3 @@ elif sel == "HISTORICO COMPRAS":
                 st.session_state.compras = st.session_state.compras.drop(i)
                 guardar_datos("compras", st.session_state.compras); st.rerun()
             st.divider()
-
