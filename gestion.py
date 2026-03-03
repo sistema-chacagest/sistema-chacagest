@@ -2082,111 +2082,140 @@ elif sel == "CHEQUES":
                             if any(v is not None for v in row_d.values()):
                                 filas_raw.append(row_d)
 
-                    # ── Mapear columnas por nombre (flexible) ──────────────
+                    # ── Buscar columnas por nombre ───────────────────────
                     def _find_col(row_d, *keywords):
-                        """Busca la primera clave del dict que contenga alguna keyword."""
                         for kw in keywords:
                             for k in row_d.keys():
                                 if kw in k:
                                     return row_d[k]
                         return None
 
-                    filas = []
-                    for row_d in filas_raw:
-                        fecha_emis = _fmt_fecha(_find_col(row_d, 'fecha emis', 'fecha emisi', 'f. emis', 'fecha\n', 'fecha '))
-                        fecha_venc = _fmt_fecha(_find_col(row_d, 'acred', 'venc', 'pago', 'fecha acred'))
-                        nro        = _find_col(row_d, 'nro', 'número', 'numero', 'cheque')
-                        banco      = _find_col(row_d, 'banco')
-                        concepto   = _find_col(row_d, 'concepto', 'descripcion', 'detalle', 'orden')
-                        importe    = _find_col(row_d, 'importe', 'monto', 'valor')
-                        # Convertir importe
-                        try:
-                            imp_f = float(str(importe).replace('.', '').replace(',', '.')) if importe else 0
-                        except:
-                            imp_f = 0
+                    # Detectar si Fecha y Nro Cheque vienen vacíos en todas las filas
+                    col_fecha_vacia = all(_find_col(r, 'fecha emis', 'fecha emisi', 'fecha ') is None for r in filas_raw)
+                    col_nro_vacia   = all(_find_col(r, 'nro', 'número', 'numero', 'nro cheque') is None for r in filas_raw)
 
-                        # Convertir nro — descartar filas no numéricas (cabeceras residuales, totales, etc.)
-                        try:
-                            nro_str = str(int(float(str(nro).replace('.', '').replace(',', '.')))) if nro is not None else None
-                        except (ValueError, TypeError):
-                            continue  # no es un nro de cheque válido, saltar fila
-
-                        if nro_str is None or imp_f <= 0:
-                            continue
-
-                        filas.append({
-                            'fecha_emis': fecha_emis if fecha_emis != '-' else str(date.today()),
-                            'fecha_venc': fecha_venc if fecha_venc != '-' else str(date.today()),
-                            'nro':        nro_str,
-                            'banco':      str(banco).strip() if banco else 'BANCO GALICIA',
-                            'concepto':   str(concepto).strip() if concepto else '-',
-                            'importe':    imp_f,
-                        })
-
-                    if not filas:
-                        st.error("❌ No se encontraron datos válidos.")
-                        st.markdown("**🔍 Diagnóstico — headers detectados y primeras filas:**")
-                        if filas_raw:
-                            st.write("**Headers:**", list(filas_raw[0].keys()))
-                            st.dataframe(pd.DataFrame(filas_raw[:20]), use_container_width=True)
-                        else:
-                            st.warning("No se pudo leer ninguna fila.")
+                    if col_fecha_vacia or col_nro_vacia:
+                        faltantes = []
+                        if col_fecha_vacia: faltantes.append('**Fecha** y **Fecha Acred**')
+                        if col_nro_vacia:   faltantes.append('**Nro Cheque**')
+                        st.warning(f"⚠️ El archivo tiene las columnas {' y '.join(faltantes)} vacías. El banco exporta el archivo sin esos datos.")
+                        st.markdown("""
+                        <div style='background:#fff3cd;border-left:4px solid #f39c12;padding:12px 16px;border-radius:6px;font-size:13px;margin-top:8px;'>
+                        <b>📋 Cómo completar el archivo antes de importar:</b><br><br>
+                        1. Abrí el archivo XLS en Excel<br>
+                        2. Completá la columna <b>Fecha</b> con la fecha de emisión (formato DD/MM/AAAA)<br>
+                        3. Completá la columna <b>Fecha Acred</b> con la fecha de vencimiento<br>
+                        4. Completá la columna <b>Nro Cheque</b> con el número de cada cheque<br>
+                        5. Guardá el archivo y volvé a subirlo aquí
+                        </div>
+                        """, unsafe_allow_html=True)
+                        # Vista previa de los datos disponibles
+                        datos_parciales = []
+                        for r in filas_raw:
+                            concepto_p = _find_col(r, 'concepto', 'descripcion', 'detalle', 'orden')
+                            banco_p    = _find_col(r, 'banco')
+                            importe_p  = _find_col(r, 'importe', 'monto', 'valor')
+                            try:
+                                imp_p = float(str(importe_p).replace('.', '').replace(',', '.')) if importe_p else 0
+                            except:
+                                imp_p = 0
+                            if imp_p > 0:
+                                datos_parciales.append({
+                                    'Fecha Emisión':     '⚠️ completar',
+                                    'Fecha Vencimiento': '⚠️ completar',
+                                    'Nro Cheque':        '⚠️ completar',
+                                    'Banco':             str(banco_p).strip() if banco_p else '-',
+                                    'Beneficiario':      _benef(str(concepto_p)) if concepto_p else '-',
+                                    'Importe':           imp_p,
+                                })
+                        if datos_parciales:
+                            st.markdown(f"##### 👇 {len(datos_parciales)} registros encontrados — completá las columnas faltantes en el XLS:")
+                            st.dataframe(pd.DataFrame(datos_parciales), use_container_width=True, hide_index=True)
                     else:
-                        df_preview = pd.DataFrame([{
-                            'Fecha Emisión':     f['fecha_emis'],
-                            'Fecha Vencimiento': f['fecha_venc'],
-                            'Nro Cheque':        f['nro'],
-                            'Banco':             f['banco'],
-                            'Beneficiario':      _benef(f['concepto']),
-                            'Importe':           f['importe'],
-                        } for f in filas])
+                        filas = []
+                        for row_d in filas_raw:
+                            fecha_emis = _fmt_fecha(_find_col(row_d, 'fecha emis', 'fecha emisi', 'fecha '))
+                            fecha_venc = _fmt_fecha(_find_col(row_d, 'acred', 'venc', 'fecha acred'))
+                            nro        = _find_col(row_d, 'nro', 'número', 'numero', 'nro cheque')
+                            banco      = _find_col(row_d, 'banco')
+                            concepto   = _find_col(row_d, 'concepto', 'descripcion', 'detalle', 'orden')
+                            importe    = _find_col(row_d, 'importe', 'monto', 'valor')
+                            try:
+                                imp_f = float(str(importe).replace('.', '').replace(',', '.')) if importe else 0
+                            except:
+                                imp_f = 0
+                            try:
+                                nro_str = str(int(float(str(nro).replace('.', '').replace(',', '.')))) if nro is not None else None
+                            except (ValueError, TypeError):
+                                continue
+                            if nro_str is None or imp_f <= 0:
+                                continue
+                            filas.append({
+                                'fecha_emis': fecha_emis if fecha_emis != '-' else str(date.today()),
+                                'fecha_venc': fecha_venc if fecha_venc != '-' else str(date.today()),
+                                'nro':        nro_str,
+                                'banco':      str(banco).strip() if banco else 'BANCO GALICIA',
+                                'concepto':   str(concepto).strip() if concepto else '-',
+                                'importe':    imp_f,
+                            })
+                        if not filas:
+                            st.error("❌ No se encontraron datos válidos. Verificá que el archivo tenga las columnas correctas.")
+                        else:
+                            df_preview = pd.DataFrame([{
+                                'Fecha Emisión':     f['fecha_emis'],
+                                'Fecha Vencimiento': f['fecha_venc'],
+                                'Nro Cheque':        f['nro'],
+                                'Banco':             f['banco'],
+                                'Beneficiario':      _benef(f['concepto']),
+                                'Importe':           f['importe'],
+                            } for f in filas])
 
-                        st.markdown(f"##### 📋 Se encontraron **{len(df_preview)} eCheqs** para importar:")
-                        st.dataframe(df_preview, use_container_width=True, hide_index=True)
+                            st.markdown(f"##### 📋 Se encontraron **{len(df_preview)} eCheqs** para importar:")
+                            st.dataframe(df_preview, use_container_width=True, hide_index=True)
 
-                        nros_existentes = set(st.session_state.cheques_emitidos['Nro Cheque'].astype(str).tolist())
-                        nuevos     = [f for f in filas if f['nro'] not in nros_existentes]
-                        duplicados = len(filas) - len(nuevos)
+                            nros_existentes = set(st.session_state.cheques_emitidos['Nro Cheque'].astype(str).tolist())
+                            nuevos     = [f for f in filas if f['nro'] not in nros_existentes]
+                            duplicados = len(filas) - len(nuevos)
 
-                        if duplicados > 0:
-                            st.info(f"ℹ️ {duplicados} cheque(s) ya existen en el sistema y serán omitidos.")
+                            if duplicados > 0:
+                                st.info(f"ℹ️ {duplicados} cheque(s) ya existen en el sistema y serán omitidos.")
 
-                        col_imp1, col_imp2 = st.columns(2)
-                        if col_imp1.button(f"✅ IMPORTAR {len(nuevos)} eCheqs NUEVOS", key="btn_importar_echeq", disabled=(len(nuevos)==0)):
-                            importados = 0
-                            for f in nuevos:
-                                benef_val = _benef(f['concepto'])
-                                imp_val   = f['importe']
-                                nro_val   = f['nro']
-                                f_emis    = f['fecha_emis']
-                                f_venc    = f['fecha_venc']
-                                banco_val = f['banco']
+                            col_imp1, col_imp2 = st.columns(2)
+                            if col_imp1.button(f"✅ IMPORTAR {len(nuevos)} eCheqs NUEVOS", key="btn_importar_echeq", disabled=(len(nuevos)==0)):
+                                importados = 0
+                                for f in nuevos:
+                                    benef_val = _benef(f['concepto'])
+                                    imp_val   = f['importe']
+                                    nro_val   = f['nro']
+                                    f_emis    = f['fecha_emis']
+                                    f_venc    = f['fecha_venc']
+                                    banco_val = f['banco']
 
-                                # 1) cheques_emitidos
-                                nueva_fila = pd.DataFrame([[
-                                    f_emis, nro_val, "ECHEQ", banco_val, benef_val,
-                                    imp_val, f_venc, "PENDIENTE", "-",
-                                    "Importado desde XLS banco"
-                                ]], columns=COL_CHEQ_EMITIDOS)
-                                st.session_state.cheques_emitidos = pd.concat(
-                                    [st.session_state.cheques_emitidos, nueva_fila], ignore_index=True)
+                                    # 1) cheques_emitidos
+                                    nueva_fila = pd.DataFrame([[
+                                        f_emis, nro_val, "ECHEQ", banco_val, benef_val,
+                                        imp_val, f_venc, "PENDIENTE", "-",
+                                        "Importado desde XLS banco"
+                                    ]], columns=COL_CHEQ_EMITIDOS)
+                                    st.session_state.cheques_emitidos = pd.concat(
+                                        [st.session_state.cheques_emitidos, nueva_fila], ignore_index=True)
 
-                                # 2) tesorería
-                                mov = pd.DataFrame([[
-                                    f_emis, "CHEQUE EMITIDO", "CAJA GENERAL", "CHEQUE ECHEQ",
-                                    f"eCheq #{nro_val} a {benef_val}", benef_val, -imp_val, nro_val
-                                ]], columns=COL_TESORERIA)
-                                st.session_state.tesoreria = pd.concat(
-                                    [st.session_state.tesoreria, mov], ignore_index=True)
-                                importados += 1
+                                    # 2) tesorería
+                                    mov = pd.DataFrame([[
+                                        f_emis, "CHEQUE EMITIDO", "CAJA GENERAL", "CHEQUE ECHEQ",
+                                        f"eCheq #{nro_val} a {benef_val}", benef_val, -imp_val, nro_val
+                                    ]], columns=COL_TESORERIA)
+                                    st.session_state.tesoreria = pd.concat(
+                                        [st.session_state.tesoreria, mov], ignore_index=True)
+                                    importados += 1
 
-                            guardar_datos("cheques_emitidos", st.session_state.cheques_emitidos)
-                            guardar_datos("tesoreria", st.session_state.tesoreria)
-                            st.session_state.msg_cheq_emit = f"✅ Se importaron {importados} eCheqs correctamente."
-                            st.rerun()
+                                guardar_datos("cheques_emitidos", st.session_state.cheques_emitidos)
+                                guardar_datos("tesoreria", st.session_state.tesoreria)
+                                st.session_state.msg_cheq_emit = f"✅ Se importaron {importados} eCheqs correctamente."
+                                st.rerun()
 
-                        if col_imp2.button("❌ Cancelar", key="btn_cancelar_echeq"):
-                            st.rerun()
+                            if col_imp2.button("❌ Cancelar", key="btn_cancelar_echeq"):
+                                st.rerun()
 
                 except Exception as e:
                     st.error(f"❌ Error al leer el archivo: {e}")
