@@ -1392,34 +1392,115 @@ elif sel == "TESORERIA":
 
     if tab_op is not None:
         with tab_op:
-            st.subheader("Generar Orden de Pago a Proveedor")
+            st.subheader("💸 Generar Orden de Pago a Proveedor")
             if "html_op_ready" not in st.session_state: st.session_state.html_op_ready = None
-            with st.form("f_op", clear_on_submit=True):
-                p_sel  = st.selectbox("Seleccionar Proveedor", st.session_state.proveedores['Razón Social'].unique() if not st.session_state.proveedores.empty else [""])
-                cj_p   = st.selectbox("Caja de Salida", opc_cajas)
-                mon_p  = st.number_input("Monto $", min_value=0.0)
-                afip_p = st.text_input("Referencia AFIP / Pago")
-                if st.form_submit_button("GENERAR ORDEN DE PAGO"):
-                    if p_sel and mon_p > 0:
-                        nt = pd.DataFrame([[date.today(), "PAGO PROV", cj_p, "TRANSFERENCIA", "Orden de Pago", p_sel, -mon_p, afip_p]], columns=COL_TESORERIA)
-                        nc = pd.DataFrame([[date.today(), p_sel, "-", "ORDEN PAGO", 0, 0, 0, 0, 0, 0, -mon_p]], columns=COL_COMPRAS)
-                        st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
-                        st.session_state.compras   = pd.concat([st.session_state.compras, nc], ignore_index=True)
-                        guardar_datos("tesoreria", st.session_state.tesoreria)
-                        guardar_datos("compras", st.session_state.compras)
-                        st.session_state.html_op_ready = generar_html_orden_pago({
-                            "Fecha": date.today(), "Proveedor": p_sel,
-                            "Concepto": "Pago Proveedor", "Caja/Banco": cj_p,
-                            "Monto": mon_p, "Ref AFIP": afip_p
-                        })
-                        st.session_state.prov_ready = p_sel
-                        st.rerun()
-                    else:
-                        st.warning("Seleccioná proveedor y completá el monto.")
+
             if st.session_state.html_op_ready:
                 st.success(f"✅ Orden de Pago para '{st.session_state.prov_ready}' registrada con éxito.")
                 st.download_button("🖨️ IMPRIMIR ORDEN DE PAGO", st.session_state.html_op_ready, file_name=f"OrdenPago_{st.session_state.prov_ready}.html", mime="text/html")
                 if st.button("Limpiar OP"): st.session_state.html_op_ready = None; st.rerun()
+            else:
+                # ── Proveedor y forma de pago FUERA del form para reaccionar en tiempo real ──
+                p_sel   = st.selectbox("Seleccionar Proveedor", st.session_state.proveedores['Razón Social'].unique() if not st.session_state.proveedores.empty else [""], key="op_prov")
+                forma_op = st.selectbox("Forma de Pago", ["TRANSFERENCIA", "EFECTIVO", "CHEQUE PROPIO", "CHEQUE DE TERCERO"], key="op_forma")
+                afip_p  = st.text_input("Referencia AFIP / Concepto", key="op_afip")
+
+                # ── TRANSFERENCIA / EFECTIVO ─────────────────────────────────────────
+                if forma_op in ["TRANSFERENCIA", "EFECTIVO"]:
+                    with st.form("f_op_std", clear_on_submit=True):
+                        cj_p  = st.selectbox("Caja de Salida", opc_cajas)
+                        mon_p = st.number_input("Monto $", min_value=0.0, step=0.01)
+                        if st.form_submit_button("✅ GENERAR ORDEN DE PAGO"):
+                            if p_sel and mon_p > 0:
+                                nt = pd.DataFrame([[date.today(), "PAGO PROV", cj_p, forma_op, "Orden de Pago", p_sel, -mon_p, afip_p]], columns=COL_TESORERIA)
+                                nc = pd.DataFrame([[date.today(), p_sel, "-", "ORDEN PAGO", 0, 0, 0, 0, 0, 0, -mon_p]], columns=COL_COMPRAS)
+                                st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
+                                st.session_state.compras   = pd.concat([st.session_state.compras, nc], ignore_index=True)
+                                guardar_datos("tesoreria", st.session_state.tesoreria)
+                                guardar_datos("compras", st.session_state.compras)
+                                st.session_state.html_op_ready = generar_html_orden_pago({"Fecha": date.today(), "Proveedor": p_sel, "Concepto": f"Pago {forma_op}", "Caja/Banco": cj_p, "Monto": mon_p, "Ref AFIP": afip_p})
+                                st.session_state.prov_ready = p_sel
+                                st.rerun()
+                            else:
+                                st.warning("Seleccioná proveedor y completá el monto.")
+
+                # ── CHEQUE PROPIO ────────────────────────────────────────────────────
+                elif forma_op == "CHEQUE PROPIO":
+                    st.markdown("##### 📝 Datos del Cheque Propio a Emitir")
+                    with st.form("f_op_cheq_propio", clear_on_submit=True):
+                        op1, op2, op3 = st.columns(3)
+                        nro_op   = op1.text_input("Nro de Cheque")
+                        tipo_op  = op2.selectbox("Tipo", ["FÍSICO", "ECHEQ"])
+                        banco_op = op3.text_input("Banco Emisor")
+                        op4, op5 = st.columns(2)
+                        mon_op   = op4.number_input("Importe $", min_value=0.0, step=0.01)
+                        f_venc_op = op5.date_input("Fecha de Vencimiento del Cheque", value=date.today() + timedelta(days=30))
+                        obs_op   = st.text_input("Observaciones")
+                        if st.form_submit_button("✅ EMITIR CHEQUE Y GENERAR ORDEN DE PAGO"):
+                            if p_sel and nro_op and mon_op > 0:
+                                # Registrar en cheques_emitidos
+                                nuevo_cheq = pd.DataFrame([[
+                                    str(date.today()), nro_op, tipo_op, banco_op, p_sel,
+                                    mon_op, str(f_venc_op), "PENDIENTE", "-", obs_op
+                                ]], columns=COL_CHEQ_EMITIDOS)
+                                st.session_state.cheques_emitidos = pd.concat([st.session_state.cheques_emitidos, nuevo_cheq], ignore_index=True)
+                                guardar_datos("cheques_emitidos", st.session_state.cheques_emitidos)
+                                # Registrar egreso en tesorería
+                                nt = pd.DataFrame([[date.today(), "PAGO PROV", f"CHEQUE {tipo_op}", f"CHEQUE PROPIO #{nro_op}", "Orden de Pago", p_sel, -mon_op, afip_p]], columns=COL_TESORERIA)
+                                nc = pd.DataFrame([[date.today(), p_sel, "-", "ORDEN PAGO CHEQUE", 0, 0, 0, 0, 0, 0, -mon_op]], columns=COL_COMPRAS)
+                                st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
+                                st.session_state.compras   = pd.concat([st.session_state.compras, nc], ignore_index=True)
+                                guardar_datos("tesoreria", st.session_state.tesoreria)
+                                guardar_datos("compras", st.session_state.compras)
+                                st.session_state.html_op_ready = generar_html_orden_pago({"Fecha": date.today(), "Proveedor": p_sel, "Concepto": f"Cheque {tipo_op} #{nro_op} — Vto: {f_venc_op}", "Caja/Banco": f"Cheque {banco_op}", "Monto": mon_op, "Ref AFIP": afip_p})
+                                st.session_state.prov_ready = p_sel
+                                st.rerun()
+                            else:
+                                st.warning("Completá proveedor, número de cheque e importe.")
+
+                # ── CHEQUE DE TERCERO (de cartera) ───────────────────────────────────
+                elif forma_op == "CHEQUE DE TERCERO":
+                    # Filtrar cheques en cartera disponibles
+                    df_cartera_disp = st.session_state.cheques_cartera[
+                        st.session_state.cheques_cartera['Estado'] == 'EN CARTERA'
+                    ].copy() if not st.session_state.cheques_cartera.empty else pd.DataFrame(columns=COL_CHEQ_CARTERA)
+
+                    if df_cartera_disp.empty:
+                        st.warning("⚠️ No hay cheques de terceros en cartera disponibles. Ingresá uno desde el módulo **CHEQUES → Cheques en Cartera**.")
+                    else:
+                        st.markdown("##### 📂 Seleccionar Cheque de Cartera")
+                        # Mostrar cartera disponible con info útil
+                        opciones_cartera = []
+                        for idx, r in df_cartera_disp.iterrows():
+                            d_v = (pd.to_datetime(r['Fecha Vencimiento']).date() - date.today()).days if r['Fecha Vencimiento'] not in ['-',''] else '?'
+                            opciones_cartera.append(f"#{r['Nro Cheque']} — {r['Banco Librador']} — {r['Librador']} — $ {float(r['Importe']):,.2f} — Vto: {r['Fecha Vencimiento']} ({d_v}d)")
+
+                        idx_map = {opc: idx for opc, idx in zip(opciones_cartera, df_cartera_disp.index)}
+
+                        with st.form("f_op_cheq_tercero", clear_on_submit=True):
+                            cheq_sel_str = st.selectbox("Cheque a utilizar", opciones_cartera)
+                            if st.form_submit_button("✅ APLICAR CHEQUE Y GENERAR ORDEN DE PAGO"):
+                                if p_sel and cheq_sel_str:
+                                    cheq_idx = idx_map[cheq_sel_str]
+                                    cheq_row = st.session_state.cheques_cartera.loc[cheq_idx]
+                                    mon_ct   = float(cheq_row['Importe'])
+                                    # Marcar cheque como APLICADO PAGO
+                                    st.session_state.cheques_cartera.loc[cheq_idx, 'Estado']          = 'APLICADO PAGO'
+                                    st.session_state.cheques_cartera.loc[cheq_idx, 'Destino']         = p_sel
+                                    st.session_state.cheques_cartera.loc[cheq_idx, 'Fecha Aplicación']= str(date.today())
+                                    guardar_datos("cheques_cartera", st.session_state.cheques_cartera)
+                                    # Registrar en tesorería
+                                    nt = pd.DataFrame([[date.today(), "PAGO PROV", "CARTERA", f"CHEQUE TERCERO #{cheq_row['Nro Cheque']}", "Orden de Pago", p_sel, -mon_ct, afip_p]], columns=COL_TESORERIA)
+                                    nc = pd.DataFrame([[date.today(), p_sel, "-", "ORDEN PAGO CHEQUE TERCERO", 0, 0, 0, 0, 0, 0, -mon_ct]], columns=COL_COMPRAS)
+                                    st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
+                                    st.session_state.compras   = pd.concat([st.session_state.compras, nc], ignore_index=True)
+                                    guardar_datos("tesoreria", st.session_state.tesoreria)
+                                    guardar_datos("compras", st.session_state.compras)
+                                    st.session_state.html_op_ready = generar_html_orden_pago({"Fecha": date.today(), "Proveedor": p_sel, "Concepto": f"Cheque de {cheq_row['Librador']} #{cheq_row['Nro Cheque']} — Vto: {cheq_row['Fecha Vencimiento']}", "Caja/Banco": f"Cheque {cheq_row['Banco Librador']}", "Monto": mon_ct, "Ref AFIP": afip_p})
+                                    st.session_state.prov_ready = p_sel
+                                    st.rerun()
+                                else:
+                                    st.warning("Seleccioná proveedor y cheque.")
 
 elif sel == "CTA CTE INDIVIDUAL":
     st.header("📑 Cuenta Corriente por Cliente")
