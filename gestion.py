@@ -274,6 +274,147 @@ def generar_html_presupuesto(p_data):
     </html>
     """
 
+def generar_html_cierre_caja(data):
+    # Construir tabla de movimientos del día
+    df = data['movimientos']
+    filas_html = ""
+    for _, row in df.iterrows():
+        color_fila = "#fff" if row['Monto'] >= 0 else "#fff8f8"
+        signo = "+" if row['Monto'] >= 0 else ""
+        filas_html += f"""
+        <tr style="background:{color_fila};">
+            <td>{row['Fecha']}</td>
+            <td>{row['Tipo']}</td>
+            <td>{row.get('Forma','-')}</td>
+            <td>{row['Concepto']}</td>
+            <td>{row['Cliente/Proveedor']}</td>
+            <td style="text-align:right;font-weight:bold;color:{'#27ae60' if row['Monto']>=0 else '#e74c3c'};">{signo}$ {row['Monto']:,.2f}</td>
+        </tr>"""
+
+    # Subtotales por forma
+    FORMAS = ["EFECTIVO", "TRANSFERENCIA", "TARJETA DE CREDITO", "DÓLARES", "OTROS"]
+    ICONOS = {"EFECTIVO":"💵","TRANSFERENCIA":"🏦","TARJETA DE CREDITO":"💳","DÓLARES":"💲","OTROS":"📋"}
+    subtotales_html = ""
+    for f in FORMAS:
+        mask = df['Forma'].fillna('-').str.upper().str.contains(f.replace("DÓLARES","DOLAR").replace("TARJETA DE CREDITO","TARJETA"), na=False)
+        sub = df[mask]['Monto'].sum()
+        if sub != 0:
+            color_s = "#27ae60" if sub >= 0 else "#e74c3c"
+            signo_s = "+" if sub >= 0 else ""
+            subtotales_html += f"""
+            <tr>
+                <td style="padding:8px 12px;">{ICONOS.get(f,'💰')} {f}</td>
+                <td style="text-align:right;padding:8px 12px;font-weight:bold;color:{color_s};">{signo_s}$ {sub:,.2f}</td>
+            </tr>"""
+
+    total = data['total']
+    color_total = "#27ae60" if total >= 0 else "#e74c3c"
+
+    return f"""<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        @media print {{ .no-print {{ display: none; }} body {{ margin: 0; }} }}
+        * {{ box-sizing: border-box; }}
+        body {{ font-family: 'Segoe UI', Arial, sans-serif; color: #333; padding: 30px; background: #fff; }}
+        .header-cierre {{ display: flex; justify-content: space-between; align-items: flex-start;
+                          border-bottom: 4px solid #5e2d61; padding-bottom: 20px; margin-bottom: 25px; }}
+        .empresa-nombre {{ font-size: 22px; font-weight: bold; color: #5e2d61; margin: 0; }}
+        .empresa-sub {{ font-size: 12px; color: #888; margin-top: 4px; }}
+        .badge-cierre {{ background: #5e2d61; color: white; padding: 8px 20px; border-radius: 6px;
+                         font-size: 16px; font-weight: bold; text-align: center; }}
+        .info-grid {{ display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 25px; }}
+        .info-box {{ background: #f8f9fa; border-radius: 8px; padding: 14px; border-left: 4px solid #f39c12; }}
+        .info-label {{ font-size: 11px; color: #888; font-weight: bold; text-transform: uppercase; }}
+        .info-value {{ font-size: 16px; font-weight: bold; color: #333; margin-top: 4px; }}
+        table.mov {{ width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 25px; }}
+        table.mov th {{ background: #5e2d61; color: white; padding: 9px 10px; text-align: left; }}
+        table.mov td {{ padding: 7px 10px; border-bottom: 1px solid #eee; }}
+        .subtotales-tabla {{ width: 100%; border-collapse: collapse; max-width: 380px; margin-left: auto; }}
+        .subtotales-tabla td {{ border: 1px solid #ddd; }}
+        .subtotales-header {{ background: #f0f2f6; font-weight: bold; font-size: 13px; padding: 10px 12px; text-transform: uppercase; letter-spacing: 1px; }}
+        .total-box {{ background: {color_total}; color: white; padding: 16px 24px; border-radius: 10px;
+                      text-align: right; margin-top: 20px; }}
+        .total-label {{ font-size: 13px; opacity: 0.9; }}
+        .total-monto {{ font-size: 32px; font-weight: bold; display: block; margin-top: 4px; }}
+        .firmas {{ display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 60px; }}
+        .firma-box {{ border-top: 2px solid #333; padding-top: 10px; text-align: center; font-size: 12px; color: #555; }}
+        .footer-cierre {{ margin-top: 40px; text-align: center; font-size: 10px; color: #bbb;
+                           border-top: 1px solid #eee; padding-top: 12px; }}
+        .btn-imprimir {{ background: #5e2d61; color: white; border: none; padding: 12px 28px;
+                          font-size: 15px; font-weight: bold; border-radius: 8px; cursor: pointer;
+                          display: block; margin: 0 auto 24px auto; }}
+        .btn-imprimir:hover {{ background: #4a2350; }}
+    </style>
+</head>
+<body>
+    <button class="btn-imprimir no-print" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
+
+    <div class="header-cierre">
+        <div>
+            <p class="empresa-nombre">CHACABUCO NOROESTE TOUR S.R.L.</p>
+            <p class="empresa-sub">Desde 1996 viajando con vos | CHACAGEST Software System</p>
+        </div>
+        <div class="badge-cierre">CIERRE DE CAJA</div>
+    </div>
+
+    <div class="info-grid">
+        <div class="info-box">
+            <div class="info-label">📅 Fecha de Cierre</div>
+            <div class="info-value">{data['fecha_cierre']}</div>
+        </div>
+        <div class="info-box">
+            <div class="info-label">🏦 Caja</div>
+            <div class="info-value">{data['caja']}</div>
+        </div>
+        <div class="info-box">
+            <div class="info-label">👤 Responsable</div>
+            <div class="info-value">{data['responsable']}</div>
+        </div>
+    </div>
+
+    <h3 style="color:#5e2d61;border-bottom:2px solid #f39c12;padding-bottom:6px;">📋 Movimientos del Período</h3>
+    <table class="mov">
+        <thead>
+            <tr>
+                <th>Fecha</th><th>Tipo</th><th>Forma</th><th>Concepto</th><th>Cliente / Proveedor</th><th style="text-align:right;">Monto</th>
+            </tr>
+        </thead>
+        <tbody>
+            {filas_html if filas_html else '<tr><td colspan="6" style="text-align:center;padding:20px;color:#aaa;">Sin movimientos en el período</td></tr>'}
+        </tbody>
+    </table>
+
+    <table class="subtotales-tabla">
+        <tr><td colspan="2" class="subtotales-header">Resumen por Forma de Pago</td></tr>
+        {subtotales_html if subtotales_html else '<tr><td colspan="2" style="padding:8px 12px;color:#aaa;">Sin movimientos</td></tr>'}
+    </table>
+
+    <div class="total-box">
+        <span class="total-label">SALDO AL CIERRE</span>
+        <span class="total-monto">$ {total:,.2f}</span>
+    </div>
+
+    {"<div style='background:#fff8e1;border:1px solid #f39c12;border-radius:8px;padding:14px;margin-top:20px;font-size:13px;'><b>📝 Observaciones:</b><br><br>" + data['observaciones'] + "</div>" if data.get('observaciones') else ""}
+
+    <div class="firmas">
+        <div class="firma-box">
+            <p style="margin:4px 0;">Responsable de Caja</p>
+            <p style="margin:4px 0;font-weight:bold;">{data['responsable']}</p>
+        </div>
+        <div class="firma-box">
+            <p style="margin:4px 0;">Supervisión / Administración</p>
+            <p style="margin:4px 0;color:#aaa;">____________________________</p>
+        </div>
+    </div>
+
+    <div class="footer-cierre">
+        Generado por CHACAGEST · {data['fecha_cierre']} · Sistema de Gestión Chacabuco Noroeste Tour S.R.L.
+    </div>
+</body>
+</html>"""
+
 # --- 2. SISTEMA DE USUARIOS Y ROLES ---
 # ─────────────────────────────────────────────────────────────────────────────
 # USUARIOS DEL SISTEMA
@@ -899,12 +1040,12 @@ elif sel == "TESORERIA":
     # ── Tabs: Admin ve todos, Operador no ve Traspaso ni Orden de Pago
     #         pero SÍ ve "Pase de Efectivo" (puede pasar efectivo a otra caja) ──
     if es_admin:
-        tab_ing, tab_egr, tab_cob, tab_ver, tab_pase, tab_tras, tab_op = st.tabs(
-            ["📥 INGRESOS VARIOS", "📤 EGRESOS VARIOS", "🧾 COBRANZA VIAJE", "📊 VER MOVIMIENTOS", "💱 PASE DE EFECTIVO", "🔄 TRASPASO", "💸 ORDEN DE PAGO"]
+        tab_ing, tab_egr, tab_cob, tab_ver, tab_pase, tab_cierre, tab_tras, tab_op = st.tabs(
+            ["📥 INGRESOS VARIOS", "📤 EGRESOS VARIOS", "🧾 COBRANZA VIAJE", "📊 VER MOVIMIENTOS", "💱 PASE DE EFECTIVO", "🔒 CIERRE DE CAJA", "🔄 TRASPASO", "💸 ORDEN DE PAGO"]
         )
     else:
-        tab_ing, tab_egr, tab_cob, tab_ver, tab_pase = st.tabs(
-            ["📥 INGRESOS VARIOS", "📤 EGRESOS VARIOS", "🧾 COBRANZA VIAJE", "📊 MIS MOVIMIENTOS", "💱 PASE DE EFECTIVO"]
+        tab_ing, tab_egr, tab_cob, tab_ver, tab_pase, tab_cierre = st.tabs(
+            ["📥 INGRESOS VARIOS", "📤 EGRESOS VARIOS", "🧾 COBRANZA VIAJE", "📊 MIS MOVIMIENTOS", "💱 PASE DE EFECTIVO", "🔒 CIERRE DE CAJA"]
         )
         tab_tras = None
         tab_op   = None
@@ -1028,6 +1169,98 @@ elif sel == "TESORERIA":
         st.markdown("##### 📋 Detalle de Movimientos")
         st.dataframe(df_ver, use_container_width=True)
 
+    # ── CIERRE DE CAJA ──
+    with tab_cierre:
+        if "html_cierre_ready" not in st.session_state:
+            st.session_state.html_cierre_ready = None
+
+        if st.session_state.html_cierre_ready:
+            st.success("✅ Cierre generado. Descargá el documento para imprimir.")
+            st.download_button(
+                "🖨️ DESCARGAR CIERRE DE CAJA",
+                st.session_state.html_cierre_ready,
+                file_name=f"Cierre_Caja_{date.today()}.html",
+                mime="text/html"
+            )
+            if st.button("🔄 Nuevo Cierre"):
+                st.session_state.html_cierre_ready = None
+                st.rerun()
+        else:
+            st.markdown("Generá el cierre oficial de caja para el período que elijas. Se incluyen todos los movimientos y el saldo por forma de pago.")
+
+            c_cie1, c_cie2 = st.columns(2)
+            if es_admin:
+                caja_cierre = c_cie1.selectbox("Caja a cerrar", TODAS_CAJAS, key="cierre_caja_sel")
+            else:
+                caja_cierre = caja_propia
+                c_cie1.markdown(f"**Caja:** {caja_propia}")
+
+            periodo_cierre = c_cie2.radio("Período", ["Hoy", "Esta semana", "Este mes", "Personalizado"], horizontal=True, key="cierre_periodo")
+
+            hoy = date.today()
+            if periodo_cierre == "Hoy":
+                fecha_desde = hoy
+                fecha_hasta = hoy
+            elif periodo_cierre == "Esta semana":
+                fecha_desde = hoy - timedelta(days=hoy.weekday())
+                fecha_hasta = hoy
+            elif periodo_cierre == "Este mes":
+                fecha_desde = hoy.replace(day=1)
+                fecha_hasta = hoy
+            else:
+                cp1, cp2 = st.columns(2)
+                fecha_desde = cp1.date_input("Desde", value=hoy.replace(day=1), key="cierre_desde")
+                fecha_hasta = cp2.date_input("Hasta", value=hoy, key="cierre_hasta")
+
+            obs_cierre = st.text_area("Observaciones (opcional)", placeholder="Ej: Se entregó efectivo al supervisor. Faltante de $...", key="cierre_obs", height=80)
+
+            st.markdown("---")
+
+            # Preview en tiempo real
+            df_cierre = st.session_state.tesoreria[
+                st.session_state.tesoreria['Caja/Banco'] == caja_cierre
+            ].copy()
+            try:
+                df_cierre['Fecha_dt'] = pd.to_datetime(df_cierre['Fecha'], errors='coerce')
+                df_cierre = df_cierre[
+                    (df_cierre['Fecha_dt'].dt.date >= fecha_desde) &
+                    (df_cierre['Fecha_dt'].dt.date <= fecha_hasta)
+                ]
+            except:
+                pass
+
+            # Preview del resumen
+            FORMAS_PREV = ["EFECTIVO", "TRANSFERENCIA", "TARJETA DE CREDITO", "DÓLARES", "OTROS"]
+            ICONOS_PREV = {"EFECTIVO":"💵","TRANSFERENCIA":"🏦","TARJETA DE CREDITO":"💳","DÓLARES":"💲","OTROS":"📋"}
+            st.markdown(f"##### Vista previa — {caja_cierre} | {fecha_desde} al {fecha_hasta}")
+            cols_prev = st.columns(len(FORMAS_PREV))
+            for idx_p, fr in enumerate(FORMAS_PREV):
+                mask_p = df_cierre['Forma'].fillna('-').str.upper().str.contains(fr.replace("DÓLARES","DOLAR").replace("TARJETA DE CREDITO","TARJETA"), na=False)
+                sub_p  = df_cierre[mask_p]['Monto'].sum()
+                col_p  = "#2ecc71" if sub_p >= 0 else "#e74c3c"
+                cols_prev[idx_p].markdown(
+                    f"<div style='background:#f8f9fa;border-radius:8px;padding:10px;text-align:center;border-left:3px solid {col_p};'>"
+                    f"<div>{ICONOS_PREV.get(fr,'💰')}</div>"
+                    f"<div style='font-size:10px;color:#666;font-weight:bold;'>{fr}</div>"
+                    f"<div style='font-size:14px;font-weight:bold;color:{col_p};'>$ {sub_p:,.2f}</div>"
+                    f"</div>", unsafe_allow_html=True
+                )
+            st.caption(f"{len(df_cierre)} movimiento(s) en el período")
+            st.markdown("---")
+
+            if st.button("🔒 GENERAR CIERRE DE CAJA", type="primary"):
+                responsable = st.session_state.nombre_usuario
+                html_cierre = generar_html_cierre_caja({
+                    "caja":         caja_cierre,
+                    "fecha_cierre": f"{fecha_desde} al {fecha_hasta}",
+                    "responsable":  responsable,
+                    "movimientos":  df_cierre.drop(columns=['Fecha_dt'], errors='ignore'),
+                    "total":        df_cierre['Monto'].sum(),
+                    "observaciones": obs_cierre.strip()
+                })
+                st.session_state.html_cierre_ready = html_cierre
+                st.rerun()
+
     # ── PASE DE EFECTIVO: disponible para todos (operador pasa desde su caja, admin elige) ──
     with tab_pase:
         if st.session_state.get("msg_pase"):
@@ -1132,7 +1365,7 @@ elif sel == "CTA CTE GENERAL":
         res = res[res['Importe'].round(2) != 0]
         st.table(res.style.format({"Importe": "$ {:,.2f}"}))
 
-elif sel == "CTA CTE PROVEEDOR":
+elif sel == "CARGA PROVEEDOR":
     st.header("👤 Gestión de Proveedores")
     if st.session_state.get("msg_proveedor"):
         st.success(st.session_state.msg_proveedor)
@@ -1185,7 +1418,7 @@ elif sel == "CTA CTE PROVEEDOR":
                             st.session_state[f"edit_p_mode_{i}"] = False; st.rerun()
             st.divider()
 
-elif sel == "CARGA GASTOS":
+elif sel == "CTA CTE PROVEEDOR":
     st.header("💸 Carga de Gastos")
     if st.session_state.get("msg_gasto"):
         st.success(st.session_state.msg_gasto)
