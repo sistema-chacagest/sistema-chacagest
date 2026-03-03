@@ -286,7 +286,7 @@ def generar_html_presupuesto(p_data):
 # ─────────────────────────────────────────────────────────────────────────────
 USUARIOS = {
     "admin": {
-        "password": "chaca2026",
+        "password": "Noroeste23",
         "rol": "admin",
         "caja": None,           # Admin no tiene caja asignada, ve todas
         "nombre": "Administrador"
@@ -1265,3 +1265,4 @@ elif sel == "HISTORICO COMPRAS":
                 st.session_state.compras = st.session_state.compras.drop(i)
                 guardar_datos("compras", st.session_state.compras); st.rerun()
             st.divider()
+
