@@ -1079,11 +1079,10 @@ elif sel == "TESORERIA":
             ["📥 INGRESOS VARIOS", "📤 EGRESOS VARIOS", "🧾 COBRANZA VIAJE", "📊 VER MOVIMIENTOS", "💱 PASE DE EFECTIVO", "🔒 CIERRE DE CAJA", "🔄 TRASPASO", "💸 ORDEN DE PAGO"]
         )
     else:
-        tab_ing, tab_egr, tab_cob, tab_ver, tab_pase, tab_cierre = st.tabs(
-            ["📥 INGRESOS VARIOS", "📤 EGRESOS VARIOS", "🧾 COBRANZA VIAJE", "📊 MIS MOVIMIENTOS", "💱 PASE DE EFECTIVO", "🔒 CIERRE DE CAJA"]
+        tab_ing, tab_egr, tab_cob, tab_ver, tab_pase, tab_cierre, tab_op = st.tabs(
+            ["📥 INGRESOS VARIOS", "📤 EGRESOS VARIOS", "🧾 COBRANZA VIAJE", "📊 MIS MOVIMIENTOS", "💱 PASE DE EFECTIVO", "🔒 CIERRE DE CAJA", "💸 ORDEN DE PAGO"]
         )
         tab_tras = None
-        tab_op   = None
 
     with tab_ing:
         if st.session_state.get("msg_ingreso"):
@@ -1138,33 +1137,119 @@ elif sel == "TESORERIA":
 
     with tab_cob:
         if "html_recibo_ready" not in st.session_state: st.session_state.html_recibo_ready = None
-        with st.form("f_cob", clear_on_submit=True):
-            c_sel = st.selectbox("Cliente", st.session_state.clientes['Razón Social'].unique() if not st.session_state.clientes.empty else [""])
-            if es_admin:
-                cj       = st.selectbox("Caja Destino", opc_cajas)
-                forma_cob = st.selectbox("Forma de Cobro", FORMAS_PAGO + ["OTROS"])
-            else:
-                cj        = caja_propia
-                forma_cob = st.selectbox("Forma de Cobro", FORMAS_PAGO + ["OTROS"])
-            mon   = st.number_input("Monto $", min_value=0.0)
-            afip  = st.text_input("Comprobante Asociado (AFIP/Recibo)")
-            if st.form_submit_button("GENERAR COBRANZA"):
-                if c_sel and mon > 0:
-                    nt = pd.DataFrame([[date.today(), "COBRANZA", cj, forma_cob, "Cobro Viaje", c_sel, mon, afip]], columns=COL_TESORERIA)
-                    nv = pd.DataFrame([[date.today(), c_sel, date.today(), "PAGO", "TESORERIA", "-", -mon, "RECIBO", afip]], columns=COL_VIAJES)
-                    st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
-                    st.session_state.viajes    = pd.concat([st.session_state.viajes, nv], ignore_index=True)
-                    guardar_datos("tesoreria", st.session_state.tesoreria)
-                    guardar_datos("viajes", st.session_state.viajes)
-                    st.session_state.html_recibo_ready = generar_html_recibo({
-                        "Fecha": date.today(), "Cliente/Proveedor": c_sel,
-                        "Concepto": "Cobro de Viaje", "Caja/Banco": f"{cj} - {forma_cob}",
-                        "Monto": mon, "Ref AFIP": afip
-                    })
-                    st.session_state.cli_ready = c_sel
-                    st.rerun()
+        if "cob_forma_actual" not in st.session_state: st.session_state.cob_forma_actual = None
+
+        FORMAS_COBRO_VIAJE = FORMAS_PAGO + ["CHEQUE DE TERCEROS", "OTROS"]
+
+        # ── Paso 1: selección de cliente, caja, forma y monto ──
+        if not st.session_state.html_recibo_ready and st.session_state.cob_forma_actual != "CHEQUE DE TERCEROS":
+            with st.form("f_cob", clear_on_submit=True):
+                c_sel = st.selectbox("Cliente", st.session_state.clientes['Razón Social'].unique() if not st.session_state.clientes.empty else [""])
+                if es_admin:
+                    cj        = st.selectbox("Caja Destino", opc_cajas)
                 else:
-                    st.warning("Completá el cliente y el monto antes de continuar.")
+                    cj        = caja_propia
+                forma_cob = st.selectbox("Forma de Cobro", FORMAS_COBRO_VIAJE)
+                mon   = st.number_input("Monto $", min_value=0.0)
+                afip  = st.text_input("Comprobante Asociado (AFIP/Recibo)")
+                if st.form_submit_button("GENERAR COBRANZA"):
+                    if c_sel and mon > 0:
+                        if forma_cob == "CHEQUE DE TERCEROS":
+                            # Guardamos datos en session para el paso 2
+                            st.session_state.cob_forma_actual  = "CHEQUE DE TERCEROS"
+                            st.session_state.cob_cliente       = c_sel
+                            st.session_state.cob_caja          = cj
+                            st.session_state.cob_monto         = mon
+                            st.session_state.cob_afip          = afip
+                            st.rerun()
+                        else:
+                            nt = pd.DataFrame([[date.today(), "COBRANZA", cj, forma_cob, "Cobro Viaje", c_sel, mon, afip]], columns=COL_TESORERIA)
+                            nv = pd.DataFrame([[date.today(), c_sel, date.today(), "PAGO", "TESORERIA", "-", -mon, "RECIBO", afip]], columns=COL_VIAJES)
+                            st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
+                            st.session_state.viajes    = pd.concat([st.session_state.viajes, nv], ignore_index=True)
+                            guardar_datos("tesoreria", st.session_state.tesoreria)
+                            guardar_datos("viajes", st.session_state.viajes)
+                            st.session_state.html_recibo_ready = generar_html_recibo({
+                                "Fecha": date.today(), "Cliente/Proveedor": c_sel,
+                                "Concepto": "Cobro de Viaje", "Caja/Banco": f"{cj} - {forma_cob}",
+                                "Monto": mon, "Ref AFIP": afip
+                            })
+                            st.session_state.cli_ready = c_sel
+                            st.rerun()
+                    else:
+                        st.warning("Completá el cliente y el monto antes de continuar.")
+
+        # ── Paso 2: formulario de registro del cheque de terceros ──
+        if st.session_state.cob_forma_actual == "CHEQUE DE TERCEROS":
+            c_sel = st.session_state.cob_cliente
+            cj    = st.session_state.cob_caja
+            mon   = st.session_state.cob_monto
+            afip  = st.session_state.cob_afip
+
+            st.markdown(f"""
+            <div style='background:#fff4e6;border-left:5px solid #f39c12;padding:12px 18px;border-radius:8px;margin-bottom:16px;'>
+                <b>🧾 Registrando cheque de terceros</b><br>
+                Cliente: <b>{c_sel}</b> &nbsp;·&nbsp; Monto: <b>$ {mon:,.2f}</b>
+            </div>
+            """, unsafe_allow_html=True)
+
+            st.markdown("##### 🏦 Datos del Cheque Recibido")
+            with st.form("f_cheq_tercero", clear_on_submit=True):
+                ch1, ch2 = st.columns(2)
+                ch_nro      = ch1.text_input("Nro. de Cheque *")
+                ch_tipo     = ch2.selectbox("Tipo de Cheque", ["COMÚN", "DIFERIDO", "ELECTRÓNICO"])
+                ch3, ch4    = st.columns(2)
+                ch_banco    = ch3.text_input("Banco Librador *")
+                ch_librador = ch4.text_input("Librador (nombre en el cheque) *")
+                ch5, ch6    = st.columns(2)
+                ch_fvenc    = ch5.date_input("Fecha de Vencimiento / Pago", date.today() + timedelta(days=30))
+                ch_obs      = ch6.text_input("Observaciones")
+                btn1, btn2  = st.columns(2)
+                if btn1.form_submit_button("✅ CONFIRMAR Y GUARDAR CHEQUE"):
+                    if ch_nro and ch_banco and ch_librador:
+                        # 1) Registrar en cheques_cartera
+                        nuevo_cheq = pd.DataFrame([[
+                            str(date.today()), ch_nro, ch_tipo, ch_banco, ch_librador,
+                            mon, str(ch_fvenc), "EN CARTERA", "-", "-",
+                            ch_obs if ch_obs else "-"
+                        ]], columns=COL_CHEQ_CARTERA)
+                        st.session_state.cheques_cartera = pd.concat([st.session_state.cheques_cartera, nuevo_cheq], ignore_index=True)
+                        guardar_datos("cheques_cartera", st.session_state.cheques_cartera)
+
+                        # 2) Registrar en tesorería (cobranza con forma CHEQUE TERCERO)
+                        nt = pd.DataFrame([[
+                            str(date.today()), "COBRANZA", cj, "CHEQUE TERCERO",
+                            f"Cobro Viaje - Cheque #{ch_nro} de {ch_librador}",
+                            c_sel, mon, afip
+                        ]], columns=COL_TESORERIA)
+                        st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
+                        guardar_datos("tesoreria", st.session_state.tesoreria)
+
+                        # 3) Registrar movimiento en viajes (descuenta saldo cliente)
+                        nv = pd.DataFrame([[
+                            date.today(), c_sel, date.today(), "PAGO", "TESORERIA",
+                            "-", -mon, "RECIBO", afip
+                        ]], columns=COL_VIAJES)
+                        st.session_state.viajes = pd.concat([st.session_state.viajes, nv], ignore_index=True)
+                        guardar_datos("viajes", st.session_state.viajes)
+
+                        # 4) Generar recibo
+                        st.session_state.html_recibo_ready = generar_html_recibo({
+                            "Fecha": date.today(), "Cliente/Proveedor": c_sel,
+                            "Concepto": f"Cobro de Viaje — Cheque #{ch_nro} ({ch_tipo}) de {ch_librador}",
+                            "Caja/Banco": f"{cj} - CHEQUE DE TERCEROS",
+                            "Monto": mon, "Ref AFIP": afip
+                        })
+                        st.session_state.cli_ready         = c_sel
+                        st.session_state.cob_forma_actual  = None
+                        st.success(f"✅ Cheque #{ch_nro} registrado en cartera y cobranza guardada.")
+                        st.rerun()
+                    else:
+                        st.warning("Completá Nro. de Cheque, Banco Librador y Librador para continuar.")
+                if btn2.form_submit_button("❌ Cancelar"):
+                    st.session_state.cob_forma_actual = None
+                    st.rerun()
+
         if st.session_state.html_recibo_ready:
             st.success(f"✅ Cobranza de '{st.session_state.cli_ready}' registrada con éxito.")
             st.download_button("🖨️ IMPRIMIR RECIBO PDF/HTML", st.session_state.html_recibo_ready, file_name=f"Recibo_{st.session_state.cli_ready}.html", mime="text/html")
