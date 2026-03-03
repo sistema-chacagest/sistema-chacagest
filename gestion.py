@@ -1975,11 +1975,13 @@ elif sel == "CHEQUES":
                         wb = openpyxl.load_workbook(io.BytesIO(raw), data_only=True)
                         ws_xl = wb.active
                         rows_iter = list(ws_xl.iter_rows(values_only=True))
-                        # buscar fila de cabecera (la primera que tenga "fecha" o "cheque")
+                        # buscar fila de cabecera: la primera con AL MENOS 3 keywords de columnas esperadas
+                        HEADER_KW = ('fecha', 'nro', 'banco', 'importe', 'concepto', 'monto', 'acred', 'emisor')
                         header_row = 0
-                        for ri, row in enumerate(rows_iter):
+                        for ri, row in enumerate(rows_iter[:20]):
                             cells_str = [str(c).lower() if c is not None else '' for c in row]
-                            if any('fecha' in c or 'cheque' in c or 'nro' in c for c in cells_str):
+                            hits = sum(1 for c in cells_str if any(kw in c for kw in HEADER_KW))
+                            if hits >= 3:
                                 header_row = ri; break
                         headers = [str(c).strip().lower() if c is not None else f'col{ci}'
                                    for ci, c in enumerate(rows_iter[header_row])]
@@ -2061,12 +2063,14 @@ elif sel == "CHEQUES":
                         max_row = max((r for r,c in cells), default=0)
                         max_col = max((c for r,c in cells), default=0)
 
-                        # buscar fila de cabecera
+                        # buscar fila de cabecera: la primera con AL MENOS 3 keywords de columnas esperadas
+                        HEADER_KW = ('fecha', 'nro', 'banco', 'importe', 'concepto', 'monto', 'acred', 'emisor')
                         header_row = 0
-                        for ri in range(min(15, max_row+1)):
+                        for ri in range(min(20, max_row+1)):
                             row_vals = [str(_cell_val(sst, cells, ri, ci) or '').lower()
                                         for ci in range(max_col+1)]
-                            if any('fecha' in v or 'cheque' in v or 'nro' in v for v in row_vals):
+                            hits = sum(1 for v in row_vals if any(kw in v for kw in HEADER_KW))
+                            if hits >= 3:
                                 header_row = ri; break
 
                         headers = [str(_cell_val(sst, cells, header_row, ci) or f'col{ci}').strip().lower()
@@ -2124,7 +2128,7 @@ elif sel == "CHEQUES":
                         st.markdown("**🔍 Diagnóstico — headers detectados y primeras filas:**")
                         if filas_raw:
                             st.write("**Headers:**", list(filas_raw[0].keys()))
-                            st.dataframe(pd.DataFrame(filas_raw[:10]), use_container_width=True)
+                            st.dataframe(pd.DataFrame(filas_raw[:20]), use_container_width=True)
                         else:
                             st.warning("No se pudo leer ninguna fila.")
                     else:
