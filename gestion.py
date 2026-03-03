@@ -2094,22 +2094,33 @@ elif sel == "CHEQUES":
                     col_fecha_vacia = all(_find_col(r, 'fecha emis', 'fecha emisi', 'fecha ') is None for r in filas_raw)
                     col_nro_vacia   = all(_find_col(r, 'nro', 'número', 'numero', 'nro cheque') is None for r in filas_raw)
 
+                    # Verificar columnas vacías revisando valores, no claves
+                    def _col_toda_vacia(filas_raw, *keywords):
+                        """True si en TODAS las filas esa columna es None o vacía."""
+                        for r in filas_raw:
+                            v = _find_col(r, *keywords)
+                            if v is not None and str(v).strip() not in ("", "-", "None"):
+                                return False
+                        return True
+
+                    col_fecha_vacia = _col_toda_vacia(filas_raw, 'fecha emis', 'fecha emisi', 'fecha ')
+                    col_nro_vacia   = _col_toda_vacia(filas_raw, 'nro', 'número', 'numero', 'nro cheque')
+
                     if col_fecha_vacia or col_nro_vacia:
                         faltantes = []
                         if col_fecha_vacia: faltantes.append('**Fecha** y **Fecha Acred**')
                         if col_nro_vacia:   faltantes.append('**Nro Cheque**')
-                        st.warning(f"⚠️ El archivo tiene las columnas {' y '.join(faltantes)} vacías. El banco exporta el archivo sin esos datos.")
+                        st.warning(f"⚠️ El archivo tiene las columnas {' y '.join(faltantes)} vacías. Por favor completalas en Excel y volvé a subir el archivo.")
                         st.markdown("""
                         <div style='background:#fff3cd;border-left:4px solid #f39c12;padding:12px 16px;border-radius:6px;font-size:13px;margin-top:8px;'>
                         <b>📋 Cómo completar el archivo antes de importar:</b><br><br>
                         1. Abrí el archivo XLS en Excel<br>
-                        2. Completá la columna <b>Fecha</b> con la fecha de emisión (formato DD/MM/AAAA)<br>
+                        2. Completá la columna <b>Fecha</b> con la fecha de emisión (DD/MM/AAAA)<br>
                         3. Completá la columna <b>Fecha Acred</b> con la fecha de vencimiento<br>
                         4. Completá la columna <b>Nro Cheque</b> con el número de cada cheque<br>
                         5. Guardá el archivo y volvé a subirlo aquí
                         </div>
                         """, unsafe_allow_html=True)
-                        # Vista previa de los datos disponibles
                         datos_parciales = []
                         for r in filas_raw:
                             concepto_p = _find_col(r, 'concepto', 'descripcion', 'detalle', 'orden')
@@ -2129,9 +2140,8 @@ elif sel == "CHEQUES":
                                     'Importe':           imp_p,
                                 })
                         if datos_parciales:
-                            st.markdown(f"##### 👇 {len(datos_parciales)} registros encontrados — completá las columnas faltantes en el XLS:")
+                            st.markdown(f"##### 👇 {len(datos_parciales)} registros encontrados — completá las columnas faltantes:")
                             st.dataframe(pd.DataFrame(datos_parciales), use_container_width=True, hide_index=True)
-                    else:
                         filas = []
                         for row_d in filas_raw:
                             fecha_emis = _fmt_fecha(_find_col(row_d, 'fecha emis', 'fecha emisi', 'fecha '))
