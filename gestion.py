@@ -286,7 +286,7 @@ def generar_html_presupuesto(p_data):
 # ─────────────────────────────────────────────────────────────────────────────
 USUARIOS = {
     "admin": {
-        "password": "chaca2026",
+        "password": "Noroeste23",
         "rol": "admin",
         "caja": None,           # Admin no tiene caja asignada, ve todas
         "nombre": "Administrador"
@@ -1005,13 +1005,12 @@ elif sel == "TESORERIA":
         df_ver = st.session_state.tesoreria[st.session_state.tesoreria['Caja/Banco'] == cj_v].copy()
 
         # ── Resumen desglosado por Forma ──
+        FORMAS_RESUMEN = ["EFECTIVO", "TRANSFERENCIA", "TARJETA DE CREDITO", "DÓLARES", "OTROS"]
         ICONOS_FORMA   = {"EFECTIVO": "💵", "TRANSFERENCIA": "🏦", "TARJETA DE CREDITO": "💳", "DÓLARES": "💲", "OTROS": "📋"}
 
         cols_formas = st.columns(len(FORMAS_RESUMEN))
-        total_caja  = df_ver['Monto'].sum()
 
         for idx, forma_r in enumerate(FORMAS_RESUMEN):
-            # Buscar coincidencia parcial para tolerar variantes (ej: "DOLAR CAJA COTI" matchea "DÓLARES")
             mask = df_ver['Forma'].fillna('-').str.upper().str.contains(forma_r.replace("DÓLARES", "DOLAR").replace("TARJETA DE CREDITO", "TARJETA"), na=False)
             saldo_forma = df_ver[mask]['Monto'].sum()
             icono = ICONOS_FORMA.get(forma_r, "💰")
