@@ -670,8 +670,8 @@ with st.sidebar:
             opciones_ventas = ["CLIENTES", "CARGA VIAJE", "PRESUPUESTOS", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"]
             iconos_ventas   = ["people", "truck", "file-earmark-spreadsheet", "person-vcard", "globe", "file-text"]
         else:
-            opciones_ventas = ["CLIENTES", "CARGA VIAJE", "PRESUPUESTOS", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"]
-            iconos_ventas   = ["people", "truck", "file-earmark-spreadsheet", "person-vcard", "globe", "file-text"]
+            opciones_ventas = ["CLIENTES", "CARGA VIAJE", "PRESUPUESTOS", "CTA CTE INDIVIDUAL", "COMPROBANTES"]
+            iconos_ventas   = ["people", "truck", "file-earmark-spreadsheet", "person-vcard", "file-text"]
         sel_sub = option_menu(
             menu_title=None,
             options=opciones_ventas,
@@ -1230,18 +1230,15 @@ elif sel == "TESORERIA":
                 st.markdown(f"**Caja:** {caja_propia}")
                 cj = caja_propia
             forma = st.selectbox("Forma de Egreso", FORMAS_PAGO)
-            cuentas_opciones = sorted(st.session_state.get("cuentas_gastos", ["SIN CATEGORÍA"])) + ["SIN CATEGORÍA"]
-            cuentas_opciones = sorted(set(cuentas_opciones))
-            cuenta_gasto = st.selectbox("Cuenta de Gasto", cuentas_opciones)
             con = st.text_input("Concepto")
             mon = st.number_input("Monto $", min_value=0.0)
             if st.form_submit_button("REGISTRAR EGRESO"):
                 if mon > 0:
-                    concepto_completo = f"[{cuenta_gasto}] {con}" if con else f"[{cuenta_gasto}]"
+                    concepto_completo = con if con else "-"
                     nt = pd.DataFrame([[f, "EGRESO VARIO", cj, forma, concepto_completo, "Varios", -mon, "-"]], columns=COL_TESORERIA)
                     st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
                     guardar_datos("tesoreria", st.session_state.tesoreria)
-                    st.session_state.msg_egreso = f"✅ Egreso de $ {mon:,.2f} ({forma}) — {cuenta_gasto} — registrado desde {cj}."
+                    st.session_state.msg_egreso = f"✅ Egreso de $ {mon:,.2f} ({forma}) registrado desde {cj}."
                     st.rerun()
                 else:
                     st.warning("Ingresá un monto mayor a cero.")
@@ -1251,13 +1248,9 @@ elif sel == "TESORERIA":
 
         FORMAS_COBRO_VIAJE = FORMAS_PAGO + ["CHEQUE DE TERCEROS", "OTROS"]
 
-if not st.session_state.html_recibo_ready:
-            if st.session_state.clientes.empty:
-                st.warning("⚠️ No hay clientes registrados. Primero cargá uno desde **VENTAS → CLIENTES**.")
-                st.stop()
+        if not st.session_state.html_recibo_ready:
             # ── Selectbox de forma FUERA del form para mostrar campos dinámicamente ──
             cob_col1, cob_col2 = st.columns(2)
-            c_sel_prev = cob_col1.selectbox("Cliente", st.session_state.clientes['Razón Social'].unique(), key="cob_cli_sel")
             c_sel_prev = cob_col1.selectbox("Cliente", st.session_state.clientes['Razón Social'].unique() if not st.session_state.clientes.empty else [""], key="cob_cli_sel")
             forma_cob_prev = cob_col2.selectbox("Forma de Cobro", FORMAS_COBRO_VIAJE, key="cob_forma_sel")
 
@@ -1937,8 +1930,6 @@ elif sel == "CTA CTE GENERAL PROV":
             st.session_state.proveedores[['Razón Social', 'CBU', 'Alias']],
             left_on='Proveedor', right_on='Razón Social', how='left'
         ).drop(columns='Razón Social')
-        res_p['CBU']   = res_p['CBU'].fillna('-')
-        res_p['Alias'] = res_p['Alias'].fillna('-')
         res_p = res_p[['Proveedor', 'CBU', 'Alias', 'Total']]
         # Métricas
         mp1, mp2 = st.columns(2)
@@ -1973,245 +1964,143 @@ elif sel == "HISTORICO COMPRAS":
 
 elif sel == "MAYOR DE CUENTAS":
     st.header("📒 Mayor de Cuentas")
-    st.caption("Resumen contable por cuenta: Ingresos, IVA Ventas, Gastos, IVA Compras y retenciones.")
 
     # ── Filtros de período ──
     mc1, mc2 = st.columns(2)
     mc_desde = mc1.date_input("Desde", value=date(date.today().year, 1, 1), key="mc_desde")
     mc_hasta = mc2.date_input("Hasta", value=date.today(), key="mc_hasta")
 
-    # ════════════════════════════════════════════
-    # SECCIÓN 1: INGRESOS (viajes)
-    # ════════════════════════════════════════════
-    df_viajes_mc = st.session_state.viajes.copy()
-    df_viajes_mc['Importe'] = pd.to_numeric(df_viajes_mc['Importe'], errors='coerce').fillna(0)
+    # ── INGRESOS: suma de viajes del período ──
+    df_v = st.session_state.viajes.copy()
+    df_v['Importe'] = pd.to_numeric(df_v['Importe'], errors='coerce').fillna(0)
+    col_fv = next((c for c in ['Fecha Viaje', 'Fecha Carga', 'Fecha'] if c in df_v.columns), None)
+    if col_fv:
+        df_v['_fd'] = pd.to_datetime(df_v[col_fv], errors='coerce')
+        df_v = df_v[(df_v['_fd'].dt.date >= mc_desde) & (df_v['_fd'].dt.date <= mc_hasta)]
+    total_ingresos = df_v['Importe'].sum()
 
-    # Buscar la columna de fecha correcta (puede ser 'Fecha Viaje' o 'Fecha Carga')
-    col_fecha_viaje = None
-    for _cf in ['Fecha Viaje', 'Fecha Carga', 'Fecha']:
-        if _cf in df_viajes_mc.columns:
-            col_fecha_viaje = _cf
-            break
+    # ── GASTOS: suma de compras del período ──
+    df_c = st.session_state.compras.copy()
+    for col in ['Neto 21','Neto 10.5','Ret IVA','Ret Ganancia','Ret IIBB','No Gravados','Total']:
+        df_c[col] = pd.to_numeric(df_c[col], errors='coerce').fillna(0)
+    df_c['_fd'] = pd.to_datetime(df_c['Fecha'], errors='coerce')
+    df_c = df_c[(df_c['_fd'].dt.date >= mc_desde) & (df_c['_fd'].dt.date <= mc_hasta)]
+    total_gastos    = df_c['Total'].sum()
+    iva_compras_21  = (df_c['Neto 21']  * 0.21).sum()
+    iva_compras_105 = (df_c['Neto 10.5'] * 0.105).sum()
+    total_iva_compras = iva_compras_21 + iva_compras_105
+    total_ret_iva   = df_c['Ret IVA'].sum()
+    total_ret_gan   = df_c['Ret Ganancia'].sum()
+    total_ret_iibb  = df_c['Ret IIBB'].sum()
 
-    if col_fecha_viaje and not df_viajes_mc.empty:
-        df_viajes_mc['Fecha_dt'] = pd.to_datetime(df_viajes_mc[col_fecha_viaje], errors='coerce')
-        mask_v = (df_viajes_mc['Fecha_dt'].dt.date >= mc_desde) & (df_viajes_mc['Fecha_dt'].dt.date <= mc_hasta)
-        df_viajes_mc = df_viajes_mc[mask_v]
-
-    total_ingresos = df_viajes_mc['Importe'].sum()
-    iva_ventas = 0.0
-    neto_ventas = total_ingresos
-
-    # ════════════════════════════════════════════
-    # SECCIÓN 2: COMPRAS (gastos + IVA compras)
-    # ════════════════════════════════════════════
-    df_compras_mc = st.session_state.compras.copy()
-    try:
-        df_compras_mc['Fecha_dt'] = pd.to_datetime(df_compras_mc['Fecha'], errors='coerce')
-        df_compras_mc = df_compras_mc[
-            (df_compras_mc['Fecha_dt'].dt.date >= mc_desde) &
-            (df_compras_mc['Fecha_dt'].dt.date <= mc_hasta)
-        ]
-    except: pass
-
-    # Calcular IVA compras: neto21*0.21 + neto10.5*0.105
-    df_compras_mc['IVA_21']  = df_compras_mc['Neto 21']  * 0.21
-    df_compras_mc['IVA_105'] = df_compras_mc['Neto 10.5'] * 0.105
-    total_iva_compras = df_compras_mc['IVA_21'].sum() + df_compras_mc['IVA_105'].sum()
-    total_neto_compras = df_compras_mc['Neto 21'].sum() + df_compras_mc['Neto 10.5'].sum()
-    total_no_grav = df_compras_mc['No Gravados'].sum()
-    total_ret_iva = df_compras_mc['Ret IVA'].sum()
-    total_ret_gan = df_compras_mc['Ret Ganancia'].sum()
-    total_ret_iibb = df_compras_mc['Ret IIBB'].sum()
-    total_compras  = df_compras_mc['Total'].sum()
-
-    # Gastos por cuenta (join con proveedores para la cuenta de gastos)
+    # Gastos agrupados por cuenta
     gastos_por_cuenta = pd.DataFrame()
-    if not df_compras_mc.empty and not st.session_state.proveedores.empty:
-        df_gc = df_compras_mc.merge(
-            st.session_state.proveedores[['Razón Social', 'Cuenta de Gastos']],
-            left_on='Proveedor', right_on='Razón Social', how='left'
-        )
+    if not df_c.empty and not st.session_state.proveedores.empty:
+        df_gc = df_c.merge(st.session_state.proveedores[['Razón Social','Cuenta de Gastos']],
+                           left_on='Proveedor', right_on='Razón Social', how='left')
         df_gc['Cuenta de Gastos'] = df_gc['Cuenta de Gastos'].fillna('SIN CLASIFICAR')
-        gastos_por_cuenta = df_gc.groupby('Cuenta de Gastos')['Total'].sum().reset_index()
-        gastos_por_cuenta = gastos_por_cuenta.sort_values('Total', ascending=False)
+        gastos_por_cuenta = df_gc.groupby('Cuenta de Gastos')['Total'].sum().reset_index().sort_values('Total', ascending=False)
 
-    # ── IVA Neto a pagar/favor ──
-    iva_neto = iva_ventas - total_iva_compras
+    resultado = total_ingresos - total_gastos
 
-    # ════════════════════════════════════════════
-    # MÉTRICAS RESUMEN
-    # ════════════════════════════════════════════
+    # ── RESUMEN en pantalla ──
     st.markdown("### 📊 Resumen del Período")
-    km1, km2, km3, km4 = st.columns(4)
-    km1.metric("💰 Ingresos Totales", f"$ {total_ingresos:,.2f}")
-    km2.metric("🚌 IVA Ventas", "No aplica (transporte)")
-    km3.metric("🛒 Gastos Totales", f"$ {total_compras:,.2f}")
-    km4.metric("📋 IVA Compras", f"$ {total_iva_compras:,.2f}")
-    # IVA neto = solo crédito fiscal de compras (no hay débito fiscal en ventas de transporte)
-    iva_neto = -total_iva_compras  # es crédito a favor
-    color_iva_neto = "#2ecc71"
+    km1, km2, km3 = st.columns(3)
+    km1.metric("💰 Ingresos (Viajes)", f"$ {total_ingresos:,.2f}")
+    km2.metric("🛒 Gastos (Compras)", f"$ {total_gastos:,.2f}")
+    color_res = "#2ecc71" if resultado >= 0 else "#e74c3c"
+    km3.metric("📈 Resultado", f"$ {resultado:,.2f}")
     st.markdown(
         f"<div style='background:#f0f2f6;border-radius:10px;padding:14px 24px;margin:10px 0;"
-        f"border-left:5px solid {color_iva_neto};'>"
-        f"<b>IVA Crédito Fiscal (a favor — solo compras):</b> "
-        f"<span style='font-size:22px;font-weight:bold;color:{color_iva_neto};'>$ {abs(iva_neto):,.2f}</span>"
-        f"<span style='font-size:12px;color:#888;'> — Los ingresos por transporte de pasajeros no generan débito fiscal</span>"
+        f"border-left:5px solid {color_res};display:flex;justify-content:space-between;align-items:center;'>"
+        f"<span style='font-weight:bold;'>{'GANANCIA' if resultado >= 0 else 'PÉRDIDA'} DEL PERÍODO</span>"
+        f"<span style='font-size:26px;font-weight:bold;color:{color_res};'>$ {abs(resultado):,.2f}</span>"
         f"</div>", unsafe_allow_html=True
     )
-
     st.markdown("---")
 
-    # ════════════════════════════════════════════
-    # TABS DEL MAYOR
-    # ════════════════════════════════════════════
-    tab_ing, tab_gtos, tab_iva, tab_ret = st.tabs(["💰 Ingresos", "🛒 Gastos por Cuenta", "📋 IVA", "📌 Retenciones"])
+    # ── TABS ──
+    tab_ing, tab_gtos, tab_iva, tab_ret = st.tabs(["💰 Ingresos", "🛒 Gastos por Cuenta", "📋 IVA Compras", "📌 Retenciones"])
 
     with tab_ing:
-        st.markdown("#### Cuenta: INGRESOS POR SERVICIOS DE TRANSPORTE")
-        if df_viajes_mc.empty:
-            st.info("No hay viajes registrados en el período seleccionado.")
-        else:
-            df_mayor_ing = df_viajes_mc.copy()
-
-            # Usar la columna de fecha que encontramos
-            if col_fecha_viaje and col_fecha_viaje in df_mayor_ing.columns:
-                df_mayor_ing['Fecha'] = pd.to_datetime(df_mayor_ing[col_fecha_viaje], errors='coerce').dt.strftime('%d/%m/%Y')
-            else:
-                df_mayor_ing['Fecha'] = '-'
-
-            df_mayor_ing = df_mayor_ing.sort_values('Fecha_dt', na_position='last') if 'Fecha_dt' in df_mayor_ing.columns else df_mayor_ing
-            df_mayor_ing['Debe'] = 0.0
-            df_mayor_ing = df_mayor_ing.rename(columns={'Importe': 'Haber'})
-            df_mayor_ing['Saldo Acum.'] = df_mayor_ing['Haber'].cumsum()
-
-            cols_mostrar = ['Fecha', 'Cliente', 'Debe', 'Haber', 'Saldo Acum.']
-            cols_ok = [c for c in cols_mostrar if c in df_mayor_ing.columns]
-            st.dataframe(
-                df_mayor_ing[cols_ok].style.format({"Debe": "$ {:,.2f}", "Haber": "$ {:,.2f}", "Saldo Acum.": "$ {:,.2f}"}),
-                use_container_width=True
-            )
-            st.markdown(
-                f"<div style='background:#5e2d61;color:white;border-radius:8px;padding:12px 20px;"
-                f"display:flex;justify-content:space-between;align-items:center;margin-top:8px;'>"
-                f"<span style='font-size:14px;font-weight:bold;'>TOTAL INGRESOS DEL PERÍODO</span>"
-                f"<span style='font-size:22px;font-weight:bold;'>$ {total_ingresos:,.2f}</span>"
-                f"</div>", unsafe_allow_html=True
-            )
+        st.metric("Total Ingresos por Viajes", f"$ {total_ingresos:,.2f}")
+        st.caption(f"{len(df_v)} viaje(s) en el período")
+        if not df_v.empty:
+            ing_cli = df_v.groupby('Cliente')['Importe'].sum().reset_index().sort_values('Importe', ascending=False)
+            st.dataframe(ing_cli.style.format({"Importe": "$ {:,.2f}"}), use_container_width=True)
 
     with tab_gtos:
-        st.markdown("#### Gastos por Cuenta Contable")
+        st.metric("Total Gastos", f"$ {total_gastos:,.2f}")
         if not gastos_por_cuenta.empty:
             fig_gc = px.bar(gastos_por_cuenta, x='Cuenta de Gastos', y='Total',
                            color_discrete_sequence=['#5e2d61'],
-                           labels={'Total': 'Total $', 'Cuenta de Gastos': 'Cuenta'})
-            fig_gc.update_layout(showlegend=False, plot_bgcolor='white', height=320)
+                           labels={'Total':'Total $','Cuenta de Gastos':'Cuenta'})
+            fig_gc.update_layout(showlegend=False, plot_bgcolor='white', height=300)
             st.plotly_chart(fig_gc, use_container_width=True)
             st.dataframe(gastos_por_cuenta.style.format({"Total": "$ {:,.2f}"}), use_container_width=True)
         else:
-            st.info("No hay compras en el período seleccionado.")
+            st.info("No hay compras en el período.")
 
     with tab_iva:
-        st.markdown("#### Posición de IVA")
-        st.info("ℹ️ Los servicios de transporte de pasajeros **no están gravados con IVA** (exentos). Solo se registra el crédito fiscal de compras.")
+        st.info("ℹ️ Transporte de pasajeros: sin débito fiscal. Solo crédito fiscal de compras.")
         iva_data = pd.DataFrame({
-            "Concepto": ["IVA Ventas (Débito Fiscal)",
-                         "IVA Compras 21% (Crédito Fiscal)",
-                         "IVA Compras 10.5% (Crédito Fiscal)",
-                         "IVA CRÉDITO FISCAL NETO (a favor)"],
-            "Importe": [0.0,
-                        df_compras_mc['IVA_21'].sum(),
-                        df_compras_mc['IVA_105'].sum(),
-                        total_iva_compras]
+            "Concepto": ["IVA Compras 21%", "IVA Compras 10.5%", "TOTAL CRÉDITO FISCAL"],
+            "Importe":  [iva_compras_21, iva_compras_105, total_iva_compras]
         })
         st.dataframe(iva_data.style.format({"Importe": "$ {:,.2f}"}), use_container_width=True)
-        # Detalle facturas con IVA
-        if not df_compras_mc.empty:
-            with st.expander("Ver detalle comprobantes"):
-                cols_iva = ['Fecha', 'Proveedor', 'Tipo Factura', 'Neto 21', 'Neto 10.5', 'IVA_21', 'IVA_105', 'Total']
-                st.dataframe(df_compras_mc[cols_iva].rename(columns={'IVA_21':'IVA 21%','IVA_105':'IVA 10.5%'})\
-                    .style.format({c: "$ {:,.2f}" for c in ['Neto 21','Neto 10.5','IVA 21%','IVA 10.5%','Total']}),
-                    use_container_width=True)
 
     with tab_ret:
-        st.markdown("#### Retenciones del Período")
         ret_data = pd.DataFrame({
-            "Retención": ["Retención IVA", "Retención Ganancias", "Retención IIBB", "TOTAL"],
-            "Importe": [total_ret_iva, total_ret_gan, total_ret_iibb,
-                        total_ret_iva + total_ret_gan + total_ret_iibb]
+            "Retención": ["IVA", "Ganancias", "IIBB", "TOTAL"],
+            "Importe":   [total_ret_iva, total_ret_gan, total_ret_iibb,
+                          total_ret_iva + total_ret_gan + total_ret_iibb]
         })
         st.dataframe(ret_data.style.format({"Importe": "$ {:,.2f}"}), use_container_width=True)
 
     st.markdown("---")
+    st.markdown("### 📥 Exportar")
 
-    # ════════════════════════════════════════════
-    # DESCARGA TXT
-    # ════════════════════════════════════════════
-    st.markdown("### 📥 Exportar Mayor de Cuentas")
+    # ── TXT ──
+    filas_gtos_txt = "\n".join(
+        f"  {r['Cuenta de Gastos']:<40} $ {r['Total']:>12,.2f}"
+        for _, r in gastos_por_cuenta.iterrows()
+    ) if not gastos_por_cuenta.empty else "  Sin datos"
 
-    lineas_txt = []
-    lineas_txt.append("=" * 60)
-    lineas_txt.append("    CHACABUCO NOROESTE TOUR S.R.L. — MAYOR DE CUENTAS")
-    lineas_txt.append(f"    Período: {mc_desde} al {mc_hasta}")
-    lineas_txt.append(f"    Emitido: {date.today()}")
-    lineas_txt.append("=" * 60)
-    lineas_txt.append("")
-    lineas_txt.append("── INGRESOS ──────────────────────────────────────────")
-    lineas_txt.append(f"  Ingresos Totales (servicios transp.): $ {total_ingresos:>12,.2f}")
-    lineas_txt.append(f"  IVA Ventas: NO APLICA (exento - transporte de pasajeros)")
-    lineas_txt.append("")
-    if not df_viajes_mc.empty:
-        lineas_txt.append("  Detalle por cliente:")
-        for _, row_i in df_viajes_mc.groupby('Cliente')['Importe'].sum().reset_index().sort_values('Importe', ascending=False).iterrows():
-            lineas_txt.append(f"    {row_i['Cliente']:<40} $ {row_i['Importe']:>12,.2f}")
-        lineas_txt.append("")
-        lineas_txt.append("  Detalle de viajes:")
-        cols_txt = ['Fecha Viaje', 'Cliente', 'Origen', 'Destino', 'Importe']
-        for _, row_v in df_viajes_mc.sort_values('Fecha Viaje', ascending=False).iterrows():
-            fecha_v  = str(row_v.get('Fecha Viaje', '-'))
-            cliente_v= str(row_v.get('Cliente', '-'))[:25]
-            origen_v = str(row_v.get('Origen', '-'))[:15]
-            destino_v= str(row_v.get('Destino', '-'))[:15]
-            imp_v    = float(row_v.get('Importe', 0))
-            lineas_txt.append(f"    {fecha_v:<12} {cliente_v:<26} {origen_v:<16} {destino_v:<16} $ {imp_v:>10,.2f}")
-    lineas_txt.append("")
-    if not df_viajes_mc.empty:
-        for _, row_i in df_viajes_mc.groupby('Cliente')['Importe'].sum().reset_index().iterrows():
-            lineas_txt.append(f"    {row_i['Cliente']:<40} $ {row_i['Importe']:>12,.2f}")
-    lineas_txt.append("")
-    lineas_txt.append("── GASTOS POR CUENTA ─────────────────────────────────")
-    if not gastos_por_cuenta.empty:
-        for _, row_g in gastos_por_cuenta.iterrows():
-            lineas_txt.append(f"  {row_g['Cuenta de Gastos']:<40} $ {row_g['Total']:>12,.2f}")
-    lineas_txt.append(f"  {'TOTAL GASTOS':<40} $ {total_compras:>12,.2f}")
-    lineas_txt.append("")
-    lineas_txt.append("── IVA ───────────────────────────────────────────────")
-    lineas_txt.append(f"  IVA Ventas (Débito Fiscal):        NO APLICA (transporte exento)")
-    lineas_txt.append(f"  IVA Compras 21% (Crédito Fiscal): $ {df_compras_mc['IVA_21'].sum():>15,.2f}")
-    lineas_txt.append(f"  IVA Compras 10.5% (Crédito):      $ {df_compras_mc['IVA_105'].sum():>15,.2f}")
-    lineas_txt.append(f"  {'CRÉDITO FISCAL NETO (a favor)':<38}  $ {total_iva_compras:>15,.2f}")
-    lineas_txt.append("")
-    lineas_txt.append("── RETENCIONES ───────────────────────────────────────")
-    lineas_txt.append(f"  Retención IVA:                    $ {total_ret_iva:>15,.2f}")
-    lineas_txt.append(f"  Retención Ganancias:              $ {total_ret_gan:>15,.2f}")
-    lineas_txt.append(f"  Retención IIBB:                   $ {total_ret_iibb:>15,.2f}")
-    lineas_txt.append(f"  {'TOTAL RETENCIONES':<38}  $ {(total_ret_iva+total_ret_gan+total_ret_iibb):>15,.2f}")
-    lineas_txt.append("")
-    lineas_txt.append("=" * 60)
-    lineas_txt.append("  CHACAGEST Software System — www.chacagest.com.ar")
-    lineas_txt.append("=" * 60)
+    txt = "\n".join([
+        "=" * 60,
+        "    CHACABUCO NOROESTE TOUR S.R.L.",
+        "    MAYOR DE CUENTAS",
+        f"    Período: {mc_desde} al {mc_hasta}",
+        f"    Emitido: {date.today()}",
+        "=" * 60,
+        "",
+        "── INGRESOS ──────────────────────────────────────────",
+        f"  Viajes:                            $ {total_ingresos:>12,.2f}",
+        "",
+        "── GASTOS POR CUENTA ─────────────────────────────────",
+        filas_gtos_txt,
+        f"  {'TOTAL GASTOS':<40} $ {total_gastos:>12,.2f}",
+        "",
+        "── IVA COMPRAS (Crédito Fiscal) ──────────────────────",
+        f"  IVA 21%:                           $ {iva_compras_21:>12,.2f}",
+        f"  IVA 10.5%:                         $ {iva_compras_105:>12,.2f}",
+        f"  TOTAL CRÉDITO FISCAL:              $ {total_iva_compras:>12,.2f}",
+        "",
+        "── RETENCIONES ───────────────────────────────────────",
+        f"  IVA:                               $ {total_ret_iva:>12,.2f}",
+        f"  Ganancias:                         $ {total_ret_gan:>12,.2f}",
+        f"  IIBB:                              $ {total_ret_iibb:>12,.2f}",
+        f"  TOTAL:                             $ {(total_ret_iva+total_ret_gan+total_ret_iibb):>12,.2f}",
+        "",
+        "── RESULTADO ─────────────────────────────────────────",
+        f"  Ingresos - Gastos:                 $ {resultado:>12,.2f}",
+        "",
+        "=" * 60,
+        "  CHACAGEST Software System",
+        "=" * 60,
+    ])
 
-    txt_content = "\n".join(lineas_txt)
-
-    col_dl1, col_dl2 = st.columns(2)
-    col_dl1.download_button(
-        label="📄 DESCARGAR TXT",
-        data=txt_content,
-        file_name=f"Mayor_Cuentas_{mc_desde}_{mc_hasta}.txt",
-        mime="text/plain"
-    )
-
-    # HTML para impresión
+    # ── HTML para PDF ──
     filas_gtos_html = "".join(
         f"<tr><td>{r['Cuenta de Gastos']}</td><td style='text-align:right'>$ {r['Total']:,.2f}</td></tr>"
         for _, r in gastos_por_cuenta.iterrows()
@@ -2220,48 +2109,62 @@ elif sel == "MAYOR DE CUENTAS":
     html_mayor = f"""<html><head><style>
         body{{font-family:'Segoe UI',Arial,sans-serif;color:#333;padding:24px;font-size:13px;}}
         .tit{{color:#5e2d61;font-size:20px;font-weight:bold;}}
-        h3{{color:#5e2d61;border-bottom:2px solid #5e2d61;padding-bottom:4px;}}
-        table{{width:100%;border-collapse:collapse;margin-bottom:20px;}}
+        h3{{color:#5e2d61;border-bottom:2px solid #5e2d61;padding-bottom:4px;margin-top:20px;}}
+        table{{width:100%;border-collapse:collapse;margin-bottom:16px;}}
         th{{background:#5e2d61;color:white;padding:9px;text-align:left;font-size:12px;}}
         td{{border-bottom:1px solid #eee;padding:8px 10px;}}
-        .box{{background:#f0f2f6;border-radius:8px;padding:12px 20px;margin:10px 0;
+        .box{{background:#f0f2f6;border-radius:8px;padding:12px 20px;margin:8px 0;
               border-left:4px solid #5e2d61;display:flex;justify-content:space-between;}}
         .num{{font-size:18px;font-weight:bold;color:#5e2d61;}}
+        .res{{background:#5e2d61;color:white;border-radius:8px;padding:14px 20px;margin-top:16px;
+              display:flex;justify-content:space-between;align-items:center;}}
+        .res-num{{font-size:24px;font-weight:bold;color:{'#2ecc71' if resultado>=0 else '#e74c3c'};}}
     </style></head><body>
     <div class="tit">CHACABUCO NOROESTE TOUR S.R.L. — Mayor de Cuentas</div>
     <p style="color:#888;">Período: <b>{mc_desde}</b> al <b>{mc_hasta}</b> | Emitido: {date.today()}</p>
     <h3>💰 Ingresos</h3>
-    <div class="box"><span>Ingresos Brutos</span><span class="num">$ {total_ingresos:,.2f}</span></div>
-    <div class="box"><span>Ingresos Totales (servicios transporte)</span><span class="num">$ {total_ingresos:,.2f}</span></div>
-    <div class="box"><span>IVA Ventas</span><span style="color:#888;font-style:italic;">No aplica — transporte de pasajeros exento</span></div>
+    <div class="box"><span>Viajes</span><span class="num">$ {total_ingresos:,.2f}</span></div>
     <h3>🛒 Gastos por Cuenta</h3>
-    <table><tr><th>Cuenta de Gastos</th><th style="text-align:right">Total</th></tr>
-    {filas_gtos_html}
-    <tr style="font-weight:bold;background:#f8f9fa;"><td>TOTAL GASTOS</td><td style="text-align:right">$ {total_compras:,.2f}</td></tr>
+    <table>
+      <tr><th>Cuenta de Gastos</th><th style="text-align:right">Total</th></tr>
+      {filas_gtos_html}
+      <tr style="font-weight:bold;background:#f8f9fa;">
+        <td>TOTAL GASTOS</td><td style="text-align:right">$ {total_gastos:,.2f}</td>
+      </tr>
     </table>
-    <h3>📋 Posición IVA</h3>
-    <table><tr><th>Concepto</th><th style="text-align:right">Importe</th></tr>
-    <tr><td>IVA Ventas (Débito Fiscal)</td><td style="text-align:right;color:#888;font-style:italic;">No aplica (transporte exento)</td></tr>
-    <tr><td>IVA Compras 21% (Crédito)</td><td style="text-align:right">$ {df_compras_mc['IVA_21'].sum():,.2f}</td></tr>
-    <tr><td>IVA Compras 10.5% (Crédito)</td><td style="text-align:right">$ {df_compras_mc['IVA_105'].sum():,.2f}</td></tr>
-    <tr style="font-weight:bold;background:#f8f9fa;"><td>Crédito Fiscal Neto (a favor)</td><td style="text-align:right;color:#2ecc71">$ {total_iva_compras:,.2f}</td></tr>
+    <h3>📋 IVA Compras (Crédito Fiscal)</h3>
+    <table>
+      <tr><th>Concepto</th><th style="text-align:right">Importe</th></tr>
+      <tr><td>IVA 21%</td><td style="text-align:right">$ {iva_compras_21:,.2f}</td></tr>
+      <tr><td>IVA 10.5%</td><td style="text-align:right">$ {iva_compras_105:,.2f}</td></tr>
+      <tr style="font-weight:bold;background:#f8f9fa;">
+        <td>TOTAL CRÉDITO FISCAL</td><td style="text-align:right">$ {total_iva_compras:,.2f}</td>
+      </tr>
     </table>
     <h3>📌 Retenciones</h3>
-    <table><tr><th>Tipo</th><th style="text-align:right">Importe</th></tr>
-    <tr><td>IVA</td><td style="text-align:right">$ {total_ret_iva:,.2f}</td></tr>
-    <tr><td>Ganancias</td><td style="text-align:right">$ {total_ret_gan:,.2f}</td></tr>
-    <tr><td>IIBB</td><td style="text-align:right">$ {total_ret_iibb:,.2f}</td></tr>
-    <tr style="font-weight:bold;background:#f8f9fa;"><td>TOTAL</td><td style="text-align:right">$ {(total_ret_iva+total_ret_gan+total_ret_iibb):,.2f}</td></tr>
+    <table>
+      <tr><th>Tipo</th><th style="text-align:right">Importe</th></tr>
+      <tr><td>IVA</td><td style="text-align:right">$ {total_ret_iva:,.2f}</td></tr>
+      <tr><td>Ganancias</td><td style="text-align:right">$ {total_ret_gan:,.2f}</td></tr>
+      <tr><td>IIBB</td><td style="text-align:right">$ {total_ret_iibb:,.2f}</td></tr>
+      <tr style="font-weight:bold;background:#f8f9fa;">
+        <td>TOTAL</td><td style="text-align:right">$ {(total_ret_iva+total_ret_gan+total_ret_iibb):,.2f}</td>
+      </tr>
     </table>
+    <div class="res">
+      <span style="font-size:15px;font-weight:bold;">{'GANANCIA' if resultado>=0 else 'PÉRDIDA'} DEL PERÍODO</span>
+      <span class="res-num">$ {abs(resultado):,.2f}</span>
+    </div>
     </body></html>"""
 
-    col_dl2.download_button(
-        label="🖨️ DESCARGAR PDF / IMPRIMIR",
-        data=html_mayor,
-        file_name=f"Mayor_Cuentas_{mc_desde}_{mc_hasta}.html",
-        mime="text/html",
-        help="Abrí el HTML en el navegador y usá Ctrl+P para imprimir o guardar como PDF"
-    )
+    col_dl1, col_dl2 = st.columns(2)
+    col_dl1.download_button("📄 DESCARGAR TXT", data=txt,
+        file_name=f"Mayor_{mc_desde}_{mc_hasta}.txt", mime="text/plain")
+    col_dl2.download_button("🖨️ IMPRIMIR / PDF", data=html_mayor,
+        file_name=f"Mayor_{mc_desde}_{mc_hasta}.html", mime="text/html",
+        help="Abrí en el navegador y usá Ctrl+P para imprimir o guardar como PDF")
+
+
 
 # =============================================================
 # CHEQUES
