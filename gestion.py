@@ -593,6 +593,12 @@ USUARIOS = {
         "caja": "CAJA TATO",    # Solo puede ver y operar CAJA TATO
         "nombre": "Tato"
     },
+    "mel": {
+        "password": "congo2026",
+        "rol": "operador",
+        "caja": "CAJA JUNIN",    # Solo puede ver y operar CAJA JUNIN
+        "nombre": "Mel"
+    },
     # ── Para agregar más usuarios, descomentá y editá el bloque: ──
     # "nuevo_usuario": {
     #     "password": "password123",
@@ -1208,7 +1214,7 @@ elif sel == "TESORERIA":
 
     # ── Cajas disponibles según rol ──
     # Admin ve todas. Operador solo ve su caja asignada.
-    TODAS_CAJAS = ["CAJA COTI", "CAJA TATO", "BANCO GALICIA", "BANCO PROVINCIA", "TARJETA DE CREDITO", "BANCO SUPERVIELLE", "DOLAR CAJA COTI", "DOLAR CAJA TATO"]
+    TODAS_CAJAS = ["CAJA COTI", "CAJA TATO", "CAJA MEL", "CAJA JUNIN", "BANCO GALICIA", "BANCO PROVINCIA", "TARJETA DE CREDITO", "BANCO SUPERVIELLE", "DOLAR CAJA COTI", "DOLAR CAJA TATO"]
 
     if es_admin:
         opc_cajas = TODAS_CAJAS
