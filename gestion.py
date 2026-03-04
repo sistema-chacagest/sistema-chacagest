@@ -176,7 +176,60 @@ def generar_html_resumen(cliente, df, saldo):
     </html>
     """
 
-def generar_html_recibo(data):
+def generar_html_cta_cte_general(tipo, df_resumen, fecha_emision):
+    """Genera HTML para PDF de cuenta corriente general (clientes o proveedores)."""
+    filas_html = ""
+    total_general = 0
+    for _, row in df_resumen.iterrows():
+        nombre = row.get('Cliente', row.get('Proveedor', '-'))
+        saldo  = float(row.get('Importe', row.get('Total', 0)))
+        total_general += saldo
+        color = "#e74c3c" if saldo < 0 else "#2ecc71"
+        filas_html += f"""
+        <tr>
+            <td>{nombre}</td>
+            <td style="text-align:right;font-weight:bold;color:{color};">$ {saldo:,.2f}</td>
+        </tr>"""
+    color_total = "#e74c3c" if total_general < 0 else "#2ecc71"
+    return f"""<html><head><style>
+        body {{ font-family: 'Segoe UI', Arial, sans-serif; color: #333; padding: 24px; font-size: 13px; }}
+        .logo-header {{ width:100%; border-bottom:4px solid #5e2d61; margin-bottom:20px; padding-bottom:10px; }}
+        .empresa {{ color:#5e2d61; font-size:22px; font-weight:bold; }}
+        .sub {{ color:#888; font-size:12px; }}
+        h2 {{ color:#5e2d61; margin-top:0; }}
+        table {{ width:100%; border-collapse:collapse; margin-top:16px; }}
+        th {{ background:#5e2d61; color:white; padding:10px; text-align:left; font-size:12px; }}
+        td {{ border-bottom:1px solid #eee; padding:9px 10px; }}
+        tr:nth-child(even) td {{ background:#fafafa; }}
+        .total-box {{ margin-top:20px; background:#5e2d61; color:white; border-radius:8px;
+                      padding:14px 20px; display:flex; justify-content:space-between; align-items:center; }}
+        .total-num {{ font-size:22px; font-weight:bold; color:{color_total}; }}
+        .fecha {{ color:#888; font-size:12px; text-align:right; }}
+    </style></head><body>
+    <table class="logo-header"><tr>
+        <td style="vertical-align:middle;">
+            <img src="{LOGO_B64}" style="height:55px;vertical-align:middle;margin-right:12px;">
+            <span style="vertical-align:middle;">
+                <div class="empresa">CHACABUCO NOROESTE TOUR S.R.L.</div>
+                <div class="sub">Desde 1996 viajando con vos | CHACAGEST Software System</div>
+            </span>
+        </td>
+        <td style="text-align:right;vertical-align:middle;">
+            <div class="fecha"><b>Emisión:</b> {fecha_emision}</div>
+        </td>
+    </tr></table>
+    <h2>📊 Estado General de {tipo}</h2>
+    <table>
+        <tr><th>{tipo[:-1] if tipo.endswith('s') else tipo}</th><th style="text-align:right;">Saldo</th></tr>
+        {filas_html}
+    </table>
+    <div class="total-box">
+        <span style="font-size:14px;">TOTAL GENERAL</span>
+        <span class="total-num">$ {total_general:,.2f}</span>
+    </div>
+    </body></html>"""
+
+
     return f"""
     <html>
     <head>
@@ -637,8 +690,8 @@ with st.sidebar:
         st.markdown("<div style='margin-left: 20px; border-left: 2px solid #f39c12; padding-left: 10px;'>", unsafe_allow_html=True)
         # Operadores no ven CTA CTE GENERAL PROV (estados globales)
         if es_admin:
-            opciones_compras = ["CARGA PROVEEDOR", "CARGA GASTOS", "CTA CTE PROVEEDOR", "CTA CTE GENERAL PROV", "HISTORICO COMPRAS"]
-            iconos_compras   = ["person-plus", "receipt", "person-lines-fill", "globe", "clock-history"]
+            opciones_compras = ["CARGA PROVEEDOR", "CARGA GASTOS", "CTA CTE PROVEEDOR", "CTA CTE GENERAL PROV", "HISTORICO COMPRAS", "MAYOR DE CUENTAS"]
+            iconos_compras   = ["person-plus", "receipt", "person-lines-fill", "globe", "clock-history", "journal-text"]
         else:
             opciones_compras = ["CARGA PROVEEDOR", "CARGA GASTOS", "CTA CTE PROVEEDOR", "HISTORICO COMPRAS"]
             iconos_compras   = ["person-plus", "receipt", "person-lines-fill", "clock-history"]
@@ -1644,8 +1697,24 @@ elif sel == "CTA CTE GENERAL":
     st.header("🌎 Estado Global de Deudores")
     if not st.session_state.viajes.empty:
         res = st.session_state.viajes.groupby('Cliente')['Importe'].sum().reset_index()
-        res = res[res['Importe'].round(2) != 0]
+        res = res[res['Importe'].round(2) != 0].sort_values('Importe', ascending=False)
+        # Métricas
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Total clientes con saldo", len(res))
+        m2.metric("Total a cobrar", f"$ {res[res['Importe']>0]['Importe'].sum():,.2f}")
+        m3.metric("Total a favor clientes", f"$ {res[res['Importe']<0]['Importe'].sum():,.2f}")
         st.table(res.style.format({"Importe": "$ {:,.2f}"}))
+        # Descarga PDF
+        html_cta_cte = generar_html_cta_cte_general("Clientes", res, date.today())
+        st.download_button(
+            label="🖨️ DESCARGAR PDF / IMPRIMIR",
+            data=html_cta_cte,
+            file_name=f"CTA_CTE_General_Clientes_{date.today()}.html",
+            mime="text/html",
+            help="Abrí el archivo descargado en el navegador y usá Ctrl+P para imprimir o guardar como PDF"
+        )
+    else:
+        st.info("No hay movimientos registrados.")
 
 elif sel == "CARGA PROVEEDOR":
     st.header("👤 Gestión de Proveedores")
@@ -1711,7 +1780,7 @@ elif sel == "CARGA GASTOS":
     c1, c2, c3_fecha = st.columns(3)
     fecha_comp = c1.date_input("Fecha del Comprobante", value=date.today())
     pv         = c2.text_input("Punto de Venta")
-    tipo_f     = c3_fecha.selectbox("Tipo de Factura", ["A", "B", "C", "REMITO", "NOTA DE CREDITO", "NOTA DE DEBITO"])
+    tipo_f     = c3_fecha.selectbox("Tipo de Factura", ["A", "B", "C", "B - OP EXENTA", "C - OP EXENTA", "REMITO", "NOTA DE CREDITO", "NOTA DE DEBITO"])
     c3, c4   = st.columns(2)
     n21      = c3.number_input("Importe Neto (21%)", min_value=0.0, step=0.01, key="g_n21")
     n10      = c4.number_input("Importe Neto (10.5%)", min_value=0.0, step=0.01, key="g_n10")
@@ -1722,7 +1791,13 @@ elif sel == "CARGA GASTOS":
     nograv   = st.number_input("Conceptos No Gravados", min_value=0.0, step=0.01, key="g_nograv")
 
     # ── Total en tiempo real ──
-    total = (n21 * 1.21) + (n10 * 1.105) + r_iva + r_gan + r_iibb + nograv
+    # Para OP Exentas (B o C): no se suma IVA, el neto es el total
+    es_exenta = tipo_f in ("B - OP EXENTA", "C - OP EXENTA")
+    if es_exenta:
+        total = n21 + n10 + r_iva + r_gan + r_iibb + nograv
+        st.info("ℹ️ **Operación Exenta**: no se aplica IVA sobre los importes netos.")
+    else:
+        total = (n21 * 1.21) + (n10 * 1.105) + r_iva + r_gan + r_iibb + nograv
     if tipo_f == "NOTA DE CREDITO": total = -total
 
     color_total = "#2ecc71" if total >= 0 else "#e74c3c"
@@ -1856,7 +1931,23 @@ elif sel == "CTA CTE GENERAL PROV":
             left_on='Proveedor', right_on='Razón Social', how='left'
         ).drop(columns='Razón Social')
         res_p = res_p[['Proveedor', 'CBU', 'Alias', 'Total']]
+        # Métricas
+        mp1, mp2 = st.columns(2)
+        mp1.metric("Total proveedores con saldo", len(res_p[res_p['Total'].round(2) != 0]))
+        mp2.metric("Total a pagar", f"$ {res_p['Total'].sum():,.2f}")
         st.dataframe(res_p.style.format({"Total": "$ {:,.2f}"}), use_container_width=True)
+        # Descarga PDF
+        res_p_pdf = res_p[['Proveedor','Total']].rename(columns={'Proveedor':'Cliente','Total':'Importe'})
+        html_prov_pdf = generar_html_cta_cte_general("Proveedores", res_p_pdf, date.today())
+        st.download_button(
+            label="🖨️ DESCARGAR PDF / IMPRIMIR",
+            data=html_prov_pdf,
+            file_name=f"CTA_CTE_General_Proveedores_{date.today()}.html",
+            mime="text/html",
+            help="Abrí el archivo descargado en el navegador y usá Ctrl+P para imprimir o guardar como PDF"
+        )
+    else:
+        st.info("No hay comprobantes registrados.")
 
 elif sel == "HISTORICO COMPRAS":
     st.header("📜 Comprobantes Cargados")
@@ -1870,6 +1961,249 @@ elif sel == "HISTORICO COMPRAS":
                 st.session_state.compras = st.session_state.compras.drop(i)
                 guardar_datos("compras", st.session_state.compras); st.rerun()
             st.divider()
+
+elif sel == "MAYOR DE CUENTAS":
+    st.header("📒 Mayor de Cuentas")
+    st.caption("Resumen contable por cuenta: Ingresos, IVA Ventas, Gastos, IVA Compras y retenciones.")
+
+    # ── Filtros de período ──
+    mc1, mc2 = st.columns(2)
+    mc_desde = mc1.date_input("Desde", value=date(date.today().year, 1, 1), key="mc_desde")
+    mc_hasta = mc2.date_input("Hasta", value=date.today(), key="mc_hasta")
+
+    # ════════════════════════════════════════════
+    # SECCIÓN 1: INGRESOS (viajes)
+    # ════════════════════════════════════════════
+    df_viajes_mc = st.session_state.viajes.copy()
+    try:
+        df_viajes_mc['Fecha_dt'] = pd.to_datetime(df_viajes_mc['Fecha Viaje'], errors='coerce')
+        df_viajes_mc = df_viajes_mc[
+            (df_viajes_mc['Fecha_dt'].dt.date >= mc_desde) &
+            (df_viajes_mc['Fecha_dt'].dt.date <= mc_hasta)
+        ]
+    except: pass
+    total_ingresos = df_viajes_mc['Importe'].sum()
+    # IVA Ventas (21% sobre ingresos): IVA = Neto * 0.21 => IVA/total = 0.21/1.21
+    iva_ventas = total_ingresos * (0.21 / 1.21)
+    neto_ventas = total_ingresos - iva_ventas
+
+    # ════════════════════════════════════════════
+    # SECCIÓN 2: COMPRAS (gastos + IVA compras)
+    # ════════════════════════════════════════════
+    df_compras_mc = st.session_state.compras.copy()
+    try:
+        df_compras_mc['Fecha_dt'] = pd.to_datetime(df_compras_mc['Fecha'], errors='coerce')
+        df_compras_mc = df_compras_mc[
+            (df_compras_mc['Fecha_dt'].dt.date >= mc_desde) &
+            (df_compras_mc['Fecha_dt'].dt.date <= mc_hasta)
+        ]
+    except: pass
+
+    # Calcular IVA compras: neto21*0.21 + neto10.5*0.105
+    df_compras_mc['IVA_21']  = df_compras_mc['Neto 21']  * 0.21
+    df_compras_mc['IVA_105'] = df_compras_mc['Neto 10.5'] * 0.105
+    total_iva_compras = df_compras_mc['IVA_21'].sum() + df_compras_mc['IVA_105'].sum()
+    total_neto_compras = df_compras_mc['Neto 21'].sum() + df_compras_mc['Neto 10.5'].sum()
+    total_no_grav = df_compras_mc['No Gravados'].sum()
+    total_ret_iva = df_compras_mc['Ret IVA'].sum()
+    total_ret_gan = df_compras_mc['Ret Ganancia'].sum()
+    total_ret_iibb = df_compras_mc['Ret IIBB'].sum()
+    total_compras  = df_compras_mc['Total'].sum()
+
+    # Gastos por cuenta (join con proveedores para la cuenta de gastos)
+    gastos_por_cuenta = pd.DataFrame()
+    if not df_compras_mc.empty and not st.session_state.proveedores.empty:
+        df_gc = df_compras_mc.merge(
+            st.session_state.proveedores[['Razón Social', 'Cuenta de Gastos']],
+            left_on='Proveedor', right_on='Razón Social', how='left'
+        )
+        df_gc['Cuenta de Gastos'] = df_gc['Cuenta de Gastos'].fillna('SIN CLASIFICAR')
+        gastos_por_cuenta = df_gc.groupby('Cuenta de Gastos')['Total'].sum().reset_index()
+        gastos_por_cuenta = gastos_por_cuenta.sort_values('Total', ascending=False)
+
+    # ── IVA Neto a pagar/favor ──
+    iva_neto = iva_ventas - total_iva_compras
+
+    # ════════════════════════════════════════════
+    # MÉTRICAS RESUMEN
+    # ════════════════════════════════════════════
+    st.markdown("### 📊 Resumen del Período")
+    km1, km2, km3, km4 = st.columns(4)
+    km1.metric("💰 Ingresos Brutos", f"$ {total_ingresos:,.2f}")
+    km2.metric("🏭 IVA Ventas (21%)", f"$ {iva_ventas:,.2f}")
+    km3.metric("🛒 Gastos Totales", f"$ {total_compras:,.2f}")
+    km4.metric("📋 IVA Compras", f"$ {total_iva_compras:,.2f}")
+    color_iva_neto = "#e74c3c" if iva_neto < 0 else "#2ecc71"
+    st.markdown(
+        f"<div style='background:#f0f2f6;border-radius:10px;padding:14px 24px;margin:10px 0;"
+        f"border-left:5px solid {color_iva_neto};'>"
+        f"<b>IVA Neto {'a pagar' if iva_neto >= 0 else 'a favor'}:</b> "
+        f"<span style='font-size:22px;font-weight:bold;color:{color_iva_neto};'>$ {abs(iva_neto):,.2f}</span>"
+        f"</div>", unsafe_allow_html=True
+    )
+
+    st.markdown("---")
+
+    # ════════════════════════════════════════════
+    # TABS DEL MAYOR
+    # ════════════════════════════════════════════
+    tab_ing, tab_gtos, tab_iva, tab_ret = st.tabs(["💰 Ingresos", "🛒 Gastos por Cuenta", "📋 IVA", "📌 Retenciones"])
+
+    with tab_ing:
+        st.markdown("#### Ingresos por Período")
+        st.caption(f"Total registros: {len(df_viajes_mc)}")
+        col_i1, col_i2 = st.columns(2)
+        col_i1.metric("Importe Total (con IVA)", f"$ {total_ingresos:,.2f}")
+        col_i2.metric("Neto sin IVA", f"$ {neto_ventas:,.2f}")
+        if not df_viajes_mc.empty:
+            # Agrupar por cliente
+            ing_cli = df_viajes_mc.groupby('Cliente')['Importe'].sum().reset_index().sort_values('Importe', ascending=False)
+            st.dataframe(ing_cli.style.format({"Importe": "$ {:,.2f}"}), use_container_width=True)
+
+    with tab_gtos:
+        st.markdown("#### Gastos por Cuenta Contable")
+        if not gastos_por_cuenta.empty:
+            fig_gc = px.bar(gastos_por_cuenta, x='Cuenta de Gastos', y='Total',
+                           color_discrete_sequence=['#5e2d61'],
+                           labels={'Total': 'Total $', 'Cuenta de Gastos': 'Cuenta'})
+            fig_gc.update_layout(showlegend=False, plot_bgcolor='white', height=320)
+            st.plotly_chart(fig_gc, use_container_width=True)
+            st.dataframe(gastos_por_cuenta.style.format({"Total": "$ {:,.2f}"}), use_container_width=True)
+        else:
+            st.info("No hay compras en el período seleccionado.")
+
+    with tab_iva:
+        st.markdown("#### Posición de IVA")
+        iva_data = pd.DataFrame({
+            "Concepto": ["IVA Ventas (débito fiscal)", "IVA Compras 21% (crédito fiscal)",
+                         "IVA Compras 10.5% (crédito fiscal)", "IVA NETO"],
+            "Importe": [iva_ventas, df_compras_mc['IVA_21'].sum(),
+                        df_compras_mc['IVA_105'].sum(), iva_neto]
+        })
+        st.dataframe(iva_data.style.format({"Importe": "$ {:,.2f}"}), use_container_width=True)
+        # Detalle facturas con IVA
+        if not df_compras_mc.empty:
+            with st.expander("Ver detalle comprobantes"):
+                cols_iva = ['Fecha', 'Proveedor', 'Tipo Factura', 'Neto 21', 'Neto 10.5', 'IVA_21', 'IVA_105', 'Total']
+                st.dataframe(df_compras_mc[cols_iva].rename(columns={'IVA_21':'IVA 21%','IVA_105':'IVA 10.5%'})\
+                    .style.format({c: "$ {:,.2f}" for c in ['Neto 21','Neto 10.5','IVA 21%','IVA 10.5%','Total']}),
+                    use_container_width=True)
+
+    with tab_ret:
+        st.markdown("#### Retenciones del Período")
+        ret_data = pd.DataFrame({
+            "Retención": ["Retención IVA", "Retención Ganancias", "Retención IIBB", "TOTAL"],
+            "Importe": [total_ret_iva, total_ret_gan, total_ret_iibb,
+                        total_ret_iva + total_ret_gan + total_ret_iibb]
+        })
+        st.dataframe(ret_data.style.format({"Importe": "$ {:,.2f}"}), use_container_width=True)
+
+    st.markdown("---")
+
+    # ════════════════════════════════════════════
+    # DESCARGA TXT
+    # ════════════════════════════════════════════
+    st.markdown("### 📥 Exportar Mayor de Cuentas")
+
+    lineas_txt = []
+    lineas_txt.append("=" * 60)
+    lineas_txt.append("    CHACABUCO NOROESTE TOUR S.R.L. — MAYOR DE CUENTAS")
+    lineas_txt.append(f"    Período: {mc_desde} al {mc_hasta}")
+    lineas_txt.append(f"    Emitido: {date.today()}")
+    lineas_txt.append("=" * 60)
+    lineas_txt.append("")
+    lineas_txt.append("── INGRESOS ──────────────────────────────────────────")
+    lineas_txt.append(f"  Ingresos Brutos (total facturas): $ {total_ingresos:>15,.2f}")
+    lineas_txt.append(f"  Neto sin IVA:                     $ {neto_ventas:>15,.2f}")
+    lineas_txt.append(f"  IVA Ventas (21%):                 $ {iva_ventas:>15,.2f}")
+    lineas_txt.append("")
+    if not df_viajes_mc.empty:
+        for _, row_i in df_viajes_mc.groupby('Cliente')['Importe'].sum().reset_index().iterrows():
+            lineas_txt.append(f"    {row_i['Cliente']:<40} $ {row_i['Importe']:>12,.2f}")
+    lineas_txt.append("")
+    lineas_txt.append("── GASTOS POR CUENTA ─────────────────────────────────")
+    if not gastos_por_cuenta.empty:
+        for _, row_g in gastos_por_cuenta.iterrows():
+            lineas_txt.append(f"  {row_g['Cuenta de Gastos']:<40} $ {row_g['Total']:>12,.2f}")
+    lineas_txt.append(f"  {'TOTAL GASTOS':<40} $ {total_compras:>12,.2f}")
+    lineas_txt.append("")
+    lineas_txt.append("── IVA ───────────────────────────────────────────────")
+    lineas_txt.append(f"  IVA Ventas (Débito Fiscal):       $ {iva_ventas:>15,.2f}")
+    lineas_txt.append(f"  IVA Compras 21% (Crédito Fiscal): $ {df_compras_mc['IVA_21'].sum():>15,.2f}")
+    lineas_txt.append(f"  IVA Compras 10.5% (Crédito):      $ {df_compras_mc['IVA_105'].sum():>15,.2f}")
+    lineas_txt.append(f"  {'IVA NETO (a pagar/favor)':<38}  $ {iva_neto:>15,.2f}")
+    lineas_txt.append("")
+    lineas_txt.append("── RETENCIONES ───────────────────────────────────────")
+    lineas_txt.append(f"  Retención IVA:                    $ {total_ret_iva:>15,.2f}")
+    lineas_txt.append(f"  Retención Ganancias:              $ {total_ret_gan:>15,.2f}")
+    lineas_txt.append(f"  Retención IIBB:                   $ {total_ret_iibb:>15,.2f}")
+    lineas_txt.append(f"  {'TOTAL RETENCIONES':<38}  $ {(total_ret_iva+total_ret_gan+total_ret_iibb):>15,.2f}")
+    lineas_txt.append("")
+    lineas_txt.append("=" * 60)
+    lineas_txt.append("  CHACAGEST Software System — www.chacagest.com.ar")
+    lineas_txt.append("=" * 60)
+
+    txt_content = "\n".join(lineas_txt)
+
+    col_dl1, col_dl2 = st.columns(2)
+    col_dl1.download_button(
+        label="📄 DESCARGAR TXT",
+        data=txt_content,
+        file_name=f"Mayor_Cuentas_{mc_desde}_{mc_hasta}.txt",
+        mime="text/plain"
+    )
+
+    # HTML para impresión
+    filas_gtos_html = "".join(
+        f"<tr><td>{r['Cuenta de Gastos']}</td><td style='text-align:right'>$ {r['Total']:,.2f}</td></tr>"
+        for _, r in gastos_por_cuenta.iterrows()
+    ) if not gastos_por_cuenta.empty else "<tr><td colspan='2'>Sin datos</td></tr>"
+
+    html_mayor = f"""<html><head><style>
+        body{{font-family:'Segoe UI',Arial,sans-serif;color:#333;padding:24px;font-size:13px;}}
+        .tit{{color:#5e2d61;font-size:20px;font-weight:bold;}}
+        h3{{color:#5e2d61;border-bottom:2px solid #5e2d61;padding-bottom:4px;}}
+        table{{width:100%;border-collapse:collapse;margin-bottom:20px;}}
+        th{{background:#5e2d61;color:white;padding:9px;text-align:left;font-size:12px;}}
+        td{{border-bottom:1px solid #eee;padding:8px 10px;}}
+        .box{{background:#f0f2f6;border-radius:8px;padding:12px 20px;margin:10px 0;
+              border-left:4px solid #5e2d61;display:flex;justify-content:space-between;}}
+        .num{{font-size:18px;font-weight:bold;color:#5e2d61;}}
+    </style></head><body>
+    <div class="tit">CHACABUCO NOROESTE TOUR S.R.L. — Mayor de Cuentas</div>
+    <p style="color:#888;">Período: <b>{mc_desde}</b> al <b>{mc_hasta}</b> | Emitido: {date.today()}</p>
+    <h3>💰 Ingresos</h3>
+    <div class="box"><span>Ingresos Brutos</span><span class="num">$ {total_ingresos:,.2f}</span></div>
+    <div class="box"><span>Neto sin IVA</span><span class="num">$ {neto_ventas:,.2f}</span></div>
+    <div class="box"><span>IVA Ventas (21%)</span><span class="num">$ {iva_ventas:,.2f}</span></div>
+    <h3>🛒 Gastos por Cuenta</h3>
+    <table><tr><th>Cuenta de Gastos</th><th style="text-align:right">Total</th></tr>
+    {filas_gtos_html}
+    <tr style="font-weight:bold;background:#f8f9fa;"><td>TOTAL GASTOS</td><td style="text-align:right">$ {total_compras:,.2f}</td></tr>
+    </table>
+    <h3>📋 Posición IVA</h3>
+    <table><tr><th>Concepto</th><th style="text-align:right">Importe</th></tr>
+    <tr><td>IVA Ventas (Débito Fiscal)</td><td style="text-align:right">$ {iva_ventas:,.2f}</td></tr>
+    <tr><td>IVA Compras 21% (Crédito)</td><td style="text-align:right">$ {df_compras_mc['IVA_21'].sum():,.2f}</td></tr>
+    <tr><td>IVA Compras 10.5% (Crédito)</td><td style="text-align:right">$ {df_compras_mc['IVA_105'].sum():,.2f}</td></tr>
+    <tr style="font-weight:bold;background:#f8f9fa;"><td>IVA Neto</td><td style="text-align:right;color:{'#e74c3c' if iva_neto<0 else '#2ecc71'}">$ {iva_neto:,.2f}</td></tr>
+    </table>
+    <h3>📌 Retenciones</h3>
+    <table><tr><th>Tipo</th><th style="text-align:right">Importe</th></tr>
+    <tr><td>IVA</td><td style="text-align:right">$ {total_ret_iva:,.2f}</td></tr>
+    <tr><td>Ganancias</td><td style="text-align:right">$ {total_ret_gan:,.2f}</td></tr>
+    <tr><td>IIBB</td><td style="text-align:right">$ {total_ret_iibb:,.2f}</td></tr>
+    <tr style="font-weight:bold;background:#f8f9fa;"><td>TOTAL</td><td style="text-align:right">$ {(total_ret_iva+total_ret_gan+total_ret_iibb):,.2f}</td></tr>
+    </table>
+    </body></html>"""
+
+    col_dl2.download_button(
+        label="🖨️ DESCARGAR PDF / IMPRIMIR",
+        data=html_mayor,
+        file_name=f"Mayor_Cuentas_{mc_desde}_{mc_hasta}.html",
+        mime="text/html",
+        help="Abrí el HTML en el navegador y usá Ctrl+P para imprimir o guardar como PDF"
+    )
 
 # =============================================================
 # CHEQUES
