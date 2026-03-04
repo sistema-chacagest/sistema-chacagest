@@ -1230,15 +1230,18 @@ elif sel == "TESORERIA":
                 st.markdown(f"**Caja:** {caja_propia}")
                 cj = caja_propia
             forma = st.selectbox("Forma de Egreso", FORMAS_PAGO)
+            cuentas_opciones = sorted(st.session_state.get("cuentas_gastos", ["SIN CATEGORÍA"])) + ["SIN CATEGORÍA"]
+            cuentas_opciones = sorted(set(cuentas_opciones))
+            cuenta_gasto = st.selectbox("Cuenta de Gasto", cuentas_opciones)
             con = st.text_input("Concepto")
             mon = st.number_input("Monto $", min_value=0.0)
             if st.form_submit_button("REGISTRAR EGRESO"):
                 if mon > 0:
-                    concepto_completo = con if con else "-"
+                    concepto_completo = f"[{cuenta_gasto}] {con}" if con else f"[{cuenta_gasto}]"
                     nt = pd.DataFrame([[f, "EGRESO VARIO", cj, forma, concepto_completo, "Varios", -mon, "-"]], columns=COL_TESORERIA)
                     st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
                     guardar_datos("tesoreria", st.session_state.tesoreria)
-                    st.session_state.msg_egreso = f"✅ Egreso de $ {mon:,.2f} ({forma}) registrado desde {cj}."
+                    st.session_state.msg_egreso = f"✅ Egreso de $ {mon:,.2f} ({forma}) — {cuenta_gasto} — registrado desde {cj}."
                     st.rerun()
                 else:
                     st.warning("Ingresá un monto mayor a cero.")
