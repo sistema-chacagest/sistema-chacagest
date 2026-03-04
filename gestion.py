@@ -665,13 +665,8 @@ with st.sidebar:
     sel_sub = None
     if menu_principal == "VENTAS":
         st.markdown("<div style='margin-left: 20px; border-left: 2px solid #f39c12; padding-left: 10px;'>", unsafe_allow_html=True)
-        # Operadores no ven CTA CTE GENERAL ni COMPROBANTES (movimientos de otros)
-        if es_admin:
-            opciones_ventas = ["CLIENTES", "CARGA VIAJE", "PRESUPUESTOS", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"]
-            iconos_ventas   = ["people", "truck", "file-earmark-spreadsheet", "person-vcard", "globe", "file-text"]
-        else:
-            opciones_ventas = ["CLIENTES", "CARGA VIAJE", "PRESUPUESTOS", "CTA CTE INDIVIDUAL", "COMPROBANTES"]
-            iconos_ventas   = ["people", "truck", "file-earmark-spreadsheet", "person-vcard", "file-text"]
+        opciones_ventas = ["CLIENTES", "CARGA VIAJE", "PRESUPUESTOS", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"]
+        iconos_ventas   = ["people", "truck", "file-earmark-spreadsheet", "person-vcard", "globe", "file-text"]
         sel_sub = option_menu(
             menu_title=None,
             options=opciones_ventas,
@@ -688,13 +683,8 @@ with st.sidebar:
 
     elif menu_principal == "COMPRAS":
         st.markdown("<div style='margin-left: 20px; border-left: 2px solid #f39c12; padding-left: 10px;'>", unsafe_allow_html=True)
-        # Operadores no ven CTA CTE GENERAL PROV (estados globales)
-        if es_admin:
-            opciones_compras = ["CARGA PROVEEDOR", "CARGA GASTOS", "CTA CTE PROVEEDOR", "CTA CTE GENERAL PROV", "HISTORICO COMPRAS", "MAYOR DE CUENTAS"]
-            iconos_compras   = ["person-plus", "receipt", "person-lines-fill", "globe", "clock-history", "journal-text"]
-        else:
-            opciones_compras = ["CARGA PROVEEDOR", "CARGA GASTOS", "CTA CTE PROVEEDOR", "HISTORICO COMPRAS"]
-            iconos_compras   = ["person-plus", "receipt", "person-lines-fill", "clock-history"]
+        opciones_compras = ["CARGA PROVEEDOR", "CARGA GASTOS", "CTA CTE PROVEEDOR", "CTA CTE GENERAL PROV", "HISTORICO COMPRAS", "MAYOR DE CUENTAS"]
+        iconos_compras   = ["person-plus", "receipt", "person-lines-fill", "globe", "clock-history", "journal-text"]
         sel_sub = option_menu(
             menu_title=None,
             options=opciones_compras,
