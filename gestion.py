@@ -626,10 +626,10 @@ with st.sidebar:
         # Operadores no ven CTA CTE GENERAL PROV (estados globales)
         if es_admin:
             opciones_compras = ["CARGA PROVEEDOR", "CARGA GASTOS", "CTA CTE PROVEEDOR", "CTA CTE GENERAL PROV", "HISTORICO COMPRAS"]
-            iconos_compras   = ["person-plus", "receipt", "person-vcard", "globe", "clock-history"]
+            iconos_compras   = ["person-plus", "receipt", "person-lines-fill", "globe", "clock-history"]
         else:
             opciones_compras = ["CARGA PROVEEDOR", "CARGA GASTOS", "CTA CTE PROVEEDOR", "HISTORICO COMPRAS"]
-            iconos_compras   = ["person-plus", "receipt", "person-vcard", "clock-history"]
+            iconos_compras   = ["person-plus", "receipt", "person-lines-fill", "clock-history"]
         sel_sub = option_menu(
             menu_title=None,
             options=opciones_compras,
@@ -1662,7 +1662,7 @@ elif sel == "CARGA PROVEEDOR":
                             st.session_state[f"edit_p_mode_{i}"] = False; st.rerun()
             st.divider()
 
-elif sel == "CTA CTE PROVEEDOR":
+elif sel == "CARGA GASTOS":
     st.header("💸 Carga de Gastos")
     if st.session_state.get("msg_gasto"):
         st.success(st.session_state.msg_gasto)
@@ -1670,9 +1670,10 @@ elif sel == "CTA CTE PROVEEDOR":
 
     # ── Inputs fuera del form para que el total se actualice en tiempo real ──
     prov_sel = st.selectbox("Proveedor", st.session_state.proveedores['Razón Social'].unique() if not st.session_state.proveedores.empty else [""])
-    c1, c2   = st.columns(2)
-    pv       = c1.text_input("Punto de Venta")
-    tipo_f   = c2.selectbox("Tipo de Factura", ["A", "B", "C", "REMITO", "NOTA DE CREDITO", "NOTA DE DEBITO"])
+    c1, c2, c3_fecha = st.columns(3)
+    fecha_comp = c1.date_input("Fecha del Comprobante", value=date.today())
+    pv         = c2.text_input("Punto de Venta")
+    tipo_f     = c3_fecha.selectbox("Tipo de Factura", ["A", "B", "C", "REMITO", "NOTA DE CREDITO", "NOTA DE DEBITO"])
     c3, c4   = st.columns(2)
     n21      = c3.number_input("Importe Neto (21%)", min_value=0.0, step=0.01, key="g_n21")
     n10      = c4.number_input("Importe Neto (10.5%)", min_value=0.0, step=0.01, key="g_n10")
@@ -1699,7 +1700,7 @@ elif sel == "CTA CTE PROVEEDOR":
 
     if st.button("✅ REGISTRAR COMPROBANTE", type="primary"):
         if total != 0:
-            ng = pd.DataFrame([[date.today(), prov_sel, pv, tipo_f, n21, n10, r_iva, r_gan, r_iibb, nograv, total]], columns=COL_COMPRAS)
+            ng = pd.DataFrame([[fecha_comp, prov_sel, pv, tipo_f, n21, n10, r_iva, r_gan, r_iibb, nograv, total]], columns=COL_COMPRAS)
             st.session_state.compras = pd.concat([st.session_state.compras, ng], ignore_index=True)
             guardar_datos("compras", st.session_state.compras)
             st.session_state.msg_gasto = f"✅ Comprobante de '{prov_sel}' guardado por $ {total:,.2f}."
@@ -1798,12 +1799,15 @@ elif sel == "COMPROBANTES":
                                     st.session_state[f"modo_edit_viaje_{i}"] = False
                                     st.rerun()
                     st.divider()
-    st.header("📊 Cuenta Corriente Individual")
+elif sel == "CTA CTE PROVEEDOR":
+    st.header("📊 Cuenta Corriente por Proveedor")
     if not st.session_state.proveedores.empty:
         p_sel = st.selectbox("Seleccionar Proveedor", st.session_state.proveedores['Razón Social'].unique())
         df_p  = st.session_state.compras[st.session_state.compras['Proveedor'] == p_sel]
         st.metric("SALDO PENDIENTE", f"$ {df_p['Total'].sum():,.2f}")
         st.dataframe(df_p, use_container_width=True)
+    else:
+        st.info("No hay proveedores registrados.")
 
 elif sel == "CTA CTE GENERAL PROV":
     st.header("🌎 Estado General de Proveedores")
