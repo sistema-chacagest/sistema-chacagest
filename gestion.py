@@ -1983,9 +1983,10 @@ elif sel == "MAYOR DE CUENTAS":
         ]
     except: pass
     total_ingresos = df_viajes_mc['Importe'].sum()
-    # IVA Ventas (21% sobre ingresos): IVA = Neto * 0.21 => IVA/total = 0.21/1.21
-    iva_ventas = total_ingresos * (0.21 / 1.21)
-    neto_ventas = total_ingresos - iva_ventas
+    # Los viajes son servicios de transporte de pasajeros — NO llevan IVA
+    # El importe registrado es el total final (no hay IVA a desdoblar)
+    iva_ventas = 0.0
+    neto_ventas = total_ingresos
 
     # ════════════════════════════════════════════
     # SECCIÓN 2: COMPRAS (gastos + IVA compras)
@@ -2029,16 +2030,19 @@ elif sel == "MAYOR DE CUENTAS":
     # ════════════════════════════════════════════
     st.markdown("### 📊 Resumen del Período")
     km1, km2, km3, km4 = st.columns(4)
-    km1.metric("💰 Ingresos Brutos", f"$ {total_ingresos:,.2f}")
-    km2.metric("🏭 IVA Ventas (21%)", f"$ {iva_ventas:,.2f}")
+    km1.metric("💰 Ingresos Totales", f"$ {total_ingresos:,.2f}")
+    km2.metric("🚌 IVA Ventas", "No aplica (transporte)")
     km3.metric("🛒 Gastos Totales", f"$ {total_compras:,.2f}")
     km4.metric("📋 IVA Compras", f"$ {total_iva_compras:,.2f}")
-    color_iva_neto = "#e74c3c" if iva_neto < 0 else "#2ecc71"
+    # IVA neto = solo crédito fiscal de compras (no hay débito fiscal en ventas de transporte)
+    iva_neto = -total_iva_compras  # es crédito a favor
+    color_iva_neto = "#2ecc71"
     st.markdown(
         f"<div style='background:#f0f2f6;border-radius:10px;padding:14px 24px;margin:10px 0;"
         f"border-left:5px solid {color_iva_neto};'>"
-        f"<b>IVA Neto {'a pagar' if iva_neto >= 0 else 'a favor'}:</b> "
+        f"<b>IVA Crédito Fiscal (a favor — solo compras):</b> "
         f"<span style='font-size:22px;font-weight:bold;color:{color_iva_neto};'>$ {abs(iva_neto):,.2f}</span>"
+        f"<span style='font-size:12px;color:#888;'> — Los ingresos por transporte de pasajeros no generan débito fiscal</span>"
         f"</div>", unsafe_allow_html=True
     )
 
@@ -2051,10 +2055,8 @@ elif sel == "MAYOR DE CUENTAS":
 
     with tab_ing:
         st.markdown("#### Ingresos por Período")
-        st.caption(f"Total registros: {len(df_viajes_mc)}")
-        col_i1, col_i2 = st.columns(2)
-        col_i1.metric("Importe Total (con IVA)", f"$ {total_ingresos:,.2f}")
-        col_i2.metric("Neto sin IVA", f"$ {neto_ventas:,.2f}")
+        st.caption(f"Total registros: {len(df_viajes_mc)} | Los servicios de transporte de pasajeros no están gravados con IVA.")
+        st.metric("Ingresos Totales", f"$ {total_ingresos:,.2f}")
         if not df_viajes_mc.empty:
             # Agrupar por cliente
             ing_cli = df_viajes_mc.groupby('Cliente')['Importe'].sum().reset_index().sort_values('Importe', ascending=False)
@@ -2074,11 +2076,16 @@ elif sel == "MAYOR DE CUENTAS":
 
     with tab_iva:
         st.markdown("#### Posición de IVA")
+        st.info("ℹ️ Los servicios de transporte de pasajeros **no están gravados con IVA** (exentos). Solo se registra el crédito fiscal de compras.")
         iva_data = pd.DataFrame({
-            "Concepto": ["IVA Ventas (débito fiscal)", "IVA Compras 21% (crédito fiscal)",
-                         "IVA Compras 10.5% (crédito fiscal)", "IVA NETO"],
-            "Importe": [iva_ventas, df_compras_mc['IVA_21'].sum(),
-                        df_compras_mc['IVA_105'].sum(), iva_neto]
+            "Concepto": ["IVA Ventas (Débito Fiscal)",
+                         "IVA Compras 21% (Crédito Fiscal)",
+                         "IVA Compras 10.5% (Crédito Fiscal)",
+                         "IVA CRÉDITO FISCAL NETO (a favor)"],
+            "Importe": [0.0,
+                        df_compras_mc['IVA_21'].sum(),
+                        df_compras_mc['IVA_105'].sum(),
+                        total_iva_compras]
         })
         st.dataframe(iva_data.style.format({"Importe": "$ {:,.2f}"}), use_container_width=True)
         # Detalle facturas con IVA
@@ -2113,9 +2120,8 @@ elif sel == "MAYOR DE CUENTAS":
     lineas_txt.append("=" * 60)
     lineas_txt.append("")
     lineas_txt.append("── INGRESOS ──────────────────────────────────────────")
-    lineas_txt.append(f"  Ingresos Brutos (total facturas): $ {total_ingresos:>15,.2f}")
-    lineas_txt.append(f"  Neto sin IVA:                     $ {neto_ventas:>15,.2f}")
-    lineas_txt.append(f"  IVA Ventas (21%):                 $ {iva_ventas:>15,.2f}")
+    lineas_txt.append(f"  Ingresos Totales (servicios transp.): $ {total_ingresos:>12,.2f}")
+    lineas_txt.append(f"  IVA Ventas: NO APLICA (exento - transporte de pasajeros)")
     lineas_txt.append("")
     if not df_viajes_mc.empty:
         for _, row_i in df_viajes_mc.groupby('Cliente')['Importe'].sum().reset_index().iterrows():
@@ -2128,10 +2134,10 @@ elif sel == "MAYOR DE CUENTAS":
     lineas_txt.append(f"  {'TOTAL GASTOS':<40} $ {total_compras:>12,.2f}")
     lineas_txt.append("")
     lineas_txt.append("── IVA ───────────────────────────────────────────────")
-    lineas_txt.append(f"  IVA Ventas (Débito Fiscal):       $ {iva_ventas:>15,.2f}")
+    lineas_txt.append(f"  IVA Ventas (Débito Fiscal):        NO APLICA (transporte exento)")
     lineas_txt.append(f"  IVA Compras 21% (Crédito Fiscal): $ {df_compras_mc['IVA_21'].sum():>15,.2f}")
     lineas_txt.append(f"  IVA Compras 10.5% (Crédito):      $ {df_compras_mc['IVA_105'].sum():>15,.2f}")
-    lineas_txt.append(f"  {'IVA NETO (a pagar/favor)':<38}  $ {iva_neto:>15,.2f}")
+    lineas_txt.append(f"  {'CRÉDITO FISCAL NETO (a favor)':<38}  $ {total_iva_compras:>15,.2f}")
     lineas_txt.append("")
     lineas_txt.append("── RETENCIONES ───────────────────────────────────────")
     lineas_txt.append(f"  Retención IVA:                    $ {total_ret_iva:>15,.2f}")
@@ -2174,8 +2180,8 @@ elif sel == "MAYOR DE CUENTAS":
     <p style="color:#888;">Período: <b>{mc_desde}</b> al <b>{mc_hasta}</b> | Emitido: {date.today()}</p>
     <h3>💰 Ingresos</h3>
     <div class="box"><span>Ingresos Brutos</span><span class="num">$ {total_ingresos:,.2f}</span></div>
-    <div class="box"><span>Neto sin IVA</span><span class="num">$ {neto_ventas:,.2f}</span></div>
-    <div class="box"><span>IVA Ventas (21%)</span><span class="num">$ {iva_ventas:,.2f}</span></div>
+    <div class="box"><span>Ingresos Totales (servicios transporte)</span><span class="num">$ {total_ingresos:,.2f}</span></div>
+    <div class="box"><span>IVA Ventas</span><span style="color:#888;font-style:italic;">No aplica — transporte de pasajeros exento</span></div>
     <h3>🛒 Gastos por Cuenta</h3>
     <table><tr><th>Cuenta de Gastos</th><th style="text-align:right">Total</th></tr>
     {filas_gtos_html}
@@ -2183,10 +2189,10 @@ elif sel == "MAYOR DE CUENTAS":
     </table>
     <h3>📋 Posición IVA</h3>
     <table><tr><th>Concepto</th><th style="text-align:right">Importe</th></tr>
-    <tr><td>IVA Ventas (Débito Fiscal)</td><td style="text-align:right">$ {iva_ventas:,.2f}</td></tr>
+    <tr><td>IVA Ventas (Débito Fiscal)</td><td style="text-align:right;color:#888;font-style:italic;">No aplica (transporte exento)</td></tr>
     <tr><td>IVA Compras 21% (Crédito)</td><td style="text-align:right">$ {df_compras_mc['IVA_21'].sum():,.2f}</td></tr>
     <tr><td>IVA Compras 10.5% (Crédito)</td><td style="text-align:right">$ {df_compras_mc['IVA_105'].sum():,.2f}</td></tr>
-    <tr style="font-weight:bold;background:#f8f9fa;"><td>IVA Neto</td><td style="text-align:right;color:{'#e74c3c' if iva_neto<0 else '#2ecc71'}">$ {iva_neto:,.2f}</td></tr>
+    <tr style="font-weight:bold;background:#f8f9fa;"><td>Crédito Fiscal Neto (a favor)</td><td style="text-align:right;color:#2ecc71">$ {total_iva_compras:,.2f}</td></tr>
     </table>
     <h3>📌 Retenciones</h3>
     <table><tr><th>Tipo</th><th style="text-align:right">Importe</th></tr>
