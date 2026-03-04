@@ -1214,7 +1214,7 @@ elif sel == "TESORERIA":
 
     # ── Cajas disponibles según rol ──
     # Admin ve todas. Operador solo ve su caja asignada.
-    TODAS_CAJAS = ["CAJA COTI", "CAJA TATO", "CAJA MEL", "CAJA JUNIN", "BANCO GALICIA", "BANCO PROVINCIA", "TARJETA DE CREDITO", "BANCO SUPERVIELLE", "DOLAR CAJA COTI", "DOLAR CAJA TATO"]
+    TODAS_CAJAS = ["CAJA COTI", "CAJA TATO", "CAJA JUNIN", "BANCO GALICIA", "BANCO PROVINCIA", "TARJETA DE CREDITO", "BANCO SUPERVIELLE", "DOLAR CAJA COTI", "DOLAR CAJA TATO"]
 
     if es_admin:
         opc_cajas = TODAS_CAJAS
