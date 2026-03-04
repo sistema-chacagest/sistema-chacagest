@@ -309,6 +309,54 @@ def generar_html_orden_pago(data):
     </html>
     """
 
+def generar_html_recibo(data):
+    return f"""
+    <html>
+    <head>
+        <style>
+            body {{ font-family: 'Segoe UI', Arial, sans-serif; padding: 20px; color: #333; }}
+            .rec-container {{ border: 2px solid #5e2d61; border-radius: 10px; padding: 30px; background-color: #fff; }}
+            .header-rec {{ border-bottom: 2px solid #5e2d61; padding-bottom: 15px; margin-bottom: 25px; display:flex; align-items:center; gap:14px; }}
+            .titulo-doc {{ font-size: 24px; font-weight: bold; text-align: center; margin: 20px 0; color: #5e2d61; letter-spacing: 2px; }}
+            .monto-rec {{ background: #f3eaf4; border: 1px dashed #5e2d61; padding: 15px; font-size: 26px; font-weight: bold; text-align: center; color: #5e2d61; margin: 20px 0; border-radius: 8px; }}
+            .detalle-table {{ width: 100%; margin-top: 20px; line-height: 2.0; border-collapse: collapse; }}
+            .detalle-table td {{ padding: 4px 8px; }}
+            .detalle-table td:first-child {{ font-weight: bold; width: 180px; color: #555; }}
+            .firma-box {{ margin-top: 60px; display: flex; justify-content: space-between; }}
+            .firma-linea {{ border-top: 1px solid #333; width: 200px; text-align: center; padding-top: 6px; font-size: 13px; color: #555; }}
+            .footer-rec {{ margin-top: 30px; font-size: 11px; color: #aaa; text-align: center; border-top: 1px solid #eee; padding-top: 12px; }}
+        </style>
+    </head>
+    <body>
+        <div class="rec-container">
+            <div class="header-rec">
+                <img src="data:image/jpeg;base64,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" style="height:65px;vertical-align:middle;">
+                <div>
+                    <h2 style="margin:0; color:#5e2d61;">CHACABUCO NOROESTE TOUR S.R.L.</h2>
+                    <small>Desde 1996, viajando con vos | CHACAGEST Software System</small>
+                </div>
+            </div>
+            <div class="titulo-doc">RECIBO DE COBRANZA</div>
+            <table class="detalle-table">
+                <tr><td>CLIENTE:</td><td>{data['Cliente/Proveedor']}</td></tr>
+                <tr><td>FECHA:</td><td>{data['Fecha']}</td></tr>
+                <tr><td>CONCEPTO:</td><td>{data['Concepto']}</td></tr>
+                <tr><td>FORMA DE PAGO:</td><td>{data['Caja/Banco']}</td></tr>
+                <tr><td>Nº REFERENCIA:</td><td>{data['Ref AFIP']}</td></tr>
+            </table>
+            <div class="monto-rec">TOTAL RECIBIDO: $ {abs(data['Monto']):,.2f}</div>
+            <div class="firma-box">
+                <div class="firma-linea">Firma del cliente</div>
+                <div class="firma-linea">Firma y sello empresa</div>
+            </div>
+            <div class="footer-rec">
+                CHACABUCO NOROESTE TOUR S.R.L. | Chacabuco, Buenos Aires | CHACAGEST Software System
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+
 def generar_html_presupuesto(p_data):
     return f"""
     <html>
