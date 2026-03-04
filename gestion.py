@@ -1930,77 +1930,17 @@ elif sel == "CTA CTE GENERAL PROV":
     if not st.session_state.compras.empty:
         res_p = st.session_state.compras.groupby('Proveedor')['Total'].sum().reset_index()
         res_p = res_p.merge(
-            st.session_state.proveedores[['Razón Social', 'CBU', 'Alias', 'Cuenta de Gastos']],
+            st.session_state.proveedores[['Razón Social', 'CBU', 'Alias']],
             left_on='Proveedor', right_on='Razón Social', how='left'
         ).drop(columns='Razón Social')
-        res_p['CBU']            = res_p['CBU'].fillna('-')
-        res_p['Alias']          = res_p['Alias'].fillna('-')
-        res_p['Cuenta de Gastos'] = res_p['Cuenta de Gastos'].fillna('-')
-        res_p = res_p[['Proveedor', 'Cuenta de Gastos', 'CBU', 'Alias', 'Total']]
-
-        # ── Métricas resumen ──
-        mp1, mp2, mp3 = st.columns(3)
-        mp1.metric("Proveedores con saldo", len(res_p[res_p['Total'].round(2) != 0]))
-        mp2.metric("Total a pagar", f"$ {res_p[res_p['Total'] > 0]['Total'].sum():,.2f}")
-        mp3.metric("Total a favor", f"$ {abs(res_p[res_p['Total'] < 0]['Total'].sum()):,.2f}")
-        st.markdown("---")
-
-        # ── Filtro de búsqueda ──
-        busq_prov = st.text_input("🔍 Buscar proveedor", placeholder="Escribí un nombre...", key="busq_ctacte_prov")
-        mostrar_solo_saldo = st.checkbox("Mostrar solo proveedores con saldo pendiente", value=False, key="filtro_saldo_prov")
-
-        df_vista = res_p.copy()
-        if busq_prov:
-            df_vista = df_vista[df_vista['Proveedor'].str.contains(busq_prov, case=False, na=False)]
-        if mostrar_solo_saldo:
-            df_vista = df_vista[df_vista['Total'].round(2) != 0]
-
-        # ── Tarjetas por proveedor ──
-        for _, row in df_vista.sort_values('Total', ascending=False).iterrows():
-            saldo = float(row['Total'])
-            if saldo > 0:
-                color_borde = "#e74c3c"
-                color_saldo = "#e74c3c"
-                etiqueta    = "A PAGAR"
-            elif saldo < 0:
-                color_borde = "#2ecc71"
-                color_saldo = "#2ecc71"
-                etiqueta    = "A FAVOR"
-            else:
-                color_borde = "#95a5a6"
-                color_saldo = "#95a5a6"
-                etiqueta    = "SALDO CERO"
-
-            cbu_val   = row['CBU']   if row['CBU']   not in ['-', '', None] else '<span style="color:#aaa">Sin CBU</span>'
-            alias_val = row['Alias'] if row['Alias'] not in ['-', '', None] else '<span style="color:#aaa">Sin Alias</span>'
-            cta_val   = row['Cuenta de Gastos'] if row['Cuenta de Gastos'] not in ['-', '', None] else '<span style="color:#aaa">Sin categoría</span>'
-
-            st.markdown(
-                f"""<div style='background:#ffffff;border-radius:10px;padding:14px 18px;margin-bottom:10px;
-                border-left:5px solid {color_borde};box-shadow:0 1px 4px rgba(0,0,0,0.08);'>
-                <div style='display:flex;justify-content:space-between;align-items:flex-start;'>
-                  <div>
-                    <div style='font-size:16px;font-weight:700;color:#2c3e50;margin-bottom:6px;'>🏢 {row['Proveedor']}</div>
-                    <div style='font-size:13px;color:#555;margin-bottom:3px;'>
-                      📂 <b>Cuenta de Gastos:</b> {cta_val}
-                    </div>
-                    <div style='font-size:13px;color:#555;margin-bottom:3px;'>
-                      🏦 <b>CBU:</b> <span style='font-family:monospace;letter-spacing:1px;'>{cbu_val}</span>
-                    </div>
-                    <div style='font-size:13px;color:#555;'>
-                      🔑 <b>Alias:</b> {alias_val}
-                    </div>
-                  </div>
-                  <div style='text-align:right;min-width:140px;'>
-                    <div style='font-size:22px;font-weight:bold;color:{color_saldo};'>$ {abs(saldo):,.2f}</div>
-                    <div style='font-size:11px;font-weight:bold;color:{color_borde};background:{color_borde}22;
-                         border-radius:4px;padding:2px 8px;display:inline-block;margin-top:4px;'>{etiqueta}</div>
-                  </div>
-                </div></div>""",
-                unsafe_allow_html=True
-            )
-
-        st.markdown("---")
+        res_p['CBU']   = res_p['CBU'].fillna('-')
+        res_p['Alias'] = res_p['Alias'].fillna('-')
+        res_p = res_p[['Proveedor', 'CBU', 'Alias', 'Total']]
+        # Métricas
+        mp1, mp2 = st.columns(2)
+        mp1.metric("Total proveedores con saldo", len(res_p[res_p['Total'].round(2) != 0]))
+        mp2.metric("Total a pagar", f"$ {res_p['Total'].sum():,.2f}")
+        st.dataframe(res_p.style.format({"Total": "$ {:,.2f}"}), use_container_width=True)
         # Descarga PDF
         res_p_pdf = res_p[['Proveedor','Total']].rename(columns={'Proveedor':'Cliente','Total':'Importe'})
         html_prov_pdf = generar_html_cta_cte_general("Proveedores", res_p_pdf, date.today())
