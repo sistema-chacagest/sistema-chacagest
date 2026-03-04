@@ -2054,13 +2054,31 @@ elif sel == "MAYOR DE CUENTAS":
     tab_ing, tab_gtos, tab_iva, tab_ret = st.tabs(["💰 Ingresos", "🛒 Gastos por Cuenta", "📋 IVA", "📌 Retenciones"])
 
     with tab_ing:
-        st.markdown("#### Ingresos por Período")
-        st.caption(f"Total registros: {len(df_viajes_mc)} | Los servicios de transporte de pasajeros no están gravados con IVA.")
-        st.metric("Ingresos Totales", f"$ {total_ingresos:,.2f}")
-        if not df_viajes_mc.empty:
-            # Agrupar por cliente
+        st.markdown("#### Ingresos por Período — Detalle de Viajes")
+        st.caption("Los servicios de transporte de pasajeros no están gravados con IVA. El importe registrado es el ingreso neto.")
+        if df_viajes_mc.empty:
+            st.info("No hay viajes registrados en el período seleccionado.")
+        else:
+            # ── Resumen por cliente ──
             ing_cli = df_viajes_mc.groupby('Cliente')['Importe'].sum().reset_index().sort_values('Importe', ascending=False)
+            ing_cli['%'] = (ing_cli['Importe'] / total_ingresos * 100).round(1).astype(str) + '%'
+            st.markdown("##### 📊 Resumen por Cliente")
             st.dataframe(ing_cli.style.format({"Importe": "$ {:,.2f}"}), use_container_width=True)
+            st.markdown("---")
+            # ── Detalle viaje a viaje ──
+            st.markdown("##### 🚌 Detalle de Viajes")
+            cols_det = ['Fecha Viaje', 'Cliente', 'Origen', 'Destino', 'Patente / Móvil', 'Tipo Comp', 'Importe']
+            cols_disponibles = [c for c in cols_det if c in df_viajes_mc.columns]
+            df_det = df_viajes_mc[cols_disponibles].sort_values('Fecha Viaje', ascending=False) if 'Fecha Viaje' in df_viajes_mc.columns else df_viajes_mc[cols_disponibles]
+            st.dataframe(df_det.style.format({"Importe": "$ {:,.2f}"}), use_container_width=True)
+            # ── Total al pie ──
+            st.markdown(
+                f"<div style='background:#5e2d61;color:white;border-radius:8px;padding:12px 20px;"
+                f"display:flex;justify-content:space-between;align-items:center;margin-top:8px;'>"
+                f"<span style='font-size:14px;font-weight:bold;'>TOTAL INGRESOS DEL PERÍODO</span>"
+                f"<span style='font-size:22px;font-weight:bold;'>$ {total_ingresos:,.2f}</span>"
+                f"</div>", unsafe_allow_html=True
+            )
 
     with tab_gtos:
         st.markdown("#### Gastos por Cuenta Contable")
@@ -2122,6 +2140,21 @@ elif sel == "MAYOR DE CUENTAS":
     lineas_txt.append("── INGRESOS ──────────────────────────────────────────")
     lineas_txt.append(f"  Ingresos Totales (servicios transp.): $ {total_ingresos:>12,.2f}")
     lineas_txt.append(f"  IVA Ventas: NO APLICA (exento - transporte de pasajeros)")
+    lineas_txt.append("")
+    if not df_viajes_mc.empty:
+        lineas_txt.append("  Detalle por cliente:")
+        for _, row_i in df_viajes_mc.groupby('Cliente')['Importe'].sum().reset_index().sort_values('Importe', ascending=False).iterrows():
+            lineas_txt.append(f"    {row_i['Cliente']:<40} $ {row_i['Importe']:>12,.2f}")
+        lineas_txt.append("")
+        lineas_txt.append("  Detalle de viajes:")
+        cols_txt = ['Fecha Viaje', 'Cliente', 'Origen', 'Destino', 'Importe']
+        for _, row_v in df_viajes_mc.sort_values('Fecha Viaje', ascending=False).iterrows():
+            fecha_v  = str(row_v.get('Fecha Viaje', '-'))
+            cliente_v= str(row_v.get('Cliente', '-'))[:25]
+            origen_v = str(row_v.get('Origen', '-'))[:15]
+            destino_v= str(row_v.get('Destino', '-'))[:15]
+            imp_v    = float(row_v.get('Importe', 0))
+            lineas_txt.append(f"    {fecha_v:<12} {cliente_v:<26} {origen_v:<16} {destino_v:<16} $ {imp_v:>10,.2f}")
     lineas_txt.append("")
     if not df_viajes_mc.empty:
         for _, row_i in df_viajes_mc.groupby('Cliente')['Importe'].sum().reset_index().iterrows():
