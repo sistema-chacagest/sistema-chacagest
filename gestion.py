@@ -176,60 +176,7 @@ def generar_html_resumen(cliente, df, saldo):
     </html>
     """
 
-def generar_html_cta_cte_general(tipo, df_resumen, fecha_emision):
-    """Genera HTML para PDF de cuenta corriente general (clientes o proveedores)."""
-    filas_html = ""
-    total_general = 0
-    for _, row in df_resumen.iterrows():
-        nombre = row.get('Cliente', row.get('Proveedor', '-'))
-        saldo  = float(row.get('Importe', row.get('Total', 0)))
-        total_general += saldo
-        color = "#e74c3c" if saldo < 0 else "#2ecc71"
-        filas_html += f"""
-        <tr>
-            <td>{nombre}</td>
-            <td style="text-align:right;font-weight:bold;color:{color};">$ {saldo:,.2f}</td>
-        </tr>"""
-    color_total = "#e74c3c" if total_general < 0 else "#2ecc71"
-    return f"""<html><head><style>
-        body {{ font-family: 'Segoe UI', Arial, sans-serif; color: #333; padding: 24px; font-size: 13px; }}
-        .logo-header {{ width:100%; border-bottom:4px solid #5e2d61; margin-bottom:20px; padding-bottom:10px; }}
-        .empresa {{ color:#5e2d61; font-size:22px; font-weight:bold; }}
-        .sub {{ color:#888; font-size:12px; }}
-        h2 {{ color:#5e2d61; margin-top:0; }}
-        table {{ width:100%; border-collapse:collapse; margin-top:16px; }}
-        th {{ background:#5e2d61; color:white; padding:10px; text-align:left; font-size:12px; }}
-        td {{ border-bottom:1px solid #eee; padding:9px 10px; }}
-        tr:nth-child(even) td {{ background:#fafafa; }}
-        .total-box {{ margin-top:20px; background:#5e2d61; color:white; border-radius:8px;
-                      padding:14px 20px; display:flex; justify-content:space-between; align-items:center; }}
-        .total-num {{ font-size:22px; font-weight:bold; color:{color_total}; }}
-        .fecha {{ color:#888; font-size:12px; text-align:right; }}
-    </style></head><body>
-    <table class="logo-header"><tr>
-        <td style="vertical-align:middle;">
-            <img src="{LOGO_B64}" style="height:55px;vertical-align:middle;margin-right:12px;">
-            <span style="vertical-align:middle;">
-                <div class="empresa">CHACABUCO NOROESTE TOUR S.R.L.</div>
-                <div class="sub">Desde 1996 viajando con vos | CHACAGEST Software System</div>
-            </span>
-        </td>
-        <td style="text-align:right;vertical-align:middle;">
-            <div class="fecha"><b>Emisión:</b> {fecha_emision}</div>
-        </td>
-    </tr></table>
-    <h2>📊 Estado General de {tipo}</h2>
-    <table>
-        <tr><th>{tipo[:-1] if tipo.endswith('s') else tipo}</th><th style="text-align:right;">Saldo</th></tr>
-        {filas_html}
-    </table>
-    <div class="total-box">
-        <span style="font-size:14px;">TOTAL GENERAL</span>
-        <span class="total-num">$ {total_general:,.2f}</span>
-    </div>
-    </body></html>"""
-
-
+def generar_html_recibo(data):
     return f"""
     <html>
     <head>
@@ -589,18 +536,6 @@ es_operador = st.session_state.rol_actual == "operador"
 caja_propia = st.session_state.caja_propia
 
 # --- 3. INICIALIZACIÓN ---
-
-# Cuentas de gastos: se pueden gestionar desde el sistema
-CUENTAS_GASTOS_DEFAULT = [
-    "COMBUSTIBLE", "REPARACION", "REPUESTO", "SERVICIO LUZ, GAS",
-    "ALQUILERES", "COMPRA ART. LIMPIEZA", "HONORARIOS",
-    "PUBLICIDAD", "GASTOS OFICINA", "GASTOS EN LIBRERIA",
-    "CHOFERES EVENTUALES", "VARIOS"
-]
-
-if 'cuentas_gastos' not in st.session_state:
-    st.session_state.cuentas_gastos = list(CUENTAS_GASTOS_DEFAULT)
-
 if 'clientes' not in st.session_state or 'viajes' not in st.session_state:
     c, v, p, t, prov, com, ce, cc = cargar_datos()
     st.session_state.clientes          = c    if c    is not None else pd.DataFrame(columns=COL_CLIENTES)
@@ -690,11 +625,11 @@ with st.sidebar:
         st.markdown("<div style='margin-left: 20px; border-left: 2px solid #f39c12; padding-left: 10px;'>", unsafe_allow_html=True)
         # Operadores no ven CTA CTE GENERAL PROV (estados globales)
         if es_admin:
-            opciones_compras = ["CARGA PROVEEDOR", "CARGA GASTOS", "CTA CTE PROVEEDOR", "CTA CTE GENERAL PROV", "HISTORICO COMPRAS", "MAYOR DE CUENTAS"]
-            iconos_compras   = ["person-plus", "receipt", "person-lines-fill", "globe", "clock-history", "journal-text"]
+            opciones_compras = ["CARGA PROVEEDOR", "CARGA GASTOS", "CTA CTE PROVEEDOR", "CTA CTE GENERAL PROV", "HISTORICO COMPRAS"]
+            iconos_compras   = ["person-plus", "receipt", "person-vcard", "globe", "clock-history"]
         else:
             opciones_compras = ["CARGA PROVEEDOR", "CARGA GASTOS", "CTA CTE PROVEEDOR", "HISTORICO COMPRAS"]
-            iconos_compras   = ["person-plus", "receipt", "person-lines-fill", "clock-history"]
+            iconos_compras   = ["person-plus", "receipt", "person-vcard", "clock-history"]
         sel_sub = option_menu(
             menu_title=None,
             options=opciones_compras,
@@ -708,32 +643,6 @@ with st.sidebar:
             }
         )
         st.markdown("</div>", unsafe_allow_html=True)
-
-    st.markdown("---")
-
-    # ── Gestión de Cuentas de Gastos (solo admin) ──
-    if es_admin:
-        with st.expander("⚙️ Cuentas de Gastos", expanded=False):
-            st.markdown("<small><b>Agregar nueva cuenta:</b></small>", unsafe_allow_html=True)
-            nueva_cta = st.text_input("Nueva cuenta", key="nueva_cta_input", label_visibility="collapsed", placeholder="Ej: SEGUROS")
-            if st.button("➕ Agregar", key="btn_agregar_cta"):
-                nueva_cta_upper = nueva_cta.strip().upper()
-                if nueva_cta_upper and nueva_cta_upper not in st.session_state.cuentas_gastos:
-                    st.session_state.cuentas_gastos.append(nueva_cta_upper)
-                    st.session_state.cuentas_gastos.sort()
-                    st.rerun()
-                elif nueva_cta_upper in st.session_state.cuentas_gastos:
-                    st.warning("Ya existe esa cuenta.")
-            st.markdown("<small><b>Cuentas actuales:</b></small>", unsafe_allow_html=True)
-            for cta in sorted(st.session_state.cuentas_gastos):
-                col_cta, col_del = st.columns([0.8, 0.2])
-                col_cta.markdown(f"<small>📂 {cta}</small>", unsafe_allow_html=True)
-                if col_del.button("🗑️", key=f"del_cta_{cta}", help=f"Eliminar {cta}"):
-                    if len(st.session_state.cuentas_gastos) > 1:
-                        st.session_state.cuentas_gastos.remove(cta)
-                        st.rerun()
-                    else:
-                        st.warning("Debe quedar al menos una cuenta.")
 
     st.markdown("---")
     if st.button("🔄 Sincronizar"):
@@ -1697,24 +1606,8 @@ elif sel == "CTA CTE GENERAL":
     st.header("🌎 Estado Global de Deudores")
     if not st.session_state.viajes.empty:
         res = st.session_state.viajes.groupby('Cliente')['Importe'].sum().reset_index()
-        res = res[res['Importe'].round(2) != 0].sort_values('Importe', ascending=False)
-        # Métricas
-        m1, m2, m3 = st.columns(3)
-        m1.metric("Total clientes con saldo", len(res))
-        m2.metric("Total a cobrar", f"$ {res[res['Importe']>0]['Importe'].sum():,.2f}")
-        m3.metric("Total a favor clientes", f"$ {res[res['Importe']<0]['Importe'].sum():,.2f}")
+        res = res[res['Importe'].round(2) != 0]
         st.table(res.style.format({"Importe": "$ {:,.2f}"}))
-        # Descarga PDF
-        html_cta_cte = generar_html_cta_cte_general("Clientes", res, date.today())
-        st.download_button(
-            label="🖨️ DESCARGAR PDF / IMPRIMIR",
-            data=html_cta_cte,
-            file_name=f"CTA_CTE_General_Clientes_{date.today()}.html",
-            mime="text/html",
-            help="Abrí el archivo descargado en el navegador y usá Ctrl+P para imprimir o guardar como PDF"
-        )
-    else:
-        st.info("No hay movimientos registrados.")
 
 elif sel == "CARGA PROVEEDOR":
     st.header("👤 Gestión de Proveedores")
@@ -1726,7 +1619,7 @@ elif sel == "CARGA PROVEEDOR":
             c1, c2  = st.columns(2)
             rs      = c1.text_input("Razón Social")
             doc     = c2.text_input("CUIT o DNI")
-            cuenta  = c1.selectbox("Cuenta de Gastos", sorted(st.session_state.cuentas_gastos))
+            cuenta  = c1.selectbox("Cuenta de Gastos", ["COMBUSTIBLE", "REPARACION", "REPUESTO", "SERVICIO LUZ, GAS", "VARIOS"])
             cat_iva = c2.selectbox("Categoría IVA", ["Responsable Inscripto", "Exento en IVA", "Consumidor Final", "Monotributista", "No Inscripto"])
             c3, c4  = st.columns(2)
             cbu     = c3.text_input("CBU")
@@ -1769,7 +1662,7 @@ elif sel == "CARGA PROVEEDOR":
                             st.session_state[f"edit_p_mode_{i}"] = False; st.rerun()
             st.divider()
 
-elif sel == "CARGA GASTOS":
+elif sel == "CTA CTE PROVEEDOR":
     st.header("💸 Carga de Gastos")
     if st.session_state.get("msg_gasto"):
         st.success(st.session_state.msg_gasto)
@@ -1777,10 +1670,9 @@ elif sel == "CARGA GASTOS":
 
     # ── Inputs fuera del form para que el total se actualice en tiempo real ──
     prov_sel = st.selectbox("Proveedor", st.session_state.proveedores['Razón Social'].unique() if not st.session_state.proveedores.empty else [""])
-    c1, c2, c3_fecha = st.columns(3)
-    fecha_comp = c1.date_input("Fecha del Comprobante", value=date.today())
-    pv         = c2.text_input("Punto de Venta")
-    tipo_f     = c3_fecha.selectbox("Tipo de Factura", ["A", "B", "C", "B - OP EXENTA", "C - OP EXENTA", "REMITO", "NOTA DE CREDITO", "NOTA DE DEBITO"])
+    c1, c2   = st.columns(2)
+    pv       = c1.text_input("Punto de Venta")
+    tipo_f   = c2.selectbox("Tipo de Factura", ["A", "B", "C", "REMITO", "NOTA DE CREDITO", "NOTA DE DEBITO"])
     c3, c4   = st.columns(2)
     n21      = c3.number_input("Importe Neto (21%)", min_value=0.0, step=0.01, key="g_n21")
     n10      = c4.number_input("Importe Neto (10.5%)", min_value=0.0, step=0.01, key="g_n10")
@@ -1791,13 +1683,7 @@ elif sel == "CARGA GASTOS":
     nograv   = st.number_input("Conceptos No Gravados", min_value=0.0, step=0.01, key="g_nograv")
 
     # ── Total en tiempo real ──
-    # Para OP Exentas (B o C): no se suma IVA, el neto es el total
-    es_exenta = tipo_f in ("B - OP EXENTA", "C - OP EXENTA")
-    if es_exenta:
-        total = n21 + n10 + r_iva + r_gan + r_iibb + nograv
-        st.info("ℹ️ **Operación Exenta**: no se aplica IVA sobre los importes netos.")
-    else:
-        total = (n21 * 1.21) + (n10 * 1.105) + r_iva + r_gan + r_iibb + nograv
+    total = (n21 * 1.21) + (n10 * 1.105) + r_iva + r_gan + r_iibb + nograv
     if tipo_f == "NOTA DE CREDITO": total = -total
 
     color_total = "#2ecc71" if total >= 0 else "#e74c3c"
@@ -1813,7 +1699,7 @@ elif sel == "CARGA GASTOS":
 
     if st.button("✅ REGISTRAR COMPROBANTE", type="primary"):
         if total != 0:
-            ng = pd.DataFrame([[fecha_comp, prov_sel, pv, tipo_f, n21, n10, r_iva, r_gan, r_iibb, nograv, total]], columns=COL_COMPRAS)
+            ng = pd.DataFrame([[date.today(), prov_sel, pv, tipo_f, n21, n10, r_iva, r_gan, r_iibb, nograv, total]], columns=COL_COMPRAS)
             st.session_state.compras = pd.concat([st.session_state.compras, ng], ignore_index=True)
             guardar_datos("compras", st.session_state.compras)
             st.session_state.msg_gasto = f"✅ Comprobante de '{prov_sel}' guardado por $ {total:,.2f}."
@@ -1912,15 +1798,12 @@ elif sel == "COMPROBANTES":
                                     st.session_state[f"modo_edit_viaje_{i}"] = False
                                     st.rerun()
                     st.divider()
-elif sel == "CTA CTE PROVEEDOR":
-    st.header("📊 Cuenta Corriente por Proveedor")
+    st.header("📊 Cuenta Corriente Individual")
     if not st.session_state.proveedores.empty:
         p_sel = st.selectbox("Seleccionar Proveedor", st.session_state.proveedores['Razón Social'].unique())
         df_p  = st.session_state.compras[st.session_state.compras['Proveedor'] == p_sel]
         st.metric("SALDO PENDIENTE", f"$ {df_p['Total'].sum():,.2f}")
         st.dataframe(df_p, use_container_width=True)
-    else:
-        st.info("No hay proveedores registrados.")
 
 elif sel == "CTA CTE GENERAL PROV":
     st.header("🌎 Estado General de Proveedores")
@@ -1931,23 +1814,7 @@ elif sel == "CTA CTE GENERAL PROV":
             left_on='Proveedor', right_on='Razón Social', how='left'
         ).drop(columns='Razón Social')
         res_p = res_p[['Proveedor', 'CBU', 'Alias', 'Total']]
-        # Métricas
-        mp1, mp2 = st.columns(2)
-        mp1.metric("Total proveedores con saldo", len(res_p[res_p['Total'].round(2) != 0]))
-        mp2.metric("Total a pagar", f"$ {res_p['Total'].sum():,.2f}")
         st.dataframe(res_p.style.format({"Total": "$ {:,.2f}"}), use_container_width=True)
-        # Descarga PDF
-        res_p_pdf = res_p[['Proveedor','Total']].rename(columns={'Proveedor':'Cliente','Total':'Importe'})
-        html_prov_pdf = generar_html_cta_cte_general("Proveedores", res_p_pdf, date.today())
-        st.download_button(
-            label="🖨️ DESCARGAR PDF / IMPRIMIR",
-            data=html_prov_pdf,
-            file_name=f"CTA_CTE_General_Proveedores_{date.today()}.html",
-            mime="text/html",
-            help="Abrí el archivo descargado en el navegador y usá Ctrl+P para imprimir o guardar como PDF"
-        )
-    else:
-        st.info("No hay comprobantes registrados.")
 
 elif sel == "HISTORICO COMPRAS":
     st.header("📜 Comprobantes Cargados")
@@ -1961,210 +1828,6 @@ elif sel == "HISTORICO COMPRAS":
                 st.session_state.compras = st.session_state.compras.drop(i)
                 guardar_datos("compras", st.session_state.compras); st.rerun()
             st.divider()
-
-elif sel == "MAYOR DE CUENTAS":
-    st.header("📒 Mayor de Cuentas")
-
-    # ── Filtros de período ──
-    mc1, mc2 = st.columns(2)
-    mc_desde = mc1.date_input("Desde", value=date(date.today().year, 1, 1), key="mc_desde")
-    mc_hasta = mc2.date_input("Hasta", value=date.today(), key="mc_hasta")
-
-    # ── INGRESOS: suma de viajes del período ──
-    df_v = st.session_state.viajes.copy()
-    df_v['Importe'] = pd.to_numeric(df_v['Importe'], errors='coerce').fillna(0)
-    col_fv = next((c for c in ['Fecha Viaje', 'Fecha Carga', 'Fecha'] if c in df_v.columns), None)
-    if col_fv:
-        df_v['_fd'] = pd.to_datetime(df_v[col_fv], errors='coerce')
-        df_v = df_v[(df_v['_fd'].dt.date >= mc_desde) & (df_v['_fd'].dt.date <= mc_hasta)]
-    total_ingresos = df_v['Importe'].sum()
-
-    # ── GASTOS: suma de compras del período ──
-    df_c = st.session_state.compras.copy()
-    for col in ['Neto 21','Neto 10.5','Ret IVA','Ret Ganancia','Ret IIBB','No Gravados','Total']:
-        df_c[col] = pd.to_numeric(df_c[col], errors='coerce').fillna(0)
-    df_c['_fd'] = pd.to_datetime(df_c['Fecha'], errors='coerce')
-    df_c = df_c[(df_c['_fd'].dt.date >= mc_desde) & (df_c['_fd'].dt.date <= mc_hasta)]
-    total_gastos    = df_c['Total'].sum()
-    iva_compras_21  = (df_c['Neto 21']  * 0.21).sum()
-    iva_compras_105 = (df_c['Neto 10.5'] * 0.105).sum()
-    total_iva_compras = iva_compras_21 + iva_compras_105
-    total_ret_iva   = df_c['Ret IVA'].sum()
-    total_ret_gan   = df_c['Ret Ganancia'].sum()
-    total_ret_iibb  = df_c['Ret IIBB'].sum()
-
-    # Gastos agrupados por cuenta
-    gastos_por_cuenta = pd.DataFrame()
-    if not df_c.empty and not st.session_state.proveedores.empty:
-        df_gc = df_c.merge(st.session_state.proveedores[['Razón Social','Cuenta de Gastos']],
-                           left_on='Proveedor', right_on='Razón Social', how='left')
-        df_gc['Cuenta de Gastos'] = df_gc['Cuenta de Gastos'].fillna('SIN CLASIFICAR')
-        gastos_por_cuenta = df_gc.groupby('Cuenta de Gastos')['Total'].sum().reset_index().sort_values('Total', ascending=False)
-
-    resultado = total_ingresos - total_gastos
-
-    # ── RESUMEN en pantalla ──
-    st.markdown("### 📊 Resumen del Período")
-    km1, km2, km3 = st.columns(3)
-    km1.metric("💰 Ingresos (Viajes)", f"$ {total_ingresos:,.2f}")
-    km2.metric("🛒 Gastos (Compras)", f"$ {total_gastos:,.2f}")
-    color_res = "#2ecc71" if resultado >= 0 else "#e74c3c"
-    km3.metric("📈 Resultado", f"$ {resultado:,.2f}")
-    st.markdown(
-        f"<div style='background:#f0f2f6;border-radius:10px;padding:14px 24px;margin:10px 0;"
-        f"border-left:5px solid {color_res};display:flex;justify-content:space-between;align-items:center;'>"
-        f"<span style='font-weight:bold;'>{'GANANCIA' if resultado >= 0 else 'PÉRDIDA'} DEL PERÍODO</span>"
-        f"<span style='font-size:26px;font-weight:bold;color:{color_res};'>$ {abs(resultado):,.2f}</span>"
-        f"</div>", unsafe_allow_html=True
-    )
-    st.markdown("---")
-
-    # ── TABS ──
-    tab_ing, tab_gtos, tab_iva, tab_ret = st.tabs(["💰 Ingresos", "🛒 Gastos por Cuenta", "📋 IVA Compras", "📌 Retenciones"])
-
-    with tab_ing:
-        st.metric("Total Ingresos por Viajes", f"$ {total_ingresos:,.2f}")
-        st.caption(f"{len(df_v)} viaje(s) en el período")
-        if not df_v.empty:
-            ing_cli = df_v.groupby('Cliente')['Importe'].sum().reset_index().sort_values('Importe', ascending=False)
-            st.dataframe(ing_cli.style.format({"Importe": "$ {:,.2f}"}), use_container_width=True)
-
-    with tab_gtos:
-        st.metric("Total Gastos", f"$ {total_gastos:,.2f}")
-        if not gastos_por_cuenta.empty:
-            fig_gc = px.bar(gastos_por_cuenta, x='Cuenta de Gastos', y='Total',
-                           color_discrete_sequence=['#5e2d61'],
-                           labels={'Total':'Total $','Cuenta de Gastos':'Cuenta'})
-            fig_gc.update_layout(showlegend=False, plot_bgcolor='white', height=300)
-            st.plotly_chart(fig_gc, use_container_width=True)
-            st.dataframe(gastos_por_cuenta.style.format({"Total": "$ {:,.2f}"}), use_container_width=True)
-        else:
-            st.info("No hay compras en el período.")
-
-    with tab_iva:
-        st.info("ℹ️ Transporte de pasajeros: sin débito fiscal. Solo crédito fiscal de compras.")
-        iva_data = pd.DataFrame({
-            "Concepto": ["IVA Compras 21%", "IVA Compras 10.5%", "TOTAL CRÉDITO FISCAL"],
-            "Importe":  [iva_compras_21, iva_compras_105, total_iva_compras]
-        })
-        st.dataframe(iva_data.style.format({"Importe": "$ {:,.2f}"}), use_container_width=True)
-
-    with tab_ret:
-        ret_data = pd.DataFrame({
-            "Retención": ["IVA", "Ganancias", "IIBB", "TOTAL"],
-            "Importe":   [total_ret_iva, total_ret_gan, total_ret_iibb,
-                          total_ret_iva + total_ret_gan + total_ret_iibb]
-        })
-        st.dataframe(ret_data.style.format({"Importe": "$ {:,.2f}"}), use_container_width=True)
-
-    st.markdown("---")
-    st.markdown("### 📥 Exportar")
-
-    # ── TXT ──
-    filas_gtos_txt = "\n".join(
-        f"  {r['Cuenta de Gastos']:<40} $ {r['Total']:>12,.2f}"
-        for _, r in gastos_por_cuenta.iterrows()
-    ) if not gastos_por_cuenta.empty else "  Sin datos"
-
-    txt = "\n".join([
-        "=" * 60,
-        "    CHACABUCO NOROESTE TOUR S.R.L.",
-        "    MAYOR DE CUENTAS",
-        f"    Período: {mc_desde} al {mc_hasta}",
-        f"    Emitido: {date.today()}",
-        "=" * 60,
-        "",
-        "── INGRESOS ──────────────────────────────────────────",
-        f"  Viajes:                            $ {total_ingresos:>12,.2f}",
-        "",
-        "── GASTOS POR CUENTA ─────────────────────────────────",
-        filas_gtos_txt,
-        f"  {'TOTAL GASTOS':<40} $ {total_gastos:>12,.2f}",
-        "",
-        "── IVA COMPRAS (Crédito Fiscal) ──────────────────────",
-        f"  IVA 21%:                           $ {iva_compras_21:>12,.2f}",
-        f"  IVA 10.5%:                         $ {iva_compras_105:>12,.2f}",
-        f"  TOTAL CRÉDITO FISCAL:              $ {total_iva_compras:>12,.2f}",
-        "",
-        "── RETENCIONES ───────────────────────────────────────",
-        f"  IVA:                               $ {total_ret_iva:>12,.2f}",
-        f"  Ganancias:                         $ {total_ret_gan:>12,.2f}",
-        f"  IIBB:                              $ {total_ret_iibb:>12,.2f}",
-        f"  TOTAL:                             $ {(total_ret_iva+total_ret_gan+total_ret_iibb):>12,.2f}",
-        "",
-        "── RESULTADO ─────────────────────────────────────────",
-        f"  Ingresos - Gastos:                 $ {resultado:>12,.2f}",
-        "",
-        "=" * 60,
-        "  CHACAGEST Software System",
-        "=" * 60,
-    ])
-
-    # ── HTML para PDF ──
-    filas_gtos_html = "".join(
-        f"<tr><td>{r['Cuenta de Gastos']}</td><td style='text-align:right'>$ {r['Total']:,.2f}</td></tr>"
-        for _, r in gastos_por_cuenta.iterrows()
-    ) if not gastos_por_cuenta.empty else "<tr><td colspan='2'>Sin datos</td></tr>"
-
-    html_mayor = f"""<html><head><style>
-        body{{font-family:'Segoe UI',Arial,sans-serif;color:#333;padding:24px;font-size:13px;}}
-        .tit{{color:#5e2d61;font-size:20px;font-weight:bold;}}
-        h3{{color:#5e2d61;border-bottom:2px solid #5e2d61;padding-bottom:4px;margin-top:20px;}}
-        table{{width:100%;border-collapse:collapse;margin-bottom:16px;}}
-        th{{background:#5e2d61;color:white;padding:9px;text-align:left;font-size:12px;}}
-        td{{border-bottom:1px solid #eee;padding:8px 10px;}}
-        .box{{background:#f0f2f6;border-radius:8px;padding:12px 20px;margin:8px 0;
-              border-left:4px solid #5e2d61;display:flex;justify-content:space-between;}}
-        .num{{font-size:18px;font-weight:bold;color:#5e2d61;}}
-        .res{{background:#5e2d61;color:white;border-radius:8px;padding:14px 20px;margin-top:16px;
-              display:flex;justify-content:space-between;align-items:center;}}
-        .res-num{{font-size:24px;font-weight:bold;color:{'#2ecc71' if resultado>=0 else '#e74c3c'};}}
-    </style></head><body>
-    <div class="tit">CHACABUCO NOROESTE TOUR S.R.L. — Mayor de Cuentas</div>
-    <p style="color:#888;">Período: <b>{mc_desde}</b> al <b>{mc_hasta}</b> | Emitido: {date.today()}</p>
-    <h3>💰 Ingresos</h3>
-    <div class="box"><span>Viajes</span><span class="num">$ {total_ingresos:,.2f}</span></div>
-    <h3>🛒 Gastos por Cuenta</h3>
-    <table>
-      <tr><th>Cuenta de Gastos</th><th style="text-align:right">Total</th></tr>
-      {filas_gtos_html}
-      <tr style="font-weight:bold;background:#f8f9fa;">
-        <td>TOTAL GASTOS</td><td style="text-align:right">$ {total_gastos:,.2f}</td>
-      </tr>
-    </table>
-    <h3>📋 IVA Compras (Crédito Fiscal)</h3>
-    <table>
-      <tr><th>Concepto</th><th style="text-align:right">Importe</th></tr>
-      <tr><td>IVA 21%</td><td style="text-align:right">$ {iva_compras_21:,.2f}</td></tr>
-      <tr><td>IVA 10.5%</td><td style="text-align:right">$ {iva_compras_105:,.2f}</td></tr>
-      <tr style="font-weight:bold;background:#f8f9fa;">
-        <td>TOTAL CRÉDITO FISCAL</td><td style="text-align:right">$ {total_iva_compras:,.2f}</td>
-      </tr>
-    </table>
-    <h3>📌 Retenciones</h3>
-    <table>
-      <tr><th>Tipo</th><th style="text-align:right">Importe</th></tr>
-      <tr><td>IVA</td><td style="text-align:right">$ {total_ret_iva:,.2f}</td></tr>
-      <tr><td>Ganancias</td><td style="text-align:right">$ {total_ret_gan:,.2f}</td></tr>
-      <tr><td>IIBB</td><td style="text-align:right">$ {total_ret_iibb:,.2f}</td></tr>
-      <tr style="font-weight:bold;background:#f8f9fa;">
-        <td>TOTAL</td><td style="text-align:right">$ {(total_ret_iva+total_ret_gan+total_ret_iibb):,.2f}</td>
-      </tr>
-    </table>
-    <div class="res">
-      <span style="font-size:15px;font-weight:bold;">{'GANANCIA' if resultado>=0 else 'PÉRDIDA'} DEL PERÍODO</span>
-      <span class="res-num">$ {abs(resultado):,.2f}</span>
-    </div>
-    </body></html>"""
-
-    col_dl1, col_dl2 = st.columns(2)
-    col_dl1.download_button("📄 DESCARGAR TXT", data=txt,
-        file_name=f"Mayor_{mc_desde}_{mc_hasta}.txt", mime="text/plain")
-    col_dl2.download_button("🖨️ IMPRIMIR / PDF", data=html_mayor,
-        file_name=f"Mayor_{mc_desde}_{mc_hasta}.html", mime="text/html",
-        help="Abrí en el navegador y usá Ctrl+P para imprimir o guardar como PDF")
-
-
 
 # =============================================================
 # CHEQUES
@@ -2258,6 +1921,254 @@ elif sel == "CHEQUES":
                         st.rerun()
                     else:
                         st.warning("Completá Nro de Cheque, Beneficiario e Importe.")
+
+        # ── IMPORTAR eCheqs desde XLS del banco ──
+        with st.expander("📥 IMPORTAR eCheqs DESDE ARCHIVO XLS DEL BANCO", expanded=False):
+            st.markdown("""
+            <div style='background:#fff4e6;border-left:4px solid #f39c12;padding:10px 14px;border-radius:6px;font-size:13px;'>
+                📋 <b>Cómo exportar el archivo desde tu banco:</b><br>
+                Ingresá a Banca Electrónica → eCheqs → Cheques Diferidos Emitidos → Exportar XLS.<br>
+                El archivo debe tener las columnas: <b>Fecha | Fecha Acred | Nro Cheque | Concepto | Importe</b>
+            </div>
+            """, unsafe_allow_html=True)
+
+            archivo_xls = st.file_uploader("Seleccioná el archivo XLS del banco", type=["xls", "xlsx"], key="xls_echeq_uploader")
+
+            if archivo_xls is not None:
+                try:
+                    import struct
+                    from datetime import timedelta as _td
+
+                    raw = archivo_xls.read()
+
+                    def _excel_date(serial):
+                        try:
+                            return (date(1899, 12, 30) + _td(days=int(serial))).strftime('%Y-%m-%d')
+                        except:
+                            return str(serial)
+
+                    def _parse_xls_echeq(data):
+                        # ── 1. Localizar stream BIFF (BOF = 0x0809) ──
+                        start = 0
+                        for i in range(len(data) - 4):
+                            try:
+                                if struct.unpack_from('<H', data, i)[0] == 0x0809:
+                                    if 4 <= struct.unpack_from('<H', data, i+2)[0] <= 20:
+                                        start = i; break
+                            except: pass
+                        data = data[start:]
+
+                        # ── 2. Parsear todos los records ──
+                        sst   = []
+                        cells = {}
+                        i = 0
+                        while i < len(data) - 4:
+                            try:
+                                rtype = struct.unpack_from('<H', data, i)[0]
+                                rlen  = struct.unpack_from('<H', data, i+2)[0]
+                            except: break
+                            if rlen > 8192 or i + 4 + rlen > len(data):
+                                i += 1; continue
+                            chunk = data[i+4:i+4+rlen]
+
+                            if rtype == 0x00FC and rlen >= 8:   # SST
+                                total = struct.unpack_from('<I', chunk, 4)[0]
+                                pos = 8
+                                for _ in range(total):
+                                    if pos + 3 > len(chunk): break
+                                    nchars = struct.unpack_from('<H', chunk, pos)[0]
+                                    flags  = chunk[pos+2]; pos += 3
+                                    if flags & 0x04: pos += 2
+                                    if flags & 0x08: pos += 4
+                                    if flags & 0x01:
+                                        s = chunk[pos:pos+nchars*2].decode('utf-16-le', errors='replace'); pos += nchars*2
+                                    else:
+                                        s = chunk[pos:pos+nchars].decode('latin-1', errors='replace'); pos += nchars
+                                    sst.append(s)
+                            elif rtype == 0x00FD and rlen >= 10:  # LabelSST
+                                row = struct.unpack_from('<H', chunk, 0)[0]
+                                col = struct.unpack_from('<H', chunk, 2)[0]
+                                idx = struct.unpack_from('<I', chunk, 6)[0]
+                                cells[(row,col)] = ('sst', idx)
+                            elif rtype == 0x0203 and rlen >= 14:  # Number
+                                row = struct.unpack_from('<H', chunk, 0)[0]
+                                col = struct.unpack_from('<H', chunk, 2)[0]
+                                val = struct.unpack_from('<d', chunk, 6)[0]
+                                cells[(row,col)] = ('num', val)
+                            elif rtype == 0x027E and rlen >= 10:  # RK
+                                row = struct.unpack_from('<H', chunk, 0)[0]
+                                col = struct.unpack_from('<H', chunk, 2)[0]
+                                rk  = struct.unpack_from('<I', chunk, 6)[0]
+                                if rk & 2:
+                                    val = (rk >> 2) / (100.0 if (rk & 1) else 1.0)
+                                else:
+                                    packed = struct.pack('<Q', (rk & 0xFFFFFFFC) << 32)
+                                    val = struct.unpack('<d', packed)[0]
+                                    if rk & 1: val /= 100
+                                cells[(row,col)] = ('num', val)
+                            i += 4 + rlen
+
+                        if not cells:
+                            return []
+
+                        # ── 3. Detectar fila de encabezado y mapear columnas ──
+                        def cell_val(r, c):
+                            cell = cells.get((r, c))
+                            if cell is None: return None
+                            if cell[0] == 'sst': return sst[cell[1]] if cell[1] < len(sst) else None
+                            return cell[1]
+
+                        max_row = max(r for r,c in cells)
+                        max_col = max(c for r,c in cells)
+
+                        # Buscar fila de encabezado (contiene "Fecha", "Concepto", "Importe", etc.)
+                        HEADER_KEYS = {'fecha', 'concepto', 'importe', 'nro', 'cheque'}
+                        header_row  = None
+                        col_map     = {}   # nombre_normalizado -> col_index
+                        for row in range(min(10, max_row+1)):
+                            matches = 0
+                            tmp_map = {}
+                            for col in range(max_col+1):
+                                v = cell_val(row, col)
+                                if isinstance(v, str):
+                                    norm = v.strip().lower()
+                                    for k in HEADER_KEYS:
+                                        if k in norm:
+                                            matches += 1
+                                            tmp_map[norm] = col
+                            if matches >= 2:
+                                header_row = row
+                                col_map    = tmp_map
+                                break
+
+                        # Determinar índices de columnas según encabezado detectado
+                        def find_col(*keys):
+                            for k in keys:
+                                for hk, hc in col_map.items():
+                                    if k in hk: return hc
+                            return None
+
+                        c_fecha  = find_col('fecha acred', 'fecha acreditación', 'vencimiento')
+                        if c_fecha is None: c_fecha = find_col('fecha')
+                        c_femis  = find_col('fecha')        # primer "fecha" = emisión
+                        c_nro    = find_col('nro', 'número', 'cheque')
+                        c_conc   = find_col('concepto')
+                        c_imp    = find_col('importe', 'monto')
+
+                        # Fallback: si no hay encabezado reconocible, usar posiciones fijas
+                        if c_conc is None and c_imp is None:
+                            c_femis = 0; c_fecha = 1; c_nro = 2; c_conc = 3; c_imp = 4
+
+                        data_start = (header_row + 1) if header_row is not None else 2
+
+                        # ── 4. Extraer filas de datos ──
+                        rows_out = []
+                        for row in range(data_start, max_row+1):
+                            # Valor concepto
+                            concepto = cell_val(row, c_conc) if c_conc is not None else None
+                            # Valor importe
+                            raw_imp  = cell_val(row, c_imp)  if c_imp  is not None else None
+                            imp_val  = float(raw_imp) if isinstance(raw_imp, (int, float)) and raw_imp else 0.0
+
+                            # Saltar filas sin concepto ni importe
+                            if not concepto and imp_val == 0:
+                                continue
+
+                            # Fechas
+                            def to_date(v):
+                                if v is None: return None
+                                if isinstance(v, (int, float)) and 40000 < v < 55000:
+                                    return _excel_date(v)
+                                return str(v)
+
+                            fecha_emis = to_date(cell_val(row, c_femis)) if c_femis is not None else None
+                            fecha_venc = to_date(cell_val(row, c_fecha)) if c_fecha is not None else None
+
+                            # Nro cheque
+                            raw_nro = cell_val(row, c_nro) if c_nro is not None else None
+                            nro_val = str(int(raw_nro)) if isinstance(raw_nro, float) else (str(raw_nro) if raw_nro else f'IMP-{row}')
+
+                            rows_out.append({
+                                'fecha_emis': fecha_emis or str(date.today()),
+                                'fecha_venc': fecha_venc or str(date.today()),
+                                'nro':        nro_val,
+                                'concepto':   str(concepto) if concepto else '⚠️ SIN DATOS',
+                                'importe':    imp_val,
+                            })
+                        return rows_out
+
+                    filas = _parse_xls_echeq(raw)
+
+                    if not filas:
+                        st.error("❌ No se encontraron datos en el archivo. Verificá que el formato sea correcto.")
+                    else:
+                        # Extract beneficiary from "Orden de Pago : NOMBRE"
+                        def _benef(concepto):
+                            if concepto and ':' in str(concepto):
+                                return str(concepto).split(':', 1)[1].strip()
+                            return str(concepto) if concepto else '-'
+
+                        # Build preview dataframe
+                        df_preview = pd.DataFrame([{
+                            'Fecha Emisión':     f.get('fecha_emis', '-'),
+                            'Fecha Vencimiento': f.get('fecha_venc', '-'),
+                            'Nro Cheque':        f.get('nro', '-'),
+                            'Beneficiario':      _benef(f.get('concepto')),
+                            'Importe':           f.get('importe', 0),
+                        } for f in filas])
+
+                        st.markdown(f"##### 📋 Se encontraron **{len(df_preview)} eCheqs** para importar:")
+                        st.dataframe(df_preview, use_container_width=True, hide_index=True)
+
+                        # Check which ones already exist
+                        nros_existentes = set(st.session_state.cheques_emitidos['Nro Cheque'].astype(str).tolist())
+                        nuevos     = [f for f in filas if str(f.get('nro','')) not in nros_existentes]
+                        duplicados = len(filas) - len(nuevos)
+
+                        if duplicados > 0:
+                            st.info(f"ℹ️ {duplicados} cheque(s) ya existen en el sistema y serán omitidos.")
+
+                        banco_import = st.text_input("Banco de los eCheqs (ej: BANCO GALICIA)", value="BANCO GALICIA", key="banco_import_xls")
+
+                        col_imp1, col_imp2 = st.columns(2)
+                        if col_imp1.button(f"✅ IMPORTAR {len(nuevos)} eCheqs NUEVOS", key="btn_importar_echeq", disabled=(len(nuevos)==0)):
+                            importados = 0
+                            for f in nuevos:
+                                benef_val = _benef(f.get('concepto'))
+                                imp_val   = float(f.get('importe') or 0)
+                                nro_val   = str(f.get('nro', '-'))
+                                f_emis    = str(f.get('fecha_emis', str(date.today())))
+                                f_venc    = str(f.get('fecha_venc', str(date.today())))
+
+                                # 1) cheques_emitidos
+                                nueva_fila = pd.DataFrame([[
+                                    f_emis, nro_val, "ECHEQ", banco_import, benef_val,
+                                    imp_val, f_venc, "PENDIENTE", "-",
+                                    "Importado desde XLS banco"
+                                ]], columns=COL_CHEQ_EMITIDOS)
+                                st.session_state.cheques_emitidos = pd.concat(
+                                    [st.session_state.cheques_emitidos, nueva_fila], ignore_index=True)
+
+                                # 2) tesorería (solo si tiene importe real)
+                                if imp_val > 0:
+                                    mov = pd.DataFrame([[
+                                        f_emis, "CHEQUE EMITIDO", "CAJA GENERAL", "CHEQUE ECHEQ",
+                                        f"eCheq #{nro_val} a {benef_val}", benef_val, -imp_val, nro_val
+                                    ]], columns=COL_TESORERIA)
+                                    st.session_state.tesoreria = pd.concat(
+                                        [st.session_state.tesoreria, mov], ignore_index=True)
+                                importados += 1
+
+                            guardar_datos("cheques_emitidos", st.session_state.cheques_emitidos)
+                            guardar_datos("tesoreria", st.session_state.tesoreria)
+                            st.session_state.msg_cheq_emit = f"✅ Se importaron {importados} eCheqs correctamente."
+                            st.rerun()
+
+                        if col_imp2.button("❌ Cancelar", key="btn_cancelar_echeq"):
+                            st.rerun()
+
+                except Exception as e:
+                    st.error(f"❌ Error al leer el archivo: {e}")
 
         st.markdown("---")
 
