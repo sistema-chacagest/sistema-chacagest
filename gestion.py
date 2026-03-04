@@ -1975,16 +1975,21 @@ elif sel == "MAYOR DE CUENTAS":
     # SECCIÓN 1: INGRESOS (viajes)
     # ════════════════════════════════════════════
     df_viajes_mc = st.session_state.viajes.copy()
-    try:
-        df_viajes_mc['Fecha_dt'] = pd.to_datetime(df_viajes_mc['Fecha Viaje'], errors='coerce')
-        df_viajes_mc = df_viajes_mc[
-            (df_viajes_mc['Fecha_dt'].dt.date >= mc_desde) &
-            (df_viajes_mc['Fecha_dt'].dt.date <= mc_hasta)
-        ]
-    except: pass
+    df_viajes_mc['Importe'] = pd.to_numeric(df_viajes_mc['Importe'], errors='coerce').fillna(0)
+
+    # Buscar la columna de fecha correcta (puede ser 'Fecha Viaje' o 'Fecha Carga')
+    col_fecha_viaje = None
+    for _cf in ['Fecha Viaje', 'Fecha Carga', 'Fecha']:
+        if _cf in df_viajes_mc.columns:
+            col_fecha_viaje = _cf
+            break
+
+    if col_fecha_viaje and not df_viajes_mc.empty:
+        df_viajes_mc['Fecha_dt'] = pd.to_datetime(df_viajes_mc[col_fecha_viaje], errors='coerce')
+        mask_v = (df_viajes_mc['Fecha_dt'].dt.date >= mc_desde) & (df_viajes_mc['Fecha_dt'].dt.date <= mc_hasta)
+        df_viajes_mc = df_viajes_mc[mask_v]
+
     total_ingresos = df_viajes_mc['Importe'].sum()
-    # Los viajes son servicios de transporte de pasajeros — NO llevan IVA
-    # El importe registrado es el total final (no hay IVA a desdoblar)
     iva_ventas = 0.0
     neto_ventas = total_ingresos
 
@@ -2058,18 +2063,17 @@ elif sel == "MAYOR DE CUENTAS":
         if df_viajes_mc.empty:
             st.info("No hay viajes registrados en el período seleccionado.")
         else:
-            # Agrupar por fecha y cliente — vista tipo mayor contable
             df_mayor_ing = df_viajes_mc.copy()
-            try:
-                df_mayor_ing['Fecha'] = pd.to_datetime(df_mayor_ing['Fecha Viaje'], errors='coerce').dt.strftime('%d/%m/%Y')
-            except:
-                df_mayor_ing['Fecha'] = df_mayor_ing.get('Fecha Viaje', '-')
 
-            df_mayor_ing = df_mayor_ing.rename(columns={'Importe': 'Haber'})
+            # Usar la columna de fecha que encontramos
+            if col_fecha_viaje and col_fecha_viaje in df_mayor_ing.columns:
+                df_mayor_ing['Fecha'] = pd.to_datetime(df_mayor_ing[col_fecha_viaje], errors='coerce').dt.strftime('%d/%m/%Y')
+            else:
+                df_mayor_ing['Fecha'] = '-'
+
+            df_mayor_ing = df_mayor_ing.sort_values('Fecha_dt', na_position='last') if 'Fecha_dt' in df_mayor_ing.columns else df_mayor_ing
             df_mayor_ing['Debe'] = 0.0
-
-            # Acumulado
-            df_mayor_ing = df_mayor_ing.sort_values('Fecha Viaje', na_position='last') if 'Fecha Viaje' in df_mayor_ing.columns else df_mayor_ing
+            df_mayor_ing = df_mayor_ing.rename(columns={'Importe': 'Haber'})
             df_mayor_ing['Saldo Acum.'] = df_mayor_ing['Haber'].cumsum()
 
             cols_mostrar = ['Fecha', 'Cliente', 'Debe', 'Haber', 'Saldo Acum.']
