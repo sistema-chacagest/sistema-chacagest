@@ -2054,24 +2054,30 @@ elif sel == "MAYOR DE CUENTAS":
     tab_ing, tab_gtos, tab_iva, tab_ret = st.tabs(["💰 Ingresos", "🛒 Gastos por Cuenta", "📋 IVA", "📌 Retenciones"])
 
     with tab_ing:
-        st.markdown("#### Ingresos por Período — Detalle de Viajes")
-        st.caption("Los servicios de transporte de pasajeros no están gravados con IVA. El importe registrado es el ingreso neto.")
+        st.markdown("#### Cuenta: INGRESOS POR SERVICIOS DE TRANSPORTE")
         if df_viajes_mc.empty:
             st.info("No hay viajes registrados en el período seleccionado.")
         else:
-            # ── Resumen por cliente ──
-            ing_cli = df_viajes_mc.groupby('Cliente')['Importe'].sum().reset_index().sort_values('Importe', ascending=False)
-            ing_cli['%'] = (ing_cli['Importe'] / total_ingresos * 100).round(1).astype(str) + '%'
-            st.markdown("##### 📊 Resumen por Cliente")
-            st.dataframe(ing_cli.style.format({"Importe": "$ {:,.2f}"}), use_container_width=True)
-            st.markdown("---")
-            # ── Detalle viaje a viaje ──
-            st.markdown("##### 🚌 Detalle de Viajes")
-            cols_det = ['Fecha Viaje', 'Cliente', 'Origen', 'Destino', 'Patente / Móvil', 'Tipo Comp', 'Importe']
-            cols_disponibles = [c for c in cols_det if c in df_viajes_mc.columns]
-            df_det = df_viajes_mc[cols_disponibles].sort_values('Fecha Viaje', ascending=False) if 'Fecha Viaje' in df_viajes_mc.columns else df_viajes_mc[cols_disponibles]
-            st.dataframe(df_det.style.format({"Importe": "$ {:,.2f}"}), use_container_width=True)
-            # ── Total al pie ──
+            # Agrupar por fecha y cliente — vista tipo mayor contable
+            df_mayor_ing = df_viajes_mc.copy()
+            try:
+                df_mayor_ing['Fecha'] = pd.to_datetime(df_mayor_ing['Fecha Viaje'], errors='coerce').dt.strftime('%d/%m/%Y')
+            except:
+                df_mayor_ing['Fecha'] = df_mayor_ing.get('Fecha Viaje', '-')
+
+            df_mayor_ing = df_mayor_ing.rename(columns={'Importe': 'Haber'})
+            df_mayor_ing['Debe'] = 0.0
+
+            # Acumulado
+            df_mayor_ing = df_mayor_ing.sort_values('Fecha Viaje', na_position='last') if 'Fecha Viaje' in df_mayor_ing.columns else df_mayor_ing
+            df_mayor_ing['Saldo Acum.'] = df_mayor_ing['Haber'].cumsum()
+
+            cols_mostrar = ['Fecha', 'Cliente', 'Debe', 'Haber', 'Saldo Acum.']
+            cols_ok = [c for c in cols_mostrar if c in df_mayor_ing.columns]
+            st.dataframe(
+                df_mayor_ing[cols_ok].style.format({"Debe": "$ {:,.2f}", "Haber": "$ {:,.2f}", "Saldo Acum.": "$ {:,.2f}"}),
+                use_container_width=True
+            )
             st.markdown(
                 f"<div style='background:#5e2d61;color:white;border-radius:8px;padding:12px 20px;"
                 f"display:flex;justify-content:space-between;align-items:center;margin-top:8px;'>"
