@@ -536,6 +536,18 @@ es_operador = st.session_state.rol_actual == "operador"
 caja_propia = st.session_state.caja_propia
 
 # --- 3. INICIALIZACIÓN ---
+
+# Cuentas de gastos: se pueden gestionar desde el sistema
+CUENTAS_GASTOS_DEFAULT = [
+    "COMBUSTIBLE", "REPARACION", "REPUESTO", "SERVICIO LUZ, GAS",
+    "ALQUILERES", "COMPRA ART. LIMPIEZA", "HONORARIOS",
+    "PUBLICIDAD", "GASTOS OFICINA", "GASTOS EN LIBRERIA",
+    "CHOFERES EVENTUALES", "VARIOS"
+]
+
+if 'cuentas_gastos' not in st.session_state:
+    st.session_state.cuentas_gastos = list(CUENTAS_GASTOS_DEFAULT)
+
 if 'clientes' not in st.session_state or 'viajes' not in st.session_state:
     c, v, p, t, prov, com, ce, cc = cargar_datos()
     st.session_state.clientes          = c    if c    is not None else pd.DataFrame(columns=COL_CLIENTES)
@@ -643,6 +655,32 @@ with st.sidebar:
             }
         )
         st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # ── Gestión de Cuentas de Gastos (solo admin) ──
+    if es_admin:
+        with st.expander("⚙️ Cuentas de Gastos", expanded=False):
+            st.markdown("<small><b>Agregar nueva cuenta:</b></small>", unsafe_allow_html=True)
+            nueva_cta = st.text_input("Nueva cuenta", key="nueva_cta_input", label_visibility="collapsed", placeholder="Ej: SEGUROS")
+            if st.button("➕ Agregar", key="btn_agregar_cta"):
+                nueva_cta_upper = nueva_cta.strip().upper()
+                if nueva_cta_upper and nueva_cta_upper not in st.session_state.cuentas_gastos:
+                    st.session_state.cuentas_gastos.append(nueva_cta_upper)
+                    st.session_state.cuentas_gastos.sort()
+                    st.rerun()
+                elif nueva_cta_upper in st.session_state.cuentas_gastos:
+                    st.warning("Ya existe esa cuenta.")
+            st.markdown("<small><b>Cuentas actuales:</b></small>", unsafe_allow_html=True)
+            for cta in sorted(st.session_state.cuentas_gastos):
+                col_cta, col_del = st.columns([0.8, 0.2])
+                col_cta.markdown(f"<small>📂 {cta}</small>", unsafe_allow_html=True)
+                if col_del.button("🗑️", key=f"del_cta_{cta}", help=f"Eliminar {cta}"):
+                    if len(st.session_state.cuentas_gastos) > 1:
+                        st.session_state.cuentas_gastos.remove(cta)
+                        st.rerun()
+                    else:
+                        st.warning("Debe quedar al menos una cuenta.")
 
     st.markdown("---")
     if st.button("🔄 Sincronizar"):
@@ -1619,7 +1657,7 @@ elif sel == "CARGA PROVEEDOR":
             c1, c2  = st.columns(2)
             rs      = c1.text_input("Razón Social")
             doc     = c2.text_input("CUIT o DNI")
-            cuenta  = c1.selectbox("Cuenta de Gastos", ["COMBUSTIBLE", "REPARACION", "REPUESTO", "SERVICIO LUZ, GAS", "ALQUILERES", "COMPRA ART. LIMPIEZA", "HONORARIOS", "PUBLICIDAD", "GASTOS OFICINA", "GASTOS EN LIBRERIA", "CHOFERES EVENTUALES", "VARIOS"])
+            cuenta  = c1.selectbox("Cuenta de Gastos", sorted(st.session_state.cuentas_gastos))
             cat_iva = c2.selectbox("Categoría IVA", ["Responsable Inscripto", "Exento en IVA", "Consumidor Final", "Monotributista", "No Inscripto"])
             c3, c4  = st.columns(2)
             cbu     = c3.text_input("CBU")
@@ -2171,6 +2209,3 @@ elif sel == "CHEQUES":
                 )
         else:
             st.success(f"✅ No hay cheques con vencimiento en los próximos {dias_filtro} días.")
-
-
-
