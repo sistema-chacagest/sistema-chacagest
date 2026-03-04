@@ -1619,7 +1619,7 @@ elif sel == "CARGA PROVEEDOR":
             c1, c2  = st.columns(2)
             rs      = c1.text_input("Razón Social")
             doc     = c2.text_input("CUIT o DNI")
-            cuenta  = c1.selectbox("Cuenta de Gastos", ["COMBUSTIBLE", "REPARACION", "REPUESTO", "SERVICIO LUZ, GAS", "ALQUILERES", "COMPRA ART. LIMPIEZA", "HONORARIOS, "PUBLICIDAD", "GASTOS OFICINA", "GASTOS EN LIBRERIA", "CHOFERES EVENTUALES", "VARIOS"])
+            cuenta  = c1.selectbox("Cuenta de Gastos", ["COMBUSTIBLE", "REPARACION", "REPUESTO", "SERVICIO LUZ, GAS", "ALQUILERES", "COMPRA ART. LIMPIEZA", "HONORARIOS", "PUBLICIDAD", "GASTOS OFICINA", "GASTOS EN LIBRERIA", "CHOFERES EVENTUALES", "VARIOS"])
             cat_iva = c2.selectbox("Categoría IVA", ["Responsable Inscripto", "Exento en IVA", "Consumidor Final", "Monotributista", "No Inscripto"])
             c3, c4  = st.columns(2)
             cbu     = c3.text_input("CBU")
@@ -2171,5 +2171,6 @@ elif sel == "CHEQUES":
                 )
         else:
             st.success(f"✅ No hay cheques con vencimiento en los próximos {dias_filtro} días.")
+
 
 
