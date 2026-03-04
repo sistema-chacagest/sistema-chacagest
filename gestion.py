@@ -670,8 +670,8 @@ with st.sidebar:
             opciones_ventas = ["CLIENTES", "CARGA VIAJE", "PRESUPUESTOS", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"]
             iconos_ventas   = ["people", "truck", "file-earmark-spreadsheet", "person-vcard", "globe", "file-text"]
         else:
-            opciones_ventas = ["CLIENTES", "CARGA VIAJE", "PRESUPUESTOS", "CTA CTE INDIVIDUAL", "COMPROBANTES"]
-            iconos_ventas   = ["people", "truck", "file-earmark-spreadsheet", "person-vcard", "file-text"]
+            opciones_ventas = ["CLIENTES", "CARGA VIAJE", "PRESUPUESTOS", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"]
+            iconos_ventas   = ["people", "truck", "file-earmark-spreadsheet", "person-vcard", "globe", "file-text"]
         sel_sub = option_menu(
             menu_title=None,
             options=opciones_ventas,
@@ -1251,9 +1251,13 @@ elif sel == "TESORERIA":
 
         FORMAS_COBRO_VIAJE = FORMAS_PAGO + ["CHEQUE DE TERCEROS", "OTROS"]
 
-        if not st.session_state.html_recibo_ready:
+if not st.session_state.html_recibo_ready:
+            if st.session_state.clientes.empty:
+                st.warning("⚠️ No hay clientes registrados. Primero cargá uno desde **VENTAS → CLIENTES**.")
+                st.stop()
             # ── Selectbox de forma FUERA del form para mostrar campos dinámicamente ──
             cob_col1, cob_col2 = st.columns(2)
+            c_sel_prev = cob_col1.selectbox("Cliente", st.session_state.clientes['Razón Social'].unique(), key="cob_cli_sel")
             c_sel_prev = cob_col1.selectbox("Cliente", st.session_state.clientes['Razón Social'].unique() if not st.session_state.clientes.empty else [""], key="cob_cli_sel")
             forma_cob_prev = cob_col2.selectbox("Forma de Cobro", FORMAS_COBRO_VIAJE, key="cob_forma_sel")
 
