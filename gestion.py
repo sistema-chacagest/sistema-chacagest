@@ -10,6 +10,18 @@ import base64
 import plotly.graph_objects as go
 import plotly.express as px
 import calendar as cal_module
+import unicodedata
+
+def normalizar(texto):
+    """Quita tildes y convierte a mayúsculas para comparaciones robustas."""
+    if not isinstance(texto, str):
+        return ""
+    return unicodedata.normalize('NFD', texto).encode('ascii', 'ignore').decode('ascii').upper()
+
+def mask_forma(serie, palabra):
+    """Filtra una Serie por forma de pago ignorando tildes y mayúsculas."""
+    palabra_norm = normalizar(palabra)
+    return serie.fillna('-').apply(normalizar).str.contains(palabra_norm, na=False)
 
 # --- 1. CONFIGURACIÓN Y CONEXIÓN ---
 st.set_page_config(page_title="CHACAGEST - GESTIÓN TOTAL", page_icon="🚛", layout="wide")
@@ -431,7 +443,7 @@ def generar_html_cierre_caja(data):
     ICONOS = {"EFECTIVO":"💵","TRANSFERENCIA":"🏦","TARJETA DE CREDITO":"💳","DÓLARES":"💲","OTROS":"📋"}
     subtotales_html = ""
     for f in FORMAS:
-        mask = df['Forma'].fillna('-').str.upper().str.contains(f.replace("DÓLARES","DOLAR").replace("TARJETA DE CREDITO","TARJETA"), na=False)
+        mask = mask_forma(df['Forma'], f.replace("DÓLARES","DOLARES").replace("TARJETA DE CREDITO","TARJETA"))
         sub = df[mask]['Monto'].sum()
         if sub != 0:
             color_s = "#27ae60" if sub >= 0 else "#e74c3c"
@@ -1444,7 +1456,7 @@ elif sel == "TESORERIA":
         cols_formas = st.columns(len(FORMAS_RESUMEN))
 
         for idx, forma_r in enumerate(FORMAS_RESUMEN):
-            mask = df_ver['Forma'].fillna('-').str.upper().str.contains(forma_r.replace("DÓLARES", "DOLAR").replace("TARJETA DE CREDITO", "TARJETA"), na=False)
+            mask = mask_forma(df_ver['Forma'], forma_r.replace("DÓLARES","DOLARES").replace("TARJETA DE CREDITO","TARJETA"))
             saldo_forma = df_ver[mask]['Monto'].sum()
             icono = ICONOS_FORMA.get(forma_r, "💰")
             color = "#2ecc71" if saldo_forma >= 0 else "#e74c3c"
@@ -1518,9 +1530,9 @@ elif sel == "TESORERIA":
                 pass
 
             # ── Efectivo disponible TOTAL en caja (todos los movimientos, sin límite de fecha) ──
-            mask_efec_base = df_caja_base['Forma'].fillna('-').str.upper().str.contains("EFECTIVO", na=False)
+            mask_efec_base = mask_forma(df_caja_base['Forma'], "EFECTIVO")
             # Dólares: primero buscar en la caja DOLAR dedicada; si no hay, buscar en la caja base por forma
-            mask_dolar_base = df_caja_base['Forma'].fillna('-').str.upper().str.contains("DOLAR", na=False)
+            mask_dolar_base = mask_forma(df_caja_base['Forma'], "DOLARES")
             efectivo_disponible = df_caja_base[mask_efec_base]['Monto'].sum()
             if not df_dolar_base.empty:
                 dolares_disponibles = df_dolar_base['Monto'].sum()
@@ -1600,7 +1612,7 @@ elif sel == "TESORERIA":
             st.markdown(f"##### Vista previa — {caja_cierre} | {fecha_desde} al {fecha_hasta}")
             cols_prev = st.columns(len(FORMAS_PREV))
             for idx_p, fr in enumerate(FORMAS_PREV):
-                mask_p = df_cierre['Forma'].fillna('-').str.upper().str.contains(fr.replace("DÓLARES","DOLAR").replace("TARJETA DE CREDITO","TARJETA"), na=False)
+                mask_p = mask_forma(df_cierre['Forma'], fr.replace("DÓLARES","DOLARES").replace("TARJETA DE CREDITO","TARJETA"))
                 sub_p  = df_cierre[mask_p]['Monto'].sum()
                 col_p  = "#2ecc71" if sub_p >= 0 else "#e74c3c"
                 cols_prev[idx_p].markdown(
