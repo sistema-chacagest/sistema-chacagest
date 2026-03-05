@@ -1500,6 +1500,12 @@ elif sel == "TESORERIA":
                 st.session_state.tesoreria['Caja/Banco'] == caja_cierre
             ].copy()
 
+            # ── Base dólares: movimientos de la caja DOLAR correspondiente (ej: "DOLAR CAJA COTI") ──
+            caja_dolar_nombre = f"DOLAR {caja_cierre}"
+            df_dolar_base = st.session_state.tesoreria[
+                st.session_state.tesoreria['Caja/Banco'] == caja_dolar_nombre
+            ].copy()
+
             # Filtrar por período
             df_cierre = df_caja_base.copy()
             try:
@@ -1513,9 +1519,13 @@ elif sel == "TESORERIA":
 
             # ── Efectivo disponible TOTAL en caja (todos los movimientos, sin límite de fecha) ──
             mask_efec_base = df_caja_base['Forma'].fillna('-').str.upper().str.contains("EFECTIVO", na=False)
+            # Dólares: primero buscar en la caja DOLAR dedicada; si no hay, buscar en la caja base por forma
             mask_dolar_base = df_caja_base['Forma'].fillna('-').str.upper().str.contains("DOLAR", na=False)
             efectivo_disponible = df_caja_base[mask_efec_base]['Monto'].sum()
-            dolares_disponibles = df_caja_base[mask_dolar_base]['Monto'].sum()
+            if not df_dolar_base.empty:
+                dolares_disponibles = df_dolar_base['Monto'].sum()
+            else:
+                dolares_disponibles = df_caja_base[mask_dolar_base]['Monto'].sum()
 
             # ── Panel: efectivo disponible ──
             st.markdown("##### 💰 Disponible en caja")
