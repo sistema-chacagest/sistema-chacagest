@@ -3234,7 +3234,8 @@ elif sel == "CHEQUES":
                 imp_ch   = ce5.number_input("Importe $", min_value=0.0, step=0.01)
                 ce6, ce7 = st.columns(2)
                 f_emis   = ce6.date_input("Fecha de Emisión", value=hoy)
-                f_venc   = ce7.date_input("Fecha de Vencimiento", value=hoy + timedelta(days=30))
+                f_venc   = ce7.date_input("Fecha de Vencimiento", value=f_emis + timedelta(days=30),
+                                          help="Fecha límite de pago = fecha de emisión + 30 días")
                 obs_ch   = st.text_input("Observaciones (opcional)")
                 if st.form_submit_button("✅ REGISTRAR CHEQUE"):
                     if nro_ch and benef and imp_ch > 0:
@@ -3327,7 +3328,8 @@ elif sel == "CHEQUES":
                 imp_cc   = cc5.number_input("Importe $", min_value=0.0, step=0.01)
                 cc6, cc7 = st.columns(2)
                 f_rec    = cc6.date_input("Fecha de Recepción", value=hoy)
-                f_venc_c = cc7.date_input("Fecha de Vencimiento", value=hoy + timedelta(days=30))
+                f_venc_c = cc7.date_input("Fecha de Vencimiento", value=f_rec + timedelta(days=30),
+                                          help="Fecha límite de cobro = fecha del cheque + 30 días")
                 obs_cc   = st.text_input("Observaciones (opcional)")
                 if st.form_submit_button("✅ AGREGAR A CARTERA"):
                     if nro_cc and librador and imp_cc > 0:
