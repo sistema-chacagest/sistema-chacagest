@@ -1829,7 +1829,7 @@ elif sel == "TESORERIA":
             cj_v = caja_propia
             st.markdown(f"#### 🏦 {caja_propia}")
 
-        df_caja_full = st.session_state.tesoreria[st.session_state.tesoreria['Caja/Banco'] == cj_v].copy()
+        df_caja_full = st.session_state.tesoreria[st.session_state.tesoreria['Caja/Banco'].astype(str).str.startswith(cj_v)].copy()
 
         # ── Mostrar solo movimientos DESDE el último cierre (inclusive el cierre no, post-cierre) ──
         cierres_idx = df_caja_full[df_caja_full['Tipo'] == 'CIERRE DE CAJA'].index
@@ -1899,13 +1899,13 @@ elif sel == "TESORERIA":
 
             # ── Base: TODOS los movimientos de la caja → saldo real físico acumulado ──
             df_caja_base = st.session_state.tesoreria[
-                st.session_state.tesoreria['Caja/Banco'] == caja_cierre
+                st.session_state.tesoreria['Caja/Banco'].astype(str).str.startswith(caja_cierre)
             ].copy()
 
             # ── Base dólares: movimientos de la caja DOLAR correspondiente (ej: "DOLAR CAJA COTI") ──
             caja_dolar_nombre = f"DOLAR {caja_cierre}"
             df_dolar_base = st.session_state.tesoreria[
-                st.session_state.tesoreria['Caja/Banco'] == caja_dolar_nombre
+                st.session_state.tesoreria['Caja/Banco'].astype(str).str.startswith(caja_dolar_nombre)
             ].copy()
 
             # Sin filtro de fechas: df_cierre = todo lo acumulado (saldo real)
@@ -2487,11 +2487,9 @@ elif sel == "CTA CTE GENERAL PROV":
         res_p['CBU']   = res_p['CBU'].fillna('-')
         res_p['Alias'] = res_p['Alias'].fillna('-')
         res_p = res_p[['Proveedor', 'CBU', 'Alias', 'Total']]
-        # Filtrar saldos en 0
-        res_p = res_p[res_p['Total'].round(2) != 0].sort_values('Total', ascending=False)
         # Métricas
         mp1, mp2 = st.columns(2)
-        mp1.metric("Total proveedores con saldo", len(res_p))
+        mp1.metric("Total proveedores con saldo", len(res_p[res_p['Total'].round(2) != 0]))
         mp2.metric("Total a pagar", f"$ {res_p['Total'].sum():,.2f}")
         st.dataframe(res_p.style.format({"Total": "$ {:,.2f}"}), use_container_width=True)
         # Descarga PDF
@@ -3253,11 +3251,10 @@ elif sel == "CHEQUES":
 
         st.markdown("---")
 
-        # Filtro por estado y beneficiario
+        # Filtro por estado
         fe_col1, fe_col2 = st.columns([2, 2])
         filtro_emit = fe_col1.radio("Mostrar", ["TODOS", "PENDIENTES", "CONCILIADOS"], horizontal=True, key="filtro_emit")
         df_emit = st.session_state.cheques_emitidos.copy()
-        # Filtro por beneficiario
         lista_benef = ["Todos"] + sorted(df_emit['Beneficiario'].dropna().unique().tolist())
         filtro_benef = fe_col2.selectbox("Beneficiario", lista_benef, key="filtro_benef_emit")
         if filtro_emit == "PENDIENTES":
