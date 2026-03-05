@@ -1493,21 +1493,19 @@ elif sel == "TESORERIA":
             st.markdown("Registrá lo que rendís y el sistema calcula automáticamente cuánto queda en caja.")
 
             hoy = date.today()
-            c_cie1, c_cie2, c_cie3 = st.columns(3)
+            c_cie1, c_cie2 = st.columns([2, 3])
             if es_admin:
                 caja_cierre = c_cie1.selectbox("Caja", TODAS_CAJAS, key="cierre_caja_sel")
             else:
                 caja_cierre = caja_propia
                 c_cie1.markdown(f"**Caja:** {caja_propia}")
-
-            fecha_desde = c_cie2.date_input("Desde", value=hoy.replace(day=1), key="cierre_desde")
-            fecha_hasta = c_cie3.date_input("Hasta", value=hoy, key="cierre_hasta")
+            c_cie2.markdown(f"**Fecha:** {hoy.strftime('%d/%m/%Y')}")
 
             obs_cierre = st.text_area("Observaciones (opcional)", placeholder="Ej: Se rindieron $400.000 al supervisor.", key="cierre_obs", height=70)
 
             st.markdown("---")
 
-            # ── Base: todos los movimientos de la caja (sin filtro de rendiciones previas, la caja no se zerifica) ──
+            # ── Base: TODOS los movimientos de la caja (saldo real acumulado) ──
             df_caja_base = st.session_state.tesoreria[
                 st.session_state.tesoreria['Caja/Banco'] == caja_cierre
             ].copy()
@@ -1518,20 +1516,11 @@ elif sel == "TESORERIA":
                 st.session_state.tesoreria['Caja/Banco'] == caja_dolar_nombre
             ].copy()
 
-            # Filtrar por período
+            # df_cierre = todos los movimientos (sin filtro de fechas): saldo real de hoy
             df_cierre = df_caja_base.copy()
-            try:
-                df_cierre['Fecha_dt'] = pd.to_datetime(df_cierre['Fecha'], errors='coerce')
-                df_cierre = df_cierre[
-                    (df_cierre['Fecha_dt'].dt.date >= fecha_desde) &
-                    (df_cierre['Fecha_dt'].dt.date <= fecha_hasta)
-                ]
-            except:
-                pass
 
-            # ── Efectivo disponible TOTAL en caja (todos los movimientos, sin límite de fecha) ──
+            # ── Efectivo disponible TOTAL en caja (saldo real acumulado) ──
             mask_efec_base = mask_forma(df_caja_base['Forma'], "EFECTIVO")
-            # Dólares: primero buscar en la caja DOLAR dedicada; si no hay, buscar en la caja base por forma
             mask_dolar_base = mask_forma(df_caja_base['Forma'], "DOLARES")
             efectivo_disponible = df_caja_base[mask_efec_base]['Monto'].sum()
             if not df_dolar_base.empty:
@@ -1606,10 +1595,10 @@ elif sel == "TESORERIA":
 
             st.markdown("---")
 
-            # ── Vista previa de movimientos del período ──
+            # ── Saldo actual por forma de pago ──
             FORMAS_PREV = ["EFECTIVO", "TRANSFERENCIA", "TARJETA DE CREDITO", "DÓLARES", "OTROS"]
             ICONOS_PREV = {"EFECTIVO":"💵","TRANSFERENCIA":"🏦","TARJETA DE CREDITO":"💳","DÓLARES":"💲","OTROS":"📋"}
-            st.markdown(f"##### Vista previa — {caja_cierre} | {fecha_desde} al {fecha_hasta}")
+            st.markdown(f"##### 📊 Saldo actual en caja — {caja_cierre}")
             cols_prev = st.columns(len(FORMAS_PREV))
             for idx_p, fr in enumerate(FORMAS_PREV):
                 mask_p = mask_forma(df_cierre['Forma'], fr.replace("DÓLARES","DOLARES").replace("TARJETA DE CREDITO","TARJETA"))
@@ -1622,7 +1611,7 @@ elif sel == "TESORERIA":
                     f"<div style='font-size:14px;font-weight:bold;color:{col_p};'>$ {sub_p:,.2f}</div>"
                     f"</div>", unsafe_allow_html=True
                 )
-            st.caption(f"{len(df_cierre)} movimiento(s) en el período")
+            st.caption(f"Saldo calculado sobre {len(df_cierre)} movimiento(s) totales en {caja_cierre}")
             st.markdown("---")
 
             if st.button("📋 GENERAR RENDICIÓN", type="primary"):
@@ -1638,14 +1627,14 @@ elif sel == "TESORERIA":
                         f"Rendición — {responsable}",
                         "INTERNO",
                         -monto_rendicion,
-                        f"Rendición {fecha_desde}/{fecha_hasta}"
+                        f"Rendición {hoy}"
                     ]], columns=COL_TESORERIA)
                     st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, mov_rend], ignore_index=True)
                     guardar_datos("tesoreria", st.session_state.tesoreria)
 
                 html_cierre = generar_html_cierre_caja({
                     "caja":                caja_cierre,
-                    "fecha_cierre":        f"{fecha_desde} al {fecha_hasta}",
+                    "fecha_cierre":        str(hoy),
                     "responsable":         responsable,
                     "movimientos":         df_cierre.drop(columns=['Fecha_dt'], errors='ignore'),
                     "total":               df_cierre['Monto'].sum(),
