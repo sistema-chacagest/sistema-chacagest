@@ -39,6 +39,10 @@ COL_CHEQ_EMITIDOS    = ["Fecha Emisión", "Nro Cheque", "Tipo", "Banco", "Benefi
 # Cheques de terceros recibidos en cobranzas (cartera)
 COL_CHEQ_CARTERA     = ["Fecha Recepción", "Nro Cheque", "Tipo", "Banco Librador", "Librador", "Importe", "Fecha Vencimiento", "Estado", "Destino", "Fecha Aplicación", "Observaciones"]
 
+# Módulo de Facturación
+COL_FACTURAS = ["Fecha", "Tipo", "Punto Venta", "Numero", "Cliente", "CUIT Cliente", "Condicion IVA",
+                "Detalle", "Neto", "IVA", "No Gravado", "Total", "Estado", "Comp Asoc Tipo", "Comp Asoc Nro", "Observaciones"]
+
 def conectar_google():
     nombre_planilla = "Base_Chacagest"
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -121,9 +125,18 @@ def cargar_datos():
         except:
             df_cc = pd.DataFrame(columns=COL_CHEQ_CARTERA)
 
-        return df_c, df_v, df_p, df_t, df_prov, df_com, df_ce, df_cc
+        try:
+            ws_fac    = sh.worksheet("facturas")
+            datos_fac = ws_fac.get_all_records()
+            df_fac    = pd.DataFrame(datos_fac) if datos_fac else pd.DataFrame(columns=COL_FACTURAS)
+            for col in ["Neto", "IVA", "No Gravado", "Total"]:
+                df_fac[col] = pd.to_numeric(df_fac[col], errors='coerce').fillna(0)
+        except:
+            df_fac = pd.DataFrame(columns=COL_FACTURAS)
+
+        return df_c, df_v, df_p, df_t, df_prov, df_com, df_ce, df_cc, df_fac
     except:
-        return None, None, None, None, None, None, None, None
+        return None, None, None, None, None, None, None, None, None
 
 def guardar_datos(nombre_hoja, df):
     try:
@@ -421,6 +434,161 @@ def generar_html_presupuesto(p_data):
     </html>
     """
 
+def generar_html_factura(data):
+    """Genera HTML profesional de Factura / NC / ND con logo de empresa."""
+    tipo      = data.get("tipo", "FACTURA")
+    letra     = data.get("letra", "B")
+    pv        = str(data.get("punto_venta", "0001")).zfill(4)
+    nro       = str(data.get("numero", "00000001")).zfill(8)
+    fecha     = data.get("fecha", "")
+    cliente   = data.get("cliente", "")
+    cuit_cli  = data.get("cuit_cliente", "")
+    cond_iva  = data.get("condicion_iva", "")
+    dir_cli   = data.get("direccion_cliente", "")
+    items     = data.get("items", [])
+    neto      = data.get("neto", 0.0)
+    iva_monto = data.get("iva_monto", 0.0)
+    no_grav   = data.get("no_gravado", 0.0)
+    total     = data.get("total", 0.0)
+    obs       = data.get("observaciones", "")
+    comp_asoc = data.get("comp_asoc", "")
+    logo_b64  = data.get("logo_b64", "")
+    responsable = data.get("responsable", "")
+
+    color_tipo = {"FACTURA": "#5e2d61", "NOTA DE CREDITO": "#27ae60", "NOTA DE DEBITO": "#c0392b"}.get(tipo, "#5e2d61")
+    label_tipo = {"FACTURA": "FACTURA", "NOTA DE CREDITO": "NOTA DE CRÉDITO", "NOTA DE DEBITO": "NOTA DE DÉBITO"}.get(tipo, tipo)
+
+    filas_items = ""
+    for it in items:
+        filas_items += f"""
+        <tr>
+            <td style='padding:7px 10px;border-bottom:1px solid #f0f0f0;'>{it.get('descripcion','')}</td>
+            <td style='padding:7px 10px;border-bottom:1px solid #f0f0f0;text-align:center;'>{it.get('cantidad',1)}</td>
+            <td style='padding:7px 10px;border-bottom:1px solid #f0f0f0;text-align:right;'>${float(it.get('precio_unitario',0)):,.2f}</td>
+            <td style='padding:7px 10px;border-bottom:1px solid #f0f0f0;text-align:center;'>{it.get('alicuota','21%')}</td>
+            <td style='padding:7px 10px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:bold;'>${float(it.get('subtotal',0)):,.2f}</td>
+        </tr>"""
+
+    comp_asoc_html = f"<tr><td><b>Comprobante Asociado:</b></td><td>{comp_asoc}</td></tr>" if comp_asoc else ""
+    obs_html = f"<div style='margin-top:16px;padding:12px;background:#fafafa;border-radius:6px;font-size:12px;color:#555;border-left:3px solid {color_tipo};'><b>Observaciones:</b> {obs}</div>" if obs else ""
+    logo_html = f"<img src='{logo_b64}' style='height:70px;vertical-align:middle;margin-right:14px;'>" if logo_b64 else ""
+
+    return f"""<!DOCTYPE html>
+<html lang='es'>
+<head>
+  <meta charset='UTF-8'>
+  <style>
+    * {{ box-sizing: border-box; margin:0; padding:0; }}
+    body {{ font-family: 'Segoe UI', Arial, sans-serif; color: #333; background: #fff; font-size:13px; padding:30px; }}
+    .doc-wrapper {{ max-width:820px; margin:0 auto; border:1px solid #ddd; border-top:8px solid {color_tipo}; padding:30px; }}
+    .header {{ display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px; padding-bottom:16px; border-bottom:1px solid #eee; }}
+    .empresa-info h2 {{ color:#333; font-size:18px; margin-bottom:4px; }}
+    .empresa-info small {{ color:#777; font-size:11px; }}
+    .tipo-badge {{ text-align:center; border:3px solid {color_tipo}; border-radius:8px; padding:12px 24px; min-width:160px; }}
+    .tipo-badge .letra {{ font-size:52px; font-weight:900; color:{color_tipo}; line-height:1; }}
+    .tipo-badge .tipo-label {{ font-size:11px; font-weight:bold; color:{color_tipo}; letter-spacing:1px; margin-top:4px; }}
+    .tipo-badge .nro-comp {{ font-size:13px; font-weight:bold; color:#333; margin-top:6px; }}
+    .datos-grid {{ display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:20px; }}
+    .datos-box {{ background:#f8f9fa; border-radius:6px; padding:14px; }}
+    .datos-box h4 {{ font-size:10px; font-weight:bold; color:{color_tipo}; text-transform:uppercase; letter-spacing:1px; margin-bottom:8px; border-bottom:1px solid #eee; padding-bottom:6px; }}
+    .datos-box table {{ width:100%; border-collapse:collapse; }}
+    .datos-box td {{ padding:3px 0; font-size:12px; }}
+    .datos-box td:first-child {{ color:#777; width:42%; }}
+    .items-table {{ width:100%; border-collapse:collapse; margin-bottom:20px; }}
+    .items-table thead tr {{ background:{color_tipo}; color:white; }}
+    .items-table thead th {{ padding:9px 10px; text-align:left; font-size:12px; font-weight:bold; }}
+    .items-table thead th:nth-child(2), .items-table thead th:nth-child(3), .items-table thead th:nth-child(4), .items-table thead th:nth-child(5) {{ text-align:center; }}
+    .items-table thead th:nth-child(5) {{ text-align:right; }}
+    .totales-box {{ display:flex; justify-content:flex-end; margin-bottom:20px; }}
+    .totales-inner {{ min-width:260px; }}
+    .totales-inner table {{ width:100%; border-collapse:collapse; }}
+    .totales-inner td {{ padding:5px 10px; font-size:13px; }}
+    .totales-inner td:last-child {{ text-align:right; font-weight:bold; }}
+    .total-final td {{ background:{color_tipo}; color:white; font-size:16px; font-weight:900; border-radius:4px; padding:10px 14px; }}
+    .footer-doc {{ text-align:center; font-size:10px; color:#aaa; margin-top:20px; border-top:1px solid #eee; padding-top:12px; }}
+    @media print {{
+      body {{ padding:0; }}
+      .doc-wrapper {{ border:none; padding:20px; }}
+    }}
+  </style>
+</head>
+<body>
+  <div class='doc-wrapper'>
+    <div class='header'>
+      <div class='empresa-info'>
+        {logo_html}
+        <div style='display:inline-block;vertical-align:middle;'>
+          <h2>CHACABUCO NOROESTE TOUR S.R.L.</h2>
+          <small>VIAJES ESPECIALES · TURISMO · TRASLADOS PERSONALES<br>
+          CUIT: 30-71234567-9 · IVA Responsable Inscripto<br>
+          Chacabuco, Buenos Aires</small>
+        </div>
+      </div>
+      <div class='tipo-badge'>
+        <div class='letra'>{letra}</div>
+        <div class='tipo-label'>{label_tipo}</div>
+        <div class='nro-comp'>{pv}-{nro}</div>
+      </div>
+    </div>
+
+    <div class='datos-grid'>
+      <div class='datos-box'>
+        <h4>Datos del Comprobante</h4>
+        <table>
+          <tr><td>Fecha:</td><td><b>{fecha}</b></td></tr>
+          <tr><td>Punto de Venta:</td><td>{pv}</td></tr>
+          <tr><td>Número:</td><td>{nro}</td></tr>
+          {comp_asoc_html}
+          <tr><td>Emitido por:</td><td>{responsable}</td></tr>
+        </table>
+      </div>
+      <div class='datos-box'>
+        <h4>Datos del Cliente</h4>
+        <table>
+          <tr><td>Razón Social:</td><td><b>{cliente}</b></td></tr>
+          <tr><td>CUIT/DNI:</td><td>{cuit_cli}</td></tr>
+          <tr><td>Condición IVA:</td><td>{cond_iva}</td></tr>
+          <tr><td>Dirección:</td><td>{dir_cli}</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <table class='items-table'>
+      <thead>
+        <tr>
+          <th style='width:45%;'>Descripción</th>
+          <th style='width:10%;text-align:center;'>Cant.</th>
+          <th style='width:17%;text-align:right;'>Precio Unit.</th>
+          <th style='width:12%;text-align:center;'>IVA %</th>
+          <th style='width:16%;text-align:right;'>Subtotal</th>
+        </tr>
+      </thead>
+      <tbody>
+        {filas_items}
+      </tbody>
+    </table>
+
+    <div class='totales-box'>
+      <div class='totales-inner'>
+        <table>
+          <tr><td>Subtotal Neto:</td><td>$ {neto:,.2f}</td></tr>
+          <tr><td>IVA:</td><td>$ {iva_monto:,.2f}</td></tr>
+          {'<tr><td>No Gravado:</td><td>$ ' + f'{no_grav:,.2f}' + '</td></tr>' if no_grav else ''}
+          <tr class='total-final'><td>TOTAL:</td><td>$ {total:,.2f}</td></tr>
+        </table>
+      </div>
+    </div>
+
+    {obs_html}
+
+    <div class='footer-doc'>
+      Generado por CHACAGEST · {fecha} · {label_tipo} {letra} {pv}-{nro} — Chacabuco Noroeste Tour S.R.L.<br>
+      <small>Este comprobante no reemplaza a los comprobantes oficiales emitidos ante AFIP</small>
+    </div>
+  </div>
+</body>
+</html>"""
+
 def generar_html_cierre_caja(data):
     # Construir tabla de movimientos del día
     df = data['movimientos']
@@ -687,7 +855,7 @@ if 'cuentas_gastos' not in st.session_state:
     st.session_state.cuentas_gastos = list(CUENTAS_GASTOS_DEFAULT)
 
 if 'clientes' not in st.session_state or 'viajes' not in st.session_state:
-    c, v, p, t, prov, com, ce, cc = cargar_datos()
+    c, v, p, t, prov, com, ce, cc, fac = cargar_datos()
     st.session_state.clientes          = c    if c    is not None else pd.DataFrame(columns=COL_CLIENTES)
     st.session_state.viajes            = v    if v    is not None else pd.DataFrame(columns=COL_VIAJES)
     st.session_state.presupuestos      = p    if p    is not None else pd.DataFrame(columns=COL_PRESUPUESTOS)
@@ -696,6 +864,7 @@ if 'clientes' not in st.session_state or 'viajes' not in st.session_state:
     st.session_state.compras           = com  if com  is not None else pd.DataFrame(columns=COL_COMPRAS)
     st.session_state.cheques_emitidos  = ce   if ce   is not None else pd.DataFrame(columns=COL_CHEQ_EMITIDOS)
     st.session_state.cheques_cartera   = cc   if cc   is not None else pd.DataFrame(columns=COL_CHEQ_CARTERA)
+    st.session_state.facturas          = fac  if fac  is not None else pd.DataFrame(columns=COL_FACTURAS)
 
 # --- 4. DISEÑO ---
 st.markdown("""
@@ -728,11 +897,11 @@ with st.sidebar:
 
     # ── Menú principal: Admin ve todo, Operador no ve Dashboard ──
     if es_admin:
-        opciones_menu = ["CALENDARIO", "DASHBOARD", "VENTAS", "COMPRAS", "TESORERIA", "CHEQUES"]
-        iconos_menu   = ["calendar3", "bar-chart-line", "cart4", "bag-check", "safe", "bank2"]
+        opciones_menu = ["CALENDARIO", "DASHBOARD", "VENTAS", "COMPRAS", "FACTURACION", "TESORERIA", "CHEQUES"]
+        iconos_menu   = ["calendar3", "bar-chart-line", "cart4", "bag-check", "receipt-cutoff", "safe", "bank2"]
     else:
-        opciones_menu = ["CALENDARIO", "VENTAS", "COMPRAS", "TESORERIA", "CHEQUES"]
-        iconos_menu   = ["calendar3", "cart4", "bag-check", "safe", "bank2"]
+        opciones_menu = ["CALENDARIO", "VENTAS", "COMPRAS", "FACTURACION", "TESORERIA", "CHEQUES"]
+        iconos_menu   = ["calendar3", "cart4", "bag-check", "receipt-cutoff", "safe", "bank2"]
 
     menu_principal = option_menu(
         menu_title=None,
@@ -813,7 +982,7 @@ with st.sidebar:
     st.markdown("---")
     if st.button("🔄 Sincronizar"):
         with st.spinner("Sincronizando..."):
-            c, v, p, t, prov, com, ce, cc = cargar_datos()
+            c, v, p, t, prov, com, ce, cc, fac = cargar_datos()
             st.session_state.clientes         = c    if c    is not None else pd.DataFrame(columns=COL_CLIENTES)
             st.session_state.viajes           = v    if v    is not None else pd.DataFrame(columns=COL_VIAJES)
             st.session_state.presupuestos     = p    if p    is not None else pd.DataFrame(columns=COL_PRESUPUESTOS)
@@ -822,6 +991,7 @@ with st.sidebar:
             st.session_state.compras          = com  if com  is not None else pd.DataFrame(columns=COL_COMPRAS)
             st.session_state.cheques_emitidos = ce   if ce   is not None else pd.DataFrame(columns=COL_CHEQ_EMITIDOS)
             st.session_state.cheques_cartera  = cc   if cc   is not None else pd.DataFrame(columns=COL_CHEQ_CARTERA)
+            st.session_state.facturas         = fac  if fac  is not None else pd.DataFrame(columns=COL_FACTURAS)
             st.rerun()
 
     if st.button("🚪 Cerrar Sesión"):
@@ -1493,19 +1663,21 @@ elif sel == "TESORERIA":
             st.markdown("Registrá lo que rendís y el sistema calcula automáticamente cuánto queda en caja.")
 
             hoy = date.today()
-            c_cie1, c_cie2 = st.columns([2, 3])
+            c_cie1, c_cie2, c_cie3 = st.columns(3)
             if es_admin:
                 caja_cierre = c_cie1.selectbox("Caja", TODAS_CAJAS, key="cierre_caja_sel")
             else:
                 caja_cierre = caja_propia
                 c_cie1.markdown(f"**Caja:** {caja_propia}")
-            c_cie2.markdown(f"**Fecha:** {hoy.strftime('%d/%m/%Y')}")
+
+            fecha_desde = c_cie2.date_input("Desde", value=hoy.replace(day=1), key="cierre_desde")
+            fecha_hasta = c_cie3.date_input("Hasta", value=hoy, key="cierre_hasta")
 
             obs_cierre = st.text_area("Observaciones (opcional)", placeholder="Ej: Se rindieron $400.000 al supervisor.", key="cierre_obs", height=70)
 
             st.markdown("---")
 
-            # ── Base: TODOS los movimientos de la caja (saldo real acumulado) ──
+            # ── Base: todos los movimientos de la caja (sin filtro de rendiciones previas, la caja no se zerifica) ──
             df_caja_base = st.session_state.tesoreria[
                 st.session_state.tesoreria['Caja/Banco'] == caja_cierre
             ].copy()
@@ -1516,11 +1688,20 @@ elif sel == "TESORERIA":
                 st.session_state.tesoreria['Caja/Banco'] == caja_dolar_nombre
             ].copy()
 
-            # df_cierre = todos los movimientos (sin filtro de fechas): saldo real de hoy
+            # Filtrar por período
             df_cierre = df_caja_base.copy()
+            try:
+                df_cierre['Fecha_dt'] = pd.to_datetime(df_cierre['Fecha'], errors='coerce')
+                df_cierre = df_cierre[
+                    (df_cierre['Fecha_dt'].dt.date >= fecha_desde) &
+                    (df_cierre['Fecha_dt'].dt.date <= fecha_hasta)
+                ]
+            except:
+                pass
 
-            # ── Efectivo disponible TOTAL en caja (saldo real acumulado) ──
+            # ── Efectivo disponible TOTAL en caja (todos los movimientos, sin límite de fecha) ──
             mask_efec_base = mask_forma(df_caja_base['Forma'], "EFECTIVO")
+            # Dólares: primero buscar en la caja DOLAR dedicada; si no hay, buscar en la caja base por forma
             mask_dolar_base = mask_forma(df_caja_base['Forma'], "DOLARES")
             efectivo_disponible = df_caja_base[mask_efec_base]['Monto'].sum()
             if not df_dolar_base.empty:
@@ -1595,10 +1776,10 @@ elif sel == "TESORERIA":
 
             st.markdown("---")
 
-            # ── Saldo actual por forma de pago ──
+            # ── Vista previa de movimientos del período ──
             FORMAS_PREV = ["EFECTIVO", "TRANSFERENCIA", "TARJETA DE CREDITO", "DÓLARES", "OTROS"]
             ICONOS_PREV = {"EFECTIVO":"💵","TRANSFERENCIA":"🏦","TARJETA DE CREDITO":"💳","DÓLARES":"💲","OTROS":"📋"}
-            st.markdown(f"##### 📊 Saldo actual en caja — {caja_cierre}")
+            st.markdown(f"##### Vista previa — {caja_cierre} | {fecha_desde} al {fecha_hasta}")
             cols_prev = st.columns(len(FORMAS_PREV))
             for idx_p, fr in enumerate(FORMAS_PREV):
                 mask_p = mask_forma(df_cierre['Forma'], fr.replace("DÓLARES","DOLARES").replace("TARJETA DE CREDITO","TARJETA"))
@@ -1611,7 +1792,7 @@ elif sel == "TESORERIA":
                     f"<div style='font-size:14px;font-weight:bold;color:{col_p};'>$ {sub_p:,.2f}</div>"
                     f"</div>", unsafe_allow_html=True
                 )
-            st.caption(f"Saldo calculado sobre {len(df_cierre)} movimiento(s) totales en {caja_cierre}")
+            st.caption(f"{len(df_cierre)} movimiento(s) en el período")
             st.markdown("---")
 
             if st.button("📋 GENERAR RENDICIÓN", type="primary"):
@@ -1627,14 +1808,14 @@ elif sel == "TESORERIA":
                         f"Rendición — {responsable}",
                         "INTERNO",
                         -monto_rendicion,
-                        f"Rendición {hoy}"
+                        f"Rendición {fecha_desde}/{fecha_hasta}"
                     ]], columns=COL_TESORERIA)
                     st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, mov_rend], ignore_index=True)
                     guardar_datos("tesoreria", st.session_state.tesoreria)
 
                 html_cierre = generar_html_cierre_caja({
                     "caja":                caja_cierre,
-                    "fecha_cierre":        str(hoy),
+                    "fecha_cierre":        f"{fecha_desde} al {fecha_hasta}",
                     "responsable":         responsable,
                     "movimientos":         df_cierre.drop(columns=['Fecha_dt'], errors='ignore'),
                     "total":               df_cierre['Monto'].sum(),
@@ -2388,6 +2569,353 @@ elif sel == "MAYOR DE CUENTAS":
         mime="text/html",
         help="Abrí el HTML en el navegador y usá Ctrl+P para imprimir o guardar como PDF"
     )
+
+
+# =============================================================
+# FACTURACIÓN
+# =============================================================
+elif sel == "FACTURACION":
+    st.header("🧾 Facturación")
+    if "facturas" not in st.session_state:
+        st.session_state.facturas = pd.DataFrame(columns=COL_FACTURAS)
+
+    tab_nueva, tab_historial, tab_ctacte = st.tabs(["📝 Emitir Comprobante", "📂 Historial", "📒 Cta. Cte. Clientes"])
+
+    # ─────────────────────────────────────────────
+    # TAB 1 — EMITIR COMPROBANTE
+    # ─────────────────────────────────────────────
+    with tab_nueva:
+        if "html_factura_ready" not in st.session_state:
+            st.session_state.html_factura_ready = None
+        if "items_factura" not in st.session_state:
+            st.session_state.items_factura = []
+
+        if st.session_state.html_factura_ready:
+            st.success("✅ Comprobante generado. Descargá el documento para imprimir.")
+            tipo_dl = st.session_state.get("ultimo_tipo_fac", "Factura")
+            nro_dl  = st.session_state.get("ultimo_nro_fac", "")
+            st.download_button(
+                "🖨️ DESCARGAR COMPROBANTE",
+                st.session_state.html_factura_ready,
+                file_name=f"{tipo_dl}_{nro_dl}_{date.today()}.html",
+                mime="text/html"
+            )
+            if st.button("🔄 Nuevo Comprobante"):
+                st.session_state.html_factura_ready = None
+                st.session_state.items_factura = []
+                st.rerun()
+        else:
+            hoy = date.today()
+            st.markdown("##### 📋 Datos del Comprobante")
+            c1, c2, c3, c4 = st.columns(4)
+            tipo_comp = c1.selectbox("Tipo", ["FACTURA", "NOTA DE CREDITO", "NOTA DE DEBITO"], key="fac_tipo")
+            letra_comp = c2.selectbox("Letra", ["A", "B", "C", "M", "X"], key="fac_letra")
+            pv_comp = c3.text_input("Punto de Venta", value="0001", max_chars=4, key="fac_pv")
+
+            # Autonumerar según tipo+letra+pv
+            mask_auto = (
+                (st.session_state.facturas['Tipo'] == tipo_comp) &
+                (st.session_state.facturas['Punto Venta'] == pv_comp.zfill(4))
+            )
+            ultimo_nro = 0
+            if not st.session_state.facturas.empty and mask_auto.any():
+                try:
+                    ultimo_nro = int(st.session_state.facturas[mask_auto]['Numero'].apply(lambda x: int(str(x).replace("-",""))).max())
+                except:
+                    ultimo_nro = 0
+            sugerido = str(ultimo_nro + 1).zfill(8)
+            nro_comp = c4.text_input("Número", value=sugerido, max_chars=8, key="fac_nro")
+
+            c5, c6 = st.columns(2)
+            fecha_comp = c5.date_input("Fecha", value=hoy, key="fac_fecha")
+
+            comp_asoc = ""
+            if tipo_comp in ["NOTA DE CREDITO", "NOTA DE DEBITO"]:
+                comp_asoc = c6.text_input("Comprobante Asociado (ej: FAC B 0001-00000012)", key="fac_comp_asoc")
+            else:
+                c6.markdown("")
+
+            st.markdown("---")
+            st.markdown("##### 👤 Datos del Cliente")
+            clientes_lista = [""] + sorted(st.session_state.clientes['Razón Social'].tolist()) if not st.session_state.clientes.empty else [""]
+            c7, c8 = st.columns(2)
+            cliente_sel = c7.selectbox("Cliente", clientes_lista, key="fac_cliente")
+
+            # Autocompletar datos del cliente
+            cuit_auto, cond_iva_auto, dir_auto = "", "", ""
+            if cliente_sel and not st.session_state.clientes.empty:
+                row_cli = st.session_state.clientes[st.session_state.clientes['Razón Social'] == cliente_sel]
+                if not row_cli.empty:
+                    cuit_auto    = str(row_cli.iloc[0].get('CUIT / CUIL / DNI *', ''))
+                    cond_iva_auto = str(row_cli.iloc[0].get('Condición IVA', ''))
+                    dir_auto     = str(row_cli.iloc[0].get('Dirección Fiscal', ''))
+            c8_cuit, c8_cond = st.columns(2)
+            cuit_comp   = c8_cuit.text_input("CUIT / DNI", value=cuit_auto, key="fac_cuit")
+            cond_iva_comp = c8_cond.text_input("Condición IVA", value=cond_iva_auto, key="fac_cond_iva")
+            dir_comp    = st.text_input("Dirección", value=dir_auto, key="fac_dir")
+
+            st.markdown("---")
+            st.markdown("##### 🛒 Ítems del Comprobante")
+
+            # Tabla de items
+            if st.session_state.items_factura:
+                hdr1, hdr2, hdr3, hdr4, hdr5, hdr6 = st.columns([4, 1.2, 2, 1.5, 2, 1])
+                hdr1.markdown("**Descripción**"); hdr2.markdown("**Cant.**")
+                hdr3.markdown("**P. Unitario**"); hdr4.markdown("**IVA %**")
+                hdr5.markdown("**Subtotal**");    hdr6.markdown("")
+                for idx_i, it in enumerate(st.session_state.items_factura):
+                    ci1, ci2, ci3, ci4, ci5, ci6 = st.columns([4, 1.2, 2, 1.5, 2, 1])
+                    ci1.markdown(f"{it['descripcion']}")
+                    ci2.markdown(f"{it['cantidad']}")
+                    ci3.markdown(f"$ {float(it['precio_unitario']):,.2f}")
+                    ci4.markdown(f"{it['alicuota']}")
+                    ci5.markdown(f"$ {float(it['subtotal']):,.2f}")
+                    if ci6.button("🗑️", key=f"del_item_{idx_i}"):
+                        st.session_state.items_factura.pop(idx_i)
+                        st.rerun()
+                st.markdown("---")
+
+            # Formulario para agregar item
+            with st.expander("➕ Agregar ítem", expanded=len(st.session_state.items_factura) == 0):
+                ni1, ni2, ni3, ni4 = st.columns([4, 1.2, 2, 1.5])
+                desc_it  = ni1.text_input("Descripción del servicio/producto", key="it_desc")
+                cant_it  = ni2.number_input("Cant.", min_value=1, value=1, step=1, key="it_cant")
+                precio_it = ni3.number_input("Precio Unitario $", min_value=0.0, step=10.0, format="%.2f", key="it_precio")
+                alicuota_it = ni4.selectbox("IVA %", ["21%", "10.5%", "27%", "0%", "Exento", "No Gravado"], key="it_alicuota")
+                if st.button("➕ Agregar ítem", key="btn_add_item"):
+                    if desc_it and precio_it > 0:
+                        subtotal = float(cant_it) * float(precio_it)
+                        st.session_state.items_factura.append({
+                            "descripcion": desc_it,
+                            "cantidad": cant_it,
+                            "precio_unitario": precio_it,
+                            "alicuota": alicuota_it,
+                            "subtotal": subtotal
+                        })
+                        st.rerun()
+                    else:
+                        st.warning("Completá descripción y precio.")
+
+            # Cálculo de totales
+            neto_calc = 0.0
+            iva_calc  = 0.0
+            no_grav_calc = 0.0
+            for it in st.session_state.items_factura:
+                sub = float(it['subtotal'])
+                ali = it['alicuota']
+                if ali == "21%":
+                    neto_calc += sub / 1.21
+                    iva_calc  += sub - (sub / 1.21)
+                elif ali == "10.5%":
+                    neto_calc += sub / 1.105
+                    iva_calc  += sub - (sub / 1.105)
+                elif ali == "27%":
+                    neto_calc += sub / 1.27
+                    iva_calc  += sub - (sub / 1.27)
+                elif ali in ["Exento", "0%"]:
+                    neto_calc += sub
+                else:  # No Gravado
+                    no_grav_calc += sub
+            total_calc = neto_calc + iva_calc + no_grav_calc
+
+            if st.session_state.items_factura:
+                st.markdown("---")
+                st.markdown("##### 💰 Totales")
+                tc1, tc2, tc3, tc4 = st.columns(4)
+                tc1.metric("Neto", f"$ {neto_calc:,.2f}")
+                tc2.metric("IVA", f"$ {iva_calc:,.2f}")
+                tc3.metric("No Gravado", f"$ {no_grav_calc:,.2f}")
+                tc4.metric("TOTAL", f"$ {total_calc:,.2f}")
+
+            st.markdown("---")
+            obs_fac = st.text_area("Observaciones", key="fac_obs", height=60, placeholder="Ej: Pago a 30 días. Servicio de traslado escolar.")
+
+            if st.button("🧾 GENERAR COMPROBANTE", type="primary"):
+                if not cliente_sel:
+                    st.warning("Seleccioná un cliente.")
+                elif not st.session_state.items_factura:
+                    st.warning("Agregá al menos un ítem.")
+                else:
+                    responsable = st.session_state.nombre_usuario
+                    nro_final = str(nro_comp).zfill(8)
+                    pv_final  = str(pv_comp).zfill(4)
+
+                    # Guardar en facturas
+                    nueva_fac = pd.DataFrame([[
+                        str(fecha_comp), tipo_comp, pv_final, nro_final,
+                        cliente_sel, cuit_comp, cond_iva_comp,
+                        " / ".join([it['descripcion'] for it in st.session_state.items_factura]),
+                        round(neto_calc, 2), round(iva_calc, 2), round(no_grav_calc, 2),
+                        round(total_calc, 2), "EMITIDA",
+                        tipo_comp if comp_asoc else "",
+                        comp_asoc,
+                        obs_fac.strip()
+                    ]], columns=COL_FACTURAS)
+                    st.session_state.facturas = pd.concat([st.session_state.facturas, nueva_fac], ignore_index=True)
+                    guardar_datos("facturas", st.session_state.facturas)
+
+                    # Mover cuenta corriente cliente
+                    signo = -1 if tipo_comp == "NOTA DE CREDITO" else 1
+                    tipo_mov_cc = {"FACTURA": "FACTURA", "NOTA DE CREDITO": "NOTA DE CREDITO", "NOTA DE DEBITO": "NOTA DE DEBITO"}.get(tipo_comp, "FACTURA")
+                    mov_cc = pd.DataFrame([[
+                        str(fecha_comp), tipo_mov_cc, "CTA CTE",
+                        "CTA CTE", f"{tipo_comp} {letra_comp} {pv_final}-{nro_final}",
+                        cliente_sel, signo * round(total_calc, 2),
+                        f"{pv_final}-{nro_final}"
+                    ]], columns=COL_TESORERIA)
+                    st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, mov_cc], ignore_index=True)
+                    guardar_datos("tesoreria", st.session_state.tesoreria)
+
+                    # Generar HTML
+                    html_fac = generar_html_factura({
+                        "tipo":              tipo_comp,
+                        "letra":             letra_comp,
+                        "punto_venta":       pv_final,
+                        "numero":            nro_final,
+                        "fecha":             str(fecha_comp),
+                        "cliente":           cliente_sel,
+                        "cuit_cliente":      cuit_comp,
+                        "condicion_iva":     cond_iva_comp,
+                        "direccion_cliente": dir_comp,
+                        "items":             st.session_state.items_factura,
+                        "neto":              round(neto_calc, 2),
+                        "iva_monto":         round(iva_calc, 2),
+                        "no_gravado":        round(no_grav_calc, 2),
+                        "total":             round(total_calc, 2),
+                        "observaciones":     obs_fac.strip(),
+                        "comp_asoc":         comp_asoc,
+                        "logo_b64":          LOGO_B64,
+                        "responsable":       responsable,
+                    })
+                    st.session_state.html_factura_ready = html_fac
+                    st.session_state.ultimo_tipo_fac = tipo_comp.replace(" ","_")
+                    st.session_state.ultimo_nro_fac  = f"{pv_final}-{nro_final}"
+                    st.rerun()
+
+    # ─────────────────────────────────────────────
+    # TAB 2 — HISTORIAL
+    # ─────────────────────────────────────────────
+    with tab_historial:
+        st.markdown("##### 📂 Comprobantes Emitidos")
+        df_h = st.session_state.facturas.copy()
+        if df_h.empty:
+            st.info("No hay comprobantes registrados.")
+        else:
+            # Filtros
+            fh1, fh2, fh3 = st.columns(3)
+            tipos_hist = ["Todos"] + sorted(df_h['Tipo'].unique().tolist())
+            tipo_filt = fh1.selectbox("Tipo", tipos_hist, key="hist_tipo")
+            clientes_hist = ["Todos"] + sorted(df_h['Cliente'].unique().tolist())
+            cli_filt = fh2.selectbox("Cliente", clientes_hist, key="hist_cli")
+            try:
+                fecha_filt = fh3.date_input("Desde", value=date.today().replace(day=1), key="hist_fecha")
+                df_h['Fecha_dt'] = pd.to_datetime(df_h['Fecha'], errors='coerce')
+                df_h = df_h[df_h['Fecha_dt'].dt.date >= fecha_filt]
+            except:
+                pass
+            if tipo_filt != "Todos":
+                df_h = df_h[df_h['Tipo'] == tipo_filt]
+            if cli_filt != "Todos":
+                df_h = df_h[df_h['Cliente'] == cli_filt]
+
+            total_fac = df_h[df_h['Tipo'] == 'FACTURA']['Total'].sum()
+            total_nc  = df_h[df_h['Tipo'] == 'NOTA DE CREDITO']['Total'].sum()
+            total_nd  = df_h[df_h['Tipo'] == 'NOTA DE DEBITO']['Total'].sum()
+            hm1, hm2, hm3, hm4 = st.columns(4)
+            hm1.metric("Facturas", f"$ {total_fac:,.2f}")
+            hm2.metric("NC emitidas", f"$ {total_nc:,.2f}")
+            hm3.metric("ND emitidas", f"$ {total_nd:,.2f}")
+            hm4.metric("Neto facturado", f"$ {(total_fac - total_nc + total_nd):,.2f}")
+            st.markdown("---")
+
+            cols_show = ['Fecha','Tipo','Punto Venta','Numero','Cliente','Total','Estado']
+            cols_show = [c for c in cols_show if c in df_h.columns]
+            st.dataframe(
+                df_h[cols_show].drop(columns=['Fecha_dt'], errors='ignore'),
+                use_container_width=True, hide_index=True
+            )
+
+            # Reemitir cualquier comprobante del historial
+            st.markdown("---")
+            st.markdown("##### 🔁 Reemitir comprobante")
+            idx_opts = df_h.index.tolist()
+            if idx_opts:
+                idx_sel = st.selectbox(
+                    "Seleccioná fila",
+                    idx_opts,
+                    format_func=lambda i: f"{df_h.loc[i,'Tipo']} {df_h.loc[i,'Punto Venta']}-{df_h.loc[i,'Numero']} | {df_h.loc[i,'Cliente']} | $ {float(df_h.loc[i,'Total']):,.2f}",
+                    key="reemitir_sel"
+                )
+                if st.button("🖨️ Reemitir", key="btn_reemitir"):
+                    row_r = st.session_state.facturas.loc[idx_sel]
+                    detalle_items = [{"descripcion": row_r['Detalle'], "cantidad": 1,
+                                      "precio_unitario": float(row_r['Total']), "alicuota": "0%",
+                                      "subtotal": float(row_r['Total'])}]
+                    html_rei = generar_html_factura({
+                        "tipo": row_r['Tipo'], "letra": "B",
+                        "punto_venta": row_r['Punto Venta'], "numero": row_r['Numero'],
+                        "fecha": row_r['Fecha'], "cliente": row_r['Cliente'],
+                        "cuit_cliente": row_r['CUIT Cliente'], "condicion_iva": row_r['Condicion IVA'],
+                        "direccion_cliente": "", "items": detalle_items,
+                        "neto": float(row_r['Neto']), "iva_monto": float(row_r['IVA']),
+                        "no_gravado": float(row_r['No Gravado']), "total": float(row_r['Total']),
+                        "observaciones": row_r['Observaciones'], "comp_asoc": row_r['Comp Asoc Nro'],
+                        "logo_b64": LOGO_B64, "responsable": st.session_state.nombre_usuario,
+                    })
+                    st.download_button("⬇️ Descargar reemisión", html_rei,
+                                       file_name=f"Reemision_{row_r['Punto Venta']}-{row_r['Numero']}.html",
+                                       mime="text/html", key="dl_reemision")
+
+    # ─────────────────────────────────────────────
+    # TAB 3 — CUENTA CORRIENTE CLIENTES (desde tesorería)
+    # ─────────────────────────────────────────────
+    with tab_ctacte:
+        st.markdown("##### 📒 Cuenta Corriente por Cliente")
+        if st.session_state.clientes.empty:
+            st.info("No hay clientes cargados.")
+        else:
+            clientes_cc = sorted(st.session_state.clientes['Razón Social'].tolist())
+            cli_cc = st.selectbox("Cliente", clientes_cc, key="cc_cliente_fac")
+
+            df_cc_cli = st.session_state.tesoreria[
+                (st.session_state.tesoreria['Cliente/Proveedor'] == cli_cc) &
+                (st.session_state.tesoreria['Tipo'].isin(['FACTURA', 'NOTA DE CREDITO', 'NOTA DE DEBITO', 'COBRO', 'COBRANZA']))
+            ].copy().sort_values('Fecha')
+
+            if df_cc_cli.empty:
+                st.info(f"No hay movimientos de cuenta corriente para {cli_cc}.")
+            else:
+                saldo_acum = 0.0
+                filas_cc = []
+                for _, r in df_cc_cli.iterrows():
+                    saldo_acum += float(r['Monto'])
+                    tipo_cc = r['Tipo']
+                    color_row = "#eafaf1" if float(r['Monto']) > 0 else "#fef9f0"
+                    filas_cc.append({
+                        "Fecha": r['Fecha'], "Tipo": tipo_cc,
+                        "Comprobante": r['Concepto'], "Debe": f"$ {float(r['Monto']):,.2f}" if float(r['Monto']) > 0 else "",
+                        "Haber": f"$ {abs(float(r['Monto'])):,.2f}" if float(r['Monto']) < 0 else "",
+                        "Saldo": f"$ {saldo_acum:,.2f}"
+                    })
+
+                df_cc_show = pd.DataFrame(filas_cc)
+                total_debe  = df_cc_cli[df_cc_cli['Monto'] > 0]['Monto'].sum()
+                total_haber = df_cc_cli[df_cc_cli['Monto'] < 0]['Monto'].sum()
+                saldo_final = total_debe + total_haber
+
+                cm1, cm2, cm3 = st.columns(3)
+                cm1.metric("Total Facturado", f"$ {total_debe:,.2f}")
+                cm2.metric("Total Cobrado", f"$ {abs(total_haber):,.2f}")
+                color_saldo = "normal" if saldo_final <= 0 else "inverse"
+                cm3.metric("Saldo Pendiente", f"$ {saldo_final:,.2f}", delta_color=color_saldo)
+                st.markdown("---")
+                st.dataframe(df_cc_show, use_container_width=True, hide_index=True)
+
+                if st.button("📄 Exportar Resumen", key="btn_export_cc"):
+                    html_resumen = generar_html_resumen(cli_cc, df_cc_show, saldo_final)
+                    st.download_button("⬇️ Descargar HTML", html_resumen,
+                                       file_name=f"CuentaCorriente_{cli_cc.replace(' ','_')}.html",
+                                       mime="text/html", key="dl_cc_fac")
 
 # =============================================================
 # CHEQUES
