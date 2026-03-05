@@ -142,14 +142,18 @@ def guardar_datos(nombre_hoja, df):
     try:
         sh = conectar_google()
         if sh is None: return False
-        ws = sh.worksheet(nombre_hoja)
+        # Intentar obtener la hoja; si no existe, crearla
+        try:
+            ws = sh.worksheet(nombre_hoja)
+        except gspread.exceptions.WorksheetNotFound:
+            ws = sh.add_worksheet(title=nombre_hoja, rows=1000, cols=20)
         ws.clear()
         df_save = df.fillna("-").copy()
         datos   = [df_save.columns.values.tolist()] + df_save.astype(str).values.tolist()
         ws.update(datos)
         return True
     except Exception as e:
-        st.error(f"Error al guardar: {e}")
+        st.error(f"Error al guardar en '{nombre_hoja}': {e}")
         return False
 
 # =========================================================
