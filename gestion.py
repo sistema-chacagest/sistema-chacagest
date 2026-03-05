@@ -1822,6 +1822,9 @@ elif sel == "TESORERIA":
                         })
                         st.session_state.cli_fac_ready = cli_fac_sel
                         st.rerun()
+
+    # ── VER MOVIMIENTOS ──
+    with tab_ver:
         # Admin puede elegir cualquier caja. Operador solo ve la suya.
         if es_admin:
             cj_v = st.selectbox("Seleccionar Caja", opc_cajas)
