@@ -545,6 +545,36 @@ def generar_html_cierre_caja(data):
         </div>
     </div>
 
+    <div style="margin-top:20px;border-radius:10px;overflow:hidden;border:1px solid #ddd;">
+        <div style="background:#5e2d61;color:white;padding:10px 16px;font-weight:bold;font-size:13px;letter-spacing:1px;">
+            💰 EFECTIVO DISPONIBLE EN CAJA (AL MOMENTO DEL CIERRE)
+        </div>
+        <div style="display:flex;gap:0;">
+            <div style="flex:1;padding:16px 20px;border-right:1px solid #eee;background:#f0fff4;">
+                <div style="font-size:11px;color:#888;font-weight:bold;">💵 EFECTIVO (PESOS)</div>
+                <div style="font-size:24px;font-weight:bold;color:#27ae60;margin-top:6px;">$ {data.get('efectivo_disponible', 0):,.2f}</div>
+            </div>
+            <div style="flex:1;padding:16px 20px;background:#fffaf0;">
+                <div style="font-size:11px;color:#888;font-weight:bold;">💲 DÓLARES</div>
+                <div style="font-size:24px;font-weight:bold;color:#d4a017;margin-top:6px;">USD {data.get('dolares_disponibles', 0):,.2f}</div>
+            </div>
+        </div>
+        {f"""
+        <div style="background:#fff3cd;border-top:1px solid #ffc107;padding:12px 20px;display:flex;justify-content:space-between;align-items:center;">
+            <div>
+                <div style="font-size:11px;color:#856404;font-weight:bold;">🏧 RETIRO AL CIERRE ({data.get('tipo_retiro','EFECTIVO')})</div>
+                <div style="font-size:20px;font-weight:bold;color:#856404;margin-top:4px;">{'$' if data.get('tipo_retiro') == 'EFECTIVO' else 'USD'} {data.get('monto_retiro', 0):,.2f}</div>
+            </div>
+            <div style="text-align:right;">
+                <div style="font-size:11px;color:#856404;font-weight:bold;">QUEDA EN CAJA ({data.get('tipo_retiro','EFECTIVO')})</div>
+                <div style="font-size:20px;font-weight:bold;color:#856404;margin-top:4px;">
+                    {'$' if data.get('tipo_retiro') == 'EFECTIVO' else 'USD'} {(data.get('efectivo_disponible', 0) - data.get('monto_retiro', 0)) if data.get('tipo_retiro') == 'EFECTIVO' else (data.get('dolares_disponibles', 0) - data.get('monto_retiro', 0)):,.2f}
+                </div>
+            </div>
+        </div>
+        """ if data.get('monto_retiro', 0) > 0 else ""}
+    </div>
+
     {"<div style='background:#fff8e1;border:1px solid #f39c12;border-radius:8px;padding:14px;margin-top:20px;font-size:13px;'><b>📝 Observaciones:</b><br><br>" + data['observaciones'] + "</div>" if data.get('observaciones') else ""}
 
     <div class="firmas">
@@ -1511,6 +1541,59 @@ elif sel == "TESORERIA":
             # El saldo real a cerrar es el acumulado desde el último cierre (toda la base, no solo el período)
             saldo_desde_ultimo_cierre = df_caja_base['Monto'].sum()
 
+            # ── Calcular efectivo disponible real (desde último cierre) por forma ──
+            mask_efec_base = df_caja_base['Forma'].fillna('-').str.upper().str.contains("EFECTIVO", na=False)
+            mask_dolar_base = df_caja_base['Forma'].fillna('-').str.upper().str.contains("DOLAR", na=False)
+            efectivo_disponible = df_caja_base[mask_efec_base]['Monto'].sum()
+            dolares_disponibles = df_caja_base[mask_dolar_base]['Monto'].sum()
+
+            # ── Panel: EFECTIVO DISPONIBLE EN CAJA ──
+            st.markdown("##### 💰 Efectivo disponible en caja (desde último cierre)")
+            col_ef1, col_ef2 = st.columns(2)
+            col_ef1_color = "#27ae60" if efectivo_disponible >= 0 else "#e74c3c"
+            col_ef2_color = "#27ae60" if dolares_disponibles >= 0 else "#e74c3c"
+            col_ef1.markdown(
+                f"<div style='background:#f0fff4;border-radius:10px;padding:16px;text-align:center;border:2px solid {col_ef1_color};'>"
+                f"<div style='font-size:28px;'>💵</div>"
+                f"<div style='font-size:12px;color:#666;font-weight:bold;margin-top:4px;'>EFECTIVO (PESOS)</div>"
+                f"<div style='font-size:26px;font-weight:bold;color:{col_ef1_color};margin-top:6px;'>$ {efectivo_disponible:,.2f}</div>"
+                f"</div>", unsafe_allow_html=True
+            )
+            col_ef2.markdown(
+                f"<div style='background:#fffaf0;border-radius:10px;padding:16px;text-align:center;border:2px solid {col_ef2_color};'>"
+                f"<div style='font-size:28px;'>💲</div>"
+                f"<div style='font-size:12px;color:#666;font-weight:bold;margin-top:4px;'>DÓLARES</div>"
+                f"<div style='font-size:26px;font-weight:bold;color:{col_ef2_color};margin-top:6px;'>USD {dolares_disponibles:,.2f}</div>"
+                f"</div>", unsafe_allow_html=True
+            )
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            # ── Retiro personalizado al cierre ──
+            st.markdown("##### 🏧 Retiro de efectivo al cierre (opcional)")
+            st.caption("Indicá el monto que vas a retirar físicamente. Se registrará como egreso y quedará reflejado en el cierre.")
+            c_ret1, c_ret2, c_ret3 = st.columns([2, 2, 1])
+            tipo_retiro = c_ret1.selectbox(
+                "Tipo de retiro", ["EFECTIVO", "DÓLARES"],
+                key="cierre_tipo_retiro",
+                help="Elegí si retirás pesos o dólares"
+            )
+            monto_retiro = c_ret2.number_input(
+                f"Monto a retirar ({'$' if tipo_retiro == 'EFECTIVO' else 'USD'})",
+                min_value=0.0, step=100.0, value=0.0,
+                key="cierre_monto_retiro",
+                format="%.2f"
+            )
+            simbolo_retiro = "$" if tipo_retiro == "EFECTIVO" else "USD"
+            if monto_retiro > 0:
+                disponible_para_retiro = efectivo_disponible if tipo_retiro == "EFECTIVO" else dolares_disponibles
+                if monto_retiro > disponible_para_retiro:
+                    st.warning(f"⚠️ El monto a retirar ({simbolo_retiro} {monto_retiro:,.2f}) supera el disponible en {tipo_retiro} ({simbolo_retiro} {disponible_para_retiro:,.2f}).")
+                else:
+                    st.success(f"✅ Retiro de {simbolo_retiro} {monto_retiro:,.2f} en {tipo_retiro}. Quedará {simbolo_retiro} {disponible_para_retiro - monto_retiro:,.2f} en caja.")
+
+            st.markdown("---")
+
             # Preview del resumen
             FORMAS_PREV = ["EFECTIVO", "TRANSFERENCIA", "TARJETA DE CREDITO", "DÓLARES", "OTROS"]
             ICONOS_PREV = {"EFECTIVO":"💵","TRANSFERENCIA":"🏦","TARJETA DE CREDITO":"💳","DÓLARES":"💲","OTROS":"📋"}
@@ -1532,11 +1615,26 @@ elif sel == "TESORERIA":
 
             if st.button("🔒 GENERAR CIERRE DE CAJA", type="primary"):
                 responsable = st.session_state.nombre_usuario
+                movs_a_guardar = []
+
+                # ── Registrar retiro personalizado si corresponde ──
+                if monto_retiro > 0:
+                    mov_retiro = pd.DataFrame([[
+                        date.today(),
+                        "RETIRO DE CAJA",
+                        caja_cierre,
+                        tipo_retiro,
+                        f"Retiro al cierre — {responsable}",
+                        "INTERNO",
+                        -monto_retiro,
+                        f"Retiro {fecha_desde}/{fecha_hasta}"
+                    ]], columns=COL_TESORERIA)
+                    movs_a_guardar.append(mov_retiro)
 
                 # ── Registrar movimiento de cierre que lleva la caja a CERO ──
-                # Usa el saldo desde el último cierre (ya calculado arriba)
-                if saldo_desde_ultimo_cierre != 0:
-                    ajuste = -saldo_desde_ultimo_cierre
+                saldo_post_retiro = saldo_desde_ultimo_cierre - monto_retiro if tipo_retiro == "EFECTIVO" else saldo_desde_ultimo_cierre
+                if saldo_post_retiro != 0:
+                    ajuste = -saldo_post_retiro
                     mov_cierre = pd.DataFrame([[
                         date.today(),
                         "CIERRE DE CAJA",
@@ -1547,17 +1645,26 @@ elif sel == "TESORERIA":
                         ajuste,
                         f"Cierre {fecha_desde}/{fecha_hasta}"
                     ]], columns=COL_TESORERIA)
-                    st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, mov_cierre], ignore_index=True)
+                    movs_a_guardar.append(mov_cierre)
+
+                if movs_a_guardar:
+                    st.session_state.tesoreria = pd.concat(
+                        [st.session_state.tesoreria] + movs_a_guardar, ignore_index=True
+                    )
                     guardar_datos("tesoreria", st.session_state.tesoreria)
 
                 html_cierre = generar_html_cierre_caja({
-                    "caja":          caja_cierre,
-                    "fecha_cierre":  f"{fecha_desde} al {fecha_hasta}",
-                    "responsable":   responsable,
-                    "movimientos":   df_cierre.drop(columns=['Fecha_dt'], errors='ignore'),
-                    "total":         df_cierre['Monto'].sum(),
-                    "saldo_previo":  saldo_desde_ultimo_cierre,
-                    "observaciones": obs_cierre.strip()
+                    "caja":                 caja_cierre,
+                    "fecha_cierre":         f"{fecha_desde} al {fecha_hasta}",
+                    "responsable":          responsable,
+                    "movimientos":          df_cierre.drop(columns=['Fecha_dt'], errors='ignore'),
+                    "total":                df_cierre['Monto'].sum(),
+                    "saldo_previo":         saldo_desde_ultimo_cierre,
+                    "efectivo_disponible":  efectivo_disponible,
+                    "dolares_disponibles":  dolares_disponibles,
+                    "monto_retiro":         monto_retiro,
+                    "tipo_retiro":          tipo_retiro,
+                    "observaciones":        obs_cierre.strip()
                 })
                 st.session_state.html_cierre_ready = html_cierre
                 st.rerun()
