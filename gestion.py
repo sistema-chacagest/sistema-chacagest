@@ -589,6 +589,7 @@ def generar_html_factura(data):
 </body>
 </html>"""
 
+
 def generar_html_cierre_caja(data):
     # Construir tabla de movimientos del día
     df = data['movimientos']
@@ -2001,15 +2002,12 @@ elif sel == "CTA CTE INDIVIDUAL":
     st.header("📑 Cuenta Corriente por Cliente")
     if not st.session_state.clientes.empty:
         cl = st.selectbox("Seleccionar Cliente", st.session_state.clientes['Razón Social'].unique())
-
         TIPOS_CTA_CTE = ['FACTURA', 'NOTA DE CREDITO', 'NOTA DE DEBITO', 'COBRO', 'COBRANZA']
         df_ind = st.session_state.tesoreria[
             (st.session_state.tesoreria['Cliente/Proveedor'] == cl) &
             (st.session_state.tesoreria['Tipo'].isin(TIPOS_CTA_CTE))
         ].copy().sort_values('Fecha')
-
         if df_ind.empty:
-            # fallback: mostrar viajes si no hay movimientos en tesorería
             df_ind_v = st.session_state.viajes[st.session_state.viajes['Cliente'] == cl].copy()
             st.metric("SALDO TOTAL (viajes)", f"$ {df_ind_v['Importe'].sum():,.2f}")
             html_reporte = generar_html_resumen(cl, df_ind_v, df_ind_v['Importe'].sum())
@@ -2021,25 +2019,21 @@ elif sel == "CTA CTE INDIVIDUAL":
             for _, r in df_ind.iterrows():
                 saldo_acum += float(r['Monto'])
                 filas_cc.append({
-                    "Fecha":        r['Fecha'],
-                    "Tipo":         r['Tipo'],
-                    "Comprobante":  r['Concepto'],
-                    "Debe":         f"$ {float(r['Monto']):,.2f}" if float(r['Monto']) > 0 else "",
-                    "Haber":        f"$ {abs(float(r['Monto'])):,.2f}" if float(r['Monto']) < 0 else "",
-                    "Saldo":        f"$ {saldo_acum:,.2f}"
+                    "Fecha": r['Fecha'], "Tipo": r['Tipo'], "Comprobante": r['Concepto'],
+                    "Debe":  f"$ {float(r['Monto']):,.2f}" if float(r['Monto']) > 0 else "",
+                    "Haber": f"$ {abs(float(r['Monto'])):,.2f}" if float(r['Monto']) < 0 else "",
+                    "Saldo": f"$ {saldo_acum:,.2f}"
                 })
             df_cc_show = pd.DataFrame(filas_cc)
             total_facturado = df_ind[df_ind['Monto'] > 0]['Monto'].sum()
             total_cobrado   = df_ind[df_ind['Monto'] < 0]['Monto'].sum()
             saldo_final     = total_facturado + total_cobrado
-
             m1, m2, m3 = st.columns(3)
             m1.metric("Total Facturado", f"$ {total_facturado:,.2f}")
             m2.metric("Total Cobrado",   f"$ {abs(total_cobrado):,.2f}")
             m3.metric("Saldo Pendiente", f"$ {saldo_final:,.2f}")
             st.markdown("---")
             st.dataframe(df_cc_show, use_container_width=True, hide_index=True)
-
             html_reporte = generar_html_resumen(cl, df_cc_show, saldo_final)
             st.download_button(label="📄 DESCARGAR RESUMEN", data=html_reporte, file_name=f"Resumen_{cl}.html", mime="text/html")
 
@@ -2949,6 +2943,8 @@ elif sel == "FACTURACION":
                     st.download_button("⬇️ Descargar HTML", html_resumen,
                                        file_name=f"CuentaCorriente_{cli_cc.replace(' ','_')}.html",
                                        mime="text/html", key="dl_cc_fac")
+
+
 
 # =============================================================
 # CHEQUES
