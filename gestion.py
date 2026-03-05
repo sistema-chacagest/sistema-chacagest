@@ -520,7 +520,7 @@ def generar_html_factura(data):
         <div style='display:inline-block;vertical-align:middle;'>
           <h2>CHACABUCO NOROESTE TOUR S.R.L.</h2>
           <small>VIAJES ESPECIALES · TURISMO · TRASLADOS PERSONALES<br>
-          CUIT: 30-71234567-9 · IVA Responsable Inscripto<br>
+          CUIT: 30-71114824-4 · IVA Responsable Inscripto<br>
           Chacabuco, Buenos Aires</small>
         </div>
       </div>
@@ -3255,3 +3255,4 @@ elif sel == "CHEQUES":
                 )
         else:
             st.success(f"✅ No hay cheques con vencimiento en los próximos {dias_filtro} días.")
+
