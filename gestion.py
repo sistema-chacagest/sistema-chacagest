@@ -1429,12 +1429,12 @@ elif sel == "TESORERIA":
     # ── Tabs: Admin ve todos, Operador no ve Traspaso ni Orden de Pago
     #         pero SÍ ve "Pase de Efectivo" (puede pasar efectivo a otra caja) ──
     if es_admin:
-        tab_ing, tab_egr, tab_cob, tab_ver, tab_pase, tab_cierre, tab_tras, tab_op = st.tabs(
-            ["📥 INGRESOS VARIOS", "📤 EGRESOS VARIOS", "🧾 COBRANZA VIAJE", "📊 VER MOVIMIENTOS", "💱 PASE DE EFECTIVO", "📋 RENDICIÓN", "🔄 TRASPASO", "💸 ORDEN DE PAGO"]
+        tab_ing, tab_egr, tab_cob, tab_cob_fac, tab_ver, tab_pase, tab_cierre, tab_tras, tab_op = st.tabs(
+            ["📥 INGRESOS VARIOS", "📤 EGRESOS VARIOS", "🧾 COBRANZA VIAJE", "🧾 COBRANZA FACTURA", "📊 VER MOVIMIENTOS", "💱 PASE DE EFECTIVO", "📋 RENDICIÓN", "🔄 TRASPASO", "💸 ORDEN DE PAGO"]
         )
     else:
-        tab_ing, tab_egr, tab_cob, tab_ver, tab_pase, tab_cierre, tab_op = st.tabs(
-            ["📥 INGRESOS VARIOS", "📤 EGRESOS VARIOS", "🧾 COBRANZA VIAJE", "📊 MIS MOVIMIENTOS", "💱 PASE DE EFECTIVO", "📋 RENDICIÓN", "💸 ORDEN DE PAGO"]
+        tab_ing, tab_egr, tab_cob, tab_cob_fac, tab_ver, tab_pase, tab_cierre, tab_op = st.tabs(
+            ["📥 INGRESOS VARIOS", "📤 EGRESOS VARIOS", "🧾 COBRANZA VIAJE", "🧾 COBRANZA FACTURA", "📊 MIS MOVIMIENTOS", "💱 PASE DE EFECTIVO", "📋 RENDICIÓN", "💸 ORDEN DE PAGO"]
         )
         tab_tras = None
 
@@ -1600,7 +1600,228 @@ elif sel == "TESORERIA":
             st.download_button("🖨️ IMPRIMIR RECIBO PDF/HTML", st.session_state.html_recibo_ready, file_name=f"Recibo_{st.session_state.cli_ready}.html", mime="text/html")
             if st.button("Limpiar"): st.session_state.html_recibo_ready = None; st.rerun()
 
-    with tab_ver:
+    # ── COBRANZA FACTURA ──
+    with tab_cob_fac:
+        if "html_recibo_fac_ready" not in st.session_state:
+            st.session_state.html_recibo_fac_ready = None
+        if "cli_fac_ready" not in st.session_state:
+            st.session_state.cli_fac_ready = None
+
+        if st.session_state.html_recibo_fac_ready:
+            st.success(f"✅ Cobranza de factura de '{st.session_state.cli_fac_ready}' registrada con éxito.")
+            st.download_button("🖨️ IMPRIMIR RECIBO", st.session_state.html_recibo_fac_ready,
+                               file_name=f"ReciboCobFac_{st.session_state.cli_fac_ready}.html", mime="text/html")
+            if st.button("🔄 Nueva cobranza", key="limpiar_cob_fac"):
+                st.session_state.html_recibo_fac_ready = None
+                st.session_state.cli_fac_ready = None
+                st.rerun()
+        else:
+            st.markdown("Registrá el cobro de facturas emitidas. Seleccioná el cliente, marcá las facturas a cancelar e ingresá el medio de pago.")
+
+            FORMAS_COB_FAC = ["EFECTIVO", "TRANSFERENCIA", "CHEQUE DE TERCEROS", "TARJETA DE CREDITO", "DÓLARES", "OTROS"]
+
+            # ── Selectores FUERA del form para reactividad ──
+            cf1, cf2 = st.columns(2)
+            cli_fac_sel  = cf1.selectbox("Cliente", [""] + sorted(st.session_state.clientes['Razón Social'].tolist()) if not st.session_state.clientes.empty else [""], key="cob_fac_cli")
+            forma_fac_sel = cf2.selectbox("Forma de Cobro", FORMAS_COB_FAC, key="cob_fac_forma")
+
+            es_cheque_fac = (forma_fac_sel == "CHEQUE DE TERCEROS")
+            es_transf_fac = (forma_fac_sel == "TRANSFERENCIA")
+
+            # ── Facturas impagas del cliente ──
+            facturas_sel_indices = []
+            total_seleccionado = 0.0
+
+            if cli_fac_sel and "facturas" in st.session_state and not st.session_state.facturas.empty:
+                # Calcular saldo de cada factura cruzando con cobros ya registrados
+                df_facs_cli = st.session_state.facturas[
+                    (st.session_state.facturas['Cliente'] == cli_fac_sel) &
+                    (st.session_state.facturas['Tipo'] == 'FACTURA')
+                ].copy()
+
+                # Cobros ya registrados para este cliente
+                df_cobros_cli = st.session_state.tesoreria[
+                    (st.session_state.tesoreria['Cliente/Proveedor'] == cli_fac_sel) &
+                    (st.session_state.tesoreria['Tipo'] == 'COBRANZA FACTURA')
+                ]
+                total_cobrado_cli = df_cobros_cli['Monto'].sum()  # negativos = cobros
+
+                # NC y ND
+                df_nc_cli = st.session_state.facturas[
+                    (st.session_state.facturas['Cliente'] == cli_fac_sel) &
+                    (st.session_state.facturas['Tipo'].isin(['NOTA DE CREDITO', 'NOTA DE DEBITO']))
+                ]
+                ajuste_nc_nd = df_nc_cli.apply(
+                    lambda r: -float(r['Total']) if r['Tipo'] == 'NOTA DE CREDITO' else float(r['Total']), axis=1
+                ).sum() if not df_nc_cli.empty else 0.0
+
+                total_facturado_cli = df_facs_cli['Total'].sum() if not df_facs_cli.empty else 0.0
+                saldo_pendiente_cli = total_facturado_cli + ajuste_nc_nd + total_cobrado_cli
+
+                if df_facs_cli.empty:
+                    st.info(f"No hay facturas registradas para {cli_fac_sel}.")
+                else:
+                    st.markdown("---")
+                    st.markdown(f"##### 📋 Facturas de {cli_fac_sel}")
+
+                    # Métricas rápidas
+                    sm1, sm2, sm3 = st.columns(3)
+                    sm1.metric("Total Facturado", f"$ {total_facturado_cli:,.2f}")
+                    sm2.metric("Total Cobrado",   f"$ {abs(total_cobrado_cli):,.2f}")
+                    sm3.metric("Saldo Pendiente", f"$ {saldo_pendiente_cli:,.2f}")
+                    st.markdown("---")
+
+                    # Checkboxes de facturas impagas
+                    st.markdown("**Seleccioná las facturas a cancelar:**")
+                    facturas_checkeadas = {}
+                    for _, frow in df_facs_cli.iterrows():
+                        fidx = frow.name
+                        label = f"FAC {frow.get('Punto Venta','')}-{frow.get('Numero','')} | {frow['Fecha']} | $ {float(frow['Total']):,.2f} | {frow.get('Detalle','')[:50]}"
+                        estado_fac = str(frow.get('Estado', 'EMITIDA'))
+                        ya_cobrada = (estado_fac == 'COBRADA')
+                        checked = st.checkbox(label, key=f"chk_fac_{fidx}", value=False, disabled=ya_cobrada,
+                                              help="Ya cobrada" if ya_cobrada else "")
+                        facturas_checkeadas[fidx] = (checked, float(frow['Total']))
+
+                    total_seleccionado = sum(v for c, v in facturas_checkeadas.values() if c)
+                    facturas_sel_indices = [i for i, (c, v) in facturas_checkeadas.items() if c]
+
+                    if total_seleccionado > 0:
+                        st.markdown(
+                            f"<div style='background:#eafaf1;border:2px solid #27ae60;border-radius:8px;"
+                            f"padding:12px 20px;margin:10px 0;display:flex;justify-content:space-between;'>"
+                            f"<b>Total seleccionado:</b>"
+                            f"<b style='color:#27ae60;font-size:18px;'>$ {total_seleccionado:,.2f}</b></div>",
+                            unsafe_allow_html=True
+                        )
+
+            st.markdown("---")
+
+            with st.form("f_cob_fac", clear_on_submit=True):
+                st.markdown("##### 💰 Datos del Cobro")
+                fcf1, fcf2 = st.columns(2)
+                if es_admin:
+                    cj_fac = fcf1.selectbox("Caja Destino", opc_cajas, key="cob_fac_caja")
+                else:
+                    cj_fac = caja_propia
+                    fcf1.markdown(f"**Caja:** {caja_propia}")
+
+                monto_cobro = fcf2.number_input("Monto cobrado $", min_value=0.0,
+                                                value=float(round(total_seleccionado, 2)),
+                                                step=100.0, format="%.2f", key="cob_fac_monto")
+
+                # ── Retenciones ──
+                st.markdown("##### ✂️ Retenciones (opcional)")
+                ret1, ret2, ret3 = st.columns(3)
+                ret_iva      = ret1.number_input("Ret. IVA $",      min_value=0.0, step=10.0, format="%.2f", key="ret_iva")
+                ret_ganancias = ret2.number_input("Ret. Ganancias $", min_value=0.0, step=10.0, format="%.2f", key="ret_gan")
+                ret_suss     = ret3.number_input("Ret. SUSS $",     min_value=0.0, step=10.0, format="%.2f", key="ret_suss")
+                total_retenciones = ret_iva + ret_ganancias + ret_suss
+                neto_cobro = monto_cobro - total_retenciones
+
+                # ── Cheque ──
+                if es_cheque_fac:
+                    st.markdown("---")
+                    st.markdown("##### 🏦 Datos del Cheque Recibido")
+                    chf1, chf2 = st.columns(2)
+                    chf_nro      = chf1.text_input("Nro. de Cheque *", key="chf_nro")
+                    chf_tipo     = chf2.selectbox("Tipo", ["COMÚN", "DIFERIDO", "ELECTRÓNICO"], key="chf_tipo")
+                    chf3, chf4   = st.columns(2)
+                    chf_banco    = chf3.text_input("Banco Librador *", key="chf_banco")
+                    chf_librador = chf4.text_input("Librador *", key="chf_librador")
+                    chf5, chf6   = st.columns(2)
+                    chf_fvenc    = chf5.date_input("Fecha Vencimiento *", date.today() + timedelta(days=30), key="chf_fvenc")
+                    chf_femision = chf6.date_input("Fecha Emisión", date.today(), key="chf_femision")
+                    chf_obs      = st.text_input("Observaciones cheque", key="chf_obs")
+                else:
+                    chf_nro = chf_tipo = chf_banco = chf_librador = chf_obs = ""
+                    chf_fvenc = chf_femision = date.today()
+
+                # ── Transferencia ──
+                if es_transf_fac:
+                    st.markdown("---")
+                    st.markdown("##### 🏦 Datos de la Transferencia")
+                    tr1, tr2 = st.columns(2)
+                    transf_banco   = tr1.text_input("Banco destino", key="transf_banco")
+                    transf_ref     = tr2.text_input("Nro. de referencia / CBU", key="transf_ref")
+                else:
+                    transf_banco = transf_ref = ""
+
+                nro_recibo = st.text_input("Nro. Recibo / Referencia (opcional)", key="cob_fac_ref")
+                obs_cobro  = st.text_area("Observaciones", height=50, key="cob_fac_obs")
+
+                if st.form_submit_button("✅ REGISTRAR COBRANZA"):
+                    if not cli_fac_sel:
+                        st.warning("Seleccioná un cliente.")
+                    elif monto_cobro <= 0:
+                        st.warning("Ingresá un monto mayor a cero.")
+                    elif es_cheque_fac and (not chf_nro or not chf_banco or not chf_librador):
+                        st.warning("Completá Nro. de Cheque, Banco y Librador.")
+                    else:
+                        # 1) Movimiento principal en tesorería
+                        concepto_cob = f"Cobro Factura"
+                        if facturas_sel_indices:
+                            nros = [f"{st.session_state.facturas.loc[i,'Punto Venta']}-{st.session_state.facturas.loc[i,'Numero']}" for i in facturas_sel_indices if i in st.session_state.facturas.index]
+                            concepto_cob = f"Cobro Facturas: {', '.join(nros)}"
+                        if chf_nro:
+                            concepto_cob += f" | Cheque #{chf_nro}"
+                        if transf_ref:
+                            concepto_cob += f" | Transf. {transf_banco} Ref:{transf_ref}"
+
+                        forma_final = "CHEQUE TERCERO" if es_cheque_fac else ("TRANSFERENCIA" if es_transf_fac else forma_fac_sel)
+                        nt_cob = pd.DataFrame([[
+                            str(date.today()), "COBRANZA FACTURA", cj_fac, forma_final,
+                            concepto_cob, cli_fac_sel, -monto_cobro, nro_recibo or "-"
+                        ]], columns=COL_TESORERIA)
+                        st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt_cob], ignore_index=True)
+
+                        # 2) Retenciones como egresos separados
+                        if ret_iva > 0:
+                            ret_row = pd.DataFrame([[str(date.today()), "RETENCION", cj_fac, "RETENCION IVA",
+                                f"Ret. IVA — {cli_fac_sel}", cli_fac_sel, -ret_iva, nro_recibo or "-"]], columns=COL_TESORERIA)
+                            st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, ret_row], ignore_index=True)
+                        if ret_ganancias > 0:
+                            ret_row = pd.DataFrame([[str(date.today()), "RETENCION", cj_fac, "RETENCION GANANCIAS",
+                                f"Ret. Ganancias — {cli_fac_sel}", cli_fac_sel, -ret_ganancias, nro_recibo or "-"]], columns=COL_TESORERIA)
+                            st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, ret_row], ignore_index=True)
+                        if ret_suss > 0:
+                            ret_row = pd.DataFrame([[str(date.today()), "RETENCION", cj_fac, "RETENCION SUSS",
+                                f"Ret. SUSS — {cli_fac_sel}", cli_fac_sel, -ret_suss, nro_recibo or "-"]], columns=COL_TESORERIA)
+                            st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, ret_row], ignore_index=True)
+
+                        guardar_datos("tesoreria", st.session_state.tesoreria)
+
+                        # 3) Marcar facturas como COBRADAS
+                        for fidx in facturas_sel_indices:
+                            if fidx in st.session_state.facturas.index:
+                                st.session_state.facturas.loc[fidx, 'Estado'] = 'COBRADA'
+                        if facturas_sel_indices:
+                            guardar_datos("facturas", st.session_state.facturas)
+
+                        # 4) Registrar cheque en cartera si corresponde
+                        if es_cheque_fac and chf_nro and chf_banco and chf_librador:
+                            nuevo_cheq = pd.DataFrame([[
+                                str(date.today()), chf_nro, chf_tipo, chf_banco, chf_librador,
+                                monto_cobro, str(chf_fvenc), "EN CARTERA", "-", "-",
+                                f"Emisión:{chf_femision} | Cob.Factura {cli_fac_sel} | {chf_obs}"
+                            ]], columns=COL_CHEQ_CARTERA)
+                            st.session_state.cheques_cartera = pd.concat([st.session_state.cheques_cartera, nuevo_cheq], ignore_index=True)
+                            guardar_datos("cheques_cartera", st.session_state.cheques_cartera)
+
+                        # 5) Generar recibo
+                        detalle_ret = ""
+                        if total_retenciones > 0:
+                            detalle_ret = f" | Ret. IVA: ${ret_iva:,.2f} | Ret. Gan.: ${ret_ganancias:,.2f} | Ret. SUSS: ${ret_suss:,.2f} | Neto: ${neto_cobro:,.2f}"
+                        st.session_state.html_recibo_fac_ready = generar_html_recibo({
+                            "Fecha": date.today(),
+                            "Cliente/Proveedor": cli_fac_sel,
+                            "Concepto": concepto_cob + detalle_ret,
+                            "Caja/Banco": f"{cj_fac} — {forma_final}",
+                            "Monto": monto_cobro,
+                            "Ref AFIP": nro_recibo or "-"
+                        })
+                        st.session_state.cli_fac_ready = cli_fac_sel
+                        st.rerun()
         # Admin puede elegir cualquier caja. Operador solo ve la suya.
         if es_admin:
             cj_v = st.selectbox("Seleccionar Caja", opc_cajas)
