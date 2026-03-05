@@ -3241,7 +3241,7 @@ elif sel == "CHEQUES":
             for a in alertas:
                 st.warning(a)
 
-    tab_emit, tab_cart, tab_venc = st.tabs(["📤 CHEQUES EMITIDOS", "📂 CHEQUES EN CARTERA", "📅 PRÓXIMOS VENCIMIENTOS"])
+    tab_emit, tab_cart, tab_venc, tab_export = st.tabs(["📤 CHEQUES EMITIDOS", "📂 CHEQUES EN CARTERA", "📅 PRÓXIMOS VENCIMIENTOS", "📥 EXPORTAR A EXCEL"])
 
     # ══════════════════════════════════════════════════════
     # TAB 1 — CHEQUES EMITIDOS
@@ -3591,3 +3591,253 @@ elif sel == "CHEQUES":
                 )
         else:
             st.success(f"✅ No hay cheques con vencimiento en los próximos {dias_filtro} días.")
+
+    # ══════════════════════════════════════════════════════
+    # TAB 4 — EXPORTAR CHEQUES A EXCEL
+    # ══════════════════════════════════════════════════════
+    with tab_export:
+        import io
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side, numbers
+        from openpyxl.utils import get_column_letter
+
+        st.markdown("##### 📥 Exportar cheques a Excel")
+        st.markdown("Elegí el rango de fechas y qué cheques exportar.")
+
+        ex1, ex2, ex3 = st.columns(3)
+        fecha_desde = ex1.date_input("Desde", value=date.today().replace(day=1), key="exp_desde")
+        fecha_hasta = ex2.date_input("Hasta", value=date.today(), key="exp_hasta")
+        tipo_export = ex3.multiselect(
+            "Incluir",
+            ["📤 Emitidos", "📂 Cartera"],
+            default=["📤 Emitidos", "📂 Cartera"],
+            key="exp_tipo"
+        )
+
+        if st.button("📊 GENERAR EXCEL", key="btn_generar_excel", type="primary"):
+            wb = Workbook()
+            wb.remove(wb.active)  # quitar hoja vacía por defecto
+
+            # Estilos
+            color_header  = "4B1A6B"   # violeta empresa
+            color_total   = "F39C12"   # naranja total
+            color_emitido = "EAF4FB"   # celeste suave
+            color_cartera = "F0FFF4"   # verde suave
+            color_vencido = "FDEDEC"   # rojo suave
+            color_listo   = "EAFAF1"   # verde brillante
+
+            thin = Side(style="thin", color="CCCCCC")
+            border_all = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+            def header_style(cell, bg=color_header):
+                cell.font = Font(bold=True, color="FFFFFF", name="Arial", size=10)
+                cell.fill = PatternFill("solid", start_color=bg)
+                cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+                cell.border = border_all
+
+            def data_style(cell, bg="FFFFFF", bold=False, color="000000", num_fmt=None):
+                cell.font = Font(bold=bold, color=color, name="Arial", size=10)
+                cell.fill = PatternFill("solid", start_color=bg)
+                cell.alignment = Alignment(vertical="center")
+                cell.border = border_all
+                if num_fmt:
+                    cell.number_format = num_fmt
+
+            def calc_estado(fecha_str):
+                try:
+                    fv = pd.to_datetime(fecha_str).date()
+                    d  = (fv - date.today()).days
+                    if d > 0:   return f"Cobra en {d}d"
+                    elif d >= -30: return "LISTO PARA COBRAR"
+                    else:       return "VENCIDO"
+                except:
+                    return "-"
+
+            # ── HOJA EMITIDOS ──
+            if "📤 Emitidos" in tipo_export and not st.session_state.cheques_emitidos.empty:
+                ws_e = wb.create_sheet("CHEQUES EMITIDOS")
+                ws_e.sheet_view.showGridLines = False
+
+                # Título
+                ws_e.merge_cells("A1:J1")
+                ws_e["A1"] = f"CHEQUES EMITIDOS — {fecha_desde.strftime('%d/%m/%Y')} al {fecha_hasta.strftime('%d/%m/%Y')}"
+                ws_e["A1"].font = Font(bold=True, color="FFFFFF", name="Arial", size=13)
+                ws_e["A1"].fill = PatternFill("solid", start_color=color_header)
+                ws_e["A1"].alignment = Alignment(horizontal="center", vertical="center")
+                ws_e.row_dimensions[1].height = 28
+
+                headers_e = ["Nro Cheque", "Tipo", "Banco", "Beneficiario", "Fecha Emisión", "Fecha Vencimiento", "Importe $", "Estado", "Situación", "Observaciones"]
+                for col, h in enumerate(headers_e, 1):
+                    cell = ws_e.cell(row=2, column=col, value=h)
+                    header_style(cell)
+                ws_e.row_dimensions[2].height = 22
+
+                df_e = st.session_state.cheques_emitidos.copy()
+                df_e['_fecha'] = pd.to_datetime(df_e['Fecha Emisión'], errors='coerce').dt.date
+                df_e = df_e[(df_e['_fecha'] >= fecha_desde) & (df_e['_fecha'] <= fecha_hasta)]
+
+                data_row = 3
+                for _, r in df_e.iterrows():
+                    sit = calc_estado(r['Fecha Vencimiento'])
+                    bg = color_vencido if sit == "VENCIDO" else (color_listo if sit == "LISTO PARA COBRAR" else color_emitido)
+                    vals = [r['Nro Cheque'], r['Tipo'], r['Banco'], r['Beneficiario'],
+                            r['Fecha Emisión'], r['Fecha Vencimiento'], float(r['Importe']),
+                            r['Estado'], sit, str(r['Observaciones']) if str(r['Observaciones']) != '-' else '']
+                    for col, v in enumerate(vals, 1):
+                        cell = ws_e.cell(row=data_row, column=col, value=v)
+                        num_fmt = '$#,##0.00' if col == 7 else None
+                        data_style(cell, bg=bg, num_fmt=num_fmt)
+                    ws_e.row_dimensions[data_row].height = 18
+                    data_row += 1
+
+                # Fila TOTAL con fórmula Excel
+                total_row = data_row
+                ws_e.merge_cells(f"A{total_row}:F{total_row}")
+                cell_lbl = ws_e[f"A{total_row}"]
+                cell_lbl.value = "TOTAL"
+                cell_lbl.font = Font(bold=True, color="FFFFFF", name="Arial", size=11)
+                cell_lbl.fill = PatternFill("solid", start_color=color_total)
+                cell_lbl.alignment = Alignment(horizontal="right", vertical="center")
+                cell_lbl.border = border_all
+
+                cell_tot = ws_e[f"G{total_row}"]
+                cell_tot.value = f"=SUM(G3:G{total_row-1})"
+                cell_tot.font = Font(bold=True, color="FFFFFF", name="Arial", size=12)
+                cell_tot.fill = PatternFill("solid", start_color=color_total)
+                cell_tot.number_format = '$#,##0.00'
+                cell_tot.alignment = Alignment(horizontal="right", vertical="center")
+                cell_tot.border = border_all
+                ws_e.row_dimensions[total_row].height = 24
+
+                for col_idx in range(8, 11):
+                    cell = ws_e.cell(row=total_row, column=col_idx)
+                    cell.fill = PatternFill("solid", start_color=color_total)
+                    cell.border = border_all
+
+                # Anchos columnas
+                anchos_e = [14, 10, 22, 35, 16, 18, 18, 14, 22, 25]
+                for i, w in enumerate(anchos_e, 1):
+                    ws_e.column_dimensions[get_column_letter(i)].width = w
+
+            # ── HOJA CARTERA ──
+            if "📂 Cartera" in tipo_export and not st.session_state.cheques_cartera.empty:
+                ws_c = wb.create_sheet("CHEQUES EN CARTERA")
+                ws_c.sheet_view.showGridLines = False
+
+                ws_c.merge_cells("A1:K1")
+                ws_c["A1"] = f"CHEQUES EN CARTERA — {fecha_desde.strftime('%d/%m/%Y')} al {fecha_hasta.strftime('%d/%m/%Y')}"
+                ws_c["A1"].font = Font(bold=True, color="FFFFFF", name="Arial", size=13)
+                ws_c["A1"].fill = PatternFill("solid", start_color=color_header)
+                ws_c["A1"].alignment = Alignment(horizontal="center", vertical="center")
+                ws_c.row_dimensions[1].height = 28
+
+                headers_c = ["Nro Cheque", "Tipo", "Banco Librador", "Librador", "Fecha Recepción", "Fecha Vencimiento", "Importe $", "Estado", "Situación", "Destino", "Observaciones"]
+                for col, h in enumerate(headers_c, 1):
+                    cell = ws_c.cell(row=2, column=col, value=h)
+                    header_style(cell)
+                ws_c.row_dimensions[2].height = 22
+
+                df_c = st.session_state.cheques_cartera.copy()
+                df_c['_fecha'] = pd.to_datetime(df_c['Fecha Recepción'], errors='coerce').dt.date
+                df_c = df_c[(df_c['_fecha'] >= fecha_desde) & (df_c['_fecha'] <= fecha_hasta)]
+
+                data_row_c = 3
+                for _, r in df_c.iterrows():
+                    sit = calc_estado(r['Fecha Vencimiento'])
+                    bg = color_vencido if sit == "VENCIDO" else (color_listo if sit == "LISTO PARA COBRAR" else color_cartera)
+                    vals = [r['Nro Cheque'], r['Tipo'], r['Banco Librador'], r['Librador'],
+                            r['Fecha Recepción'], r['Fecha Vencimiento'], float(r['Importe']),
+                            r['Estado'], sit,
+                            str(r['Destino']) if str(r['Destino']) not in ['-',''] else '',
+                            str(r['Observaciones']) if str(r['Observaciones']) != '-' else '']
+                    for col, v in enumerate(vals, 1):
+                        cell = ws_c.cell(row=data_row_c, column=col, value=v)
+                        num_fmt = '$#,##0.00' if col == 7 else None
+                        data_style(cell, bg=bg, num_fmt=num_fmt)
+                    ws_c.row_dimensions[data_row_c].height = 18
+                    data_row_c += 1
+
+                total_row_c = data_row_c
+                ws_c.merge_cells(f"A{total_row_c}:F{total_row_c}")
+                cell_lbl_c = ws_c[f"A{total_row_c}"]
+                cell_lbl_c.value = "TOTAL"
+                cell_lbl_c.font = Font(bold=True, color="FFFFFF", name="Arial", size=11)
+                cell_lbl_c.fill = PatternFill("solid", start_color=color_total)
+                cell_lbl_c.alignment = Alignment(horizontal="right", vertical="center")
+                cell_lbl_c.border = border_all
+
+                cell_tot_c = ws_c[f"G{total_row_c}"]
+                cell_tot_c.value = f"=SUM(G3:G{total_row_c-1})"
+                cell_tot_c.font = Font(bold=True, color="FFFFFF", name="Arial", size=12)
+                cell_tot_c.fill = PatternFill("solid", start_color=color_total)
+                cell_tot_c.number_format = '$#,##0.00'
+                cell_tot_c.alignment = Alignment(horizontal="right", vertical="center")
+                cell_tot_c.border = border_all
+                ws_c.row_dimensions[total_row_c].height = 24
+
+                for col_idx in range(8, 12):
+                    cell = ws_c.cell(row=total_row_c, column=col_idx)
+                    cell.fill = PatternFill("solid", start_color=color_total)
+                    cell.border = border_all
+
+                anchos_c = [14, 10, 22, 30, 16, 18, 18, 14, 22, 20, 25]
+                for i, w in enumerate(anchos_c, 1):
+                    ws_c.column_dimensions[get_column_letter(i)].width = w
+
+            # ── HOJA RESUMEN ──
+            ws_r = wb.create_sheet("RESUMEN", 0)
+            ws_r.sheet_view.showGridLines = False
+            ws_r.column_dimensions['A'].width = 35
+            ws_r.column_dimensions['B'].width = 22
+
+            ws_r.merge_cells("A1:B1")
+            ws_r["A1"] = "RESUMEN DE CHEQUES"
+            ws_r["A1"].font = Font(bold=True, color="FFFFFF", name="Arial", size=14)
+            ws_r["A1"].fill = PatternFill("solid", start_color=color_header)
+            ws_r["A1"].alignment = Alignment(horizontal="center", vertical="center")
+            ws_r.row_dimensions[1].height = 32
+
+            ws_r["A2"] = "Período"
+            ws_r["B2"] = f"{fecha_desde.strftime('%d/%m/%Y')} — {fecha_hasta.strftime('%d/%m/%Y')}"
+            ws_r["A3"] = "Generado"
+            ws_r["B3"] = date.today().strftime('%d/%m/%Y')
+            for r_idx in [2, 3]:
+                for c_idx in ['A', 'B']:
+                    ws_r[f"{c_idx}{r_idx}"].font = Font(name="Arial", size=10)
+                    ws_r[f"{c_idx}{r_idx}"].border = border_all
+
+            resumen_data = []
+            if "📤 Emitidos" in tipo_export and "CHEQUES EMITIDOS" in [s.title for s in wb.worksheets]:
+                ws_ref_e = wb["CHEQUES EMITIDOS"]
+                last_e = ws_ref_e.max_row
+                resumen_data.append(("Total Cheques Emitidos (cant.)", f"=COUNTA('CHEQUES EMITIDOS'!A3:A{last_e-1})"))
+                resumen_data.append(("Total Cheques Emitidos ($)", f"='CHEQUES EMITIDOS'!G{last_e}"))
+            if "📂 Cartera" in tipo_export and "CHEQUES EN CARTERA" in [s.title for s in wb.worksheets]:
+                ws_ref_c = wb["CHEQUES EN CARTERA"]
+                last_c = ws_ref_c.max_row
+                resumen_data.append(("Total Cheques en Cartera (cant.)", f"=COUNTA('CHEQUES EN CARTERA'!A3:A{last_c-1})"))
+                resumen_data.append(("Total Cheques en Cartera ($)", f"='CHEQUES EN CARTERA'!G{last_c}"))
+
+            for idx, (label, formula) in enumerate(resumen_data, 5):
+                ws_r[f"A{idx}"] = label
+                ws_r[f"B{idx}"] = formula
+                ws_r[f"A{idx}"].font = Font(bold=True, name="Arial", size=10)
+                ws_r[f"B{idx}"].font = Font(bold=True, name="Arial", size=11, color="4B1A6B")
+                ws_r[f"B{idx}"].number_format = '$#,##0.00' if '$' in label else '#,##0'
+                ws_r[f"A{idx}"].border = border_all
+                ws_r[f"B{idx}"].border = border_all
+                ws_r.row_dimensions[idx].height = 22
+
+            # Guardar en buffer y ofrecer descarga
+            buf = io.BytesIO()
+            wb.save(buf)
+            buf.seek(0)
+            nombre_archivo = f"Cheques_{fecha_desde.strftime('%d%m%Y')}_{fecha_hasta.strftime('%d%m%Y')}.xlsx"
+            st.success(f"✅ Excel generado con {len(tipo_export)} hoja(s) de datos + resumen.")
+            st.download_button(
+                label="⬇️ DESCARGAR EXCEL",
+                data=buf.getvalue(),
+                file_name=nombre_archivo,
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                type="primary"
+            )
