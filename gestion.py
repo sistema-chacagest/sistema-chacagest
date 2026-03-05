@@ -1507,7 +1507,7 @@ elif sel == "TESORERIA":
 
             st.markdown("---")
 
-            # ── Base: todos los movimientos de la caja (sin filtro de rendiciones previas, la caja no se zerifica) ──
+            # ── Base: todos los movimientos de la caja ──
             df_caja_base = st.session_state.tesoreria[
                 st.session_state.tesoreria['Caja/Banco'] == caja_cierre
             ].copy()
@@ -1518,26 +1518,46 @@ elif sel == "TESORERIA":
                 st.session_state.tesoreria['Caja/Banco'] == caja_dolar_nombre
             ].copy()
 
-            # Filtrar por período
+            # ── Detectar última rendición registrada para esta caja ──
+            rendiciones_idx = df_caja_base[df_caja_base['Tipo'] == 'RENDICIÓN'].index
+            ultima_rendicion_idx = rendiciones_idx[-1] if len(rendiciones_idx) > 0 else None
+
+            # ── Filtrar movimientos: solo DESDE la última rendición (exclusive) ──
+            # Si no hay rendiciones previas, se usan los filtros de fecha manuales
             df_cierre = df_caja_base.copy()
             try:
                 df_cierre['Fecha_dt'] = pd.to_datetime(df_cierre['Fecha'], errors='coerce')
-                df_cierre = df_cierre[
-                    (df_cierre['Fecha_dt'].dt.date >= fecha_desde) &
-                    (df_cierre['Fecha_dt'].dt.date <= fecha_hasta)
-                ]
+                if ultima_rendicion_idx is not None:
+                    # Solo movimientos posteriores al índice de la última rendición
+                    df_cierre = df_cierre[df_cierre.index > ultima_rendicion_idx]
+                    ultima_rend_row = df_caja_base.loc[ultima_rendicion_idx]
+                    st.info(f"📌 Última rendición registrada: **{ultima_rend_row['Fecha']}** — mostrando solo movimientos posteriores a esa rendición.")
+                    # Aplicar también el filtro de fecha hasta (el desde ya está implícito)
+                    df_cierre = df_cierre[df_cierre['Fecha_dt'].dt.date <= fecha_hasta]
+                else:
+                    # Sin rendiciones previas: usar el rango de fechas manual
+                    df_cierre = df_cierre[
+                        (df_cierre['Fecha_dt'].dt.date >= fecha_desde) &
+                        (df_cierre['Fecha_dt'].dt.date <= fecha_hasta)
+                    ]
+                    st.caption("📋 No se encontraron rendiciones anteriores — mostrando movimientos del período seleccionado.")
             except:
                 pass
 
-            # ── Efectivo disponible TOTAL en caja (todos los movimientos, sin límite de fecha) ──
-            mask_efec_base = mask_forma(df_caja_base['Forma'], "EFECTIVO")
-            # Dólares: primero buscar en la caja DOLAR dedicada; si no hay, buscar en la caja base por forma
-            mask_dolar_base = mask_forma(df_caja_base['Forma'], "DOLARES")
-            efectivo_disponible = df_caja_base[mask_efec_base]['Monto'].sum()
-            if not df_dolar_base.empty:
-                dolares_disponibles = df_dolar_base['Monto'].sum()
+            # ── Efectivo disponible: solo desde la última rendición (o todo si no hay rendiciones) ──
+            if ultima_rendicion_idx is not None:
+                df_efec_base = df_caja_base[df_caja_base.index > ultima_rendicion_idx]
             else:
-                dolares_disponibles = df_caja_base[mask_dolar_base]['Monto'].sum()
+                df_efec_base = df_caja_base
+            mask_efec_base = mask_forma(df_efec_base['Forma'], "EFECTIVO")
+            # Dólares: primero buscar en la caja DOLAR dedicada; si no hay, buscar en la caja base por forma
+            mask_dolar_base = mask_forma(df_efec_base['Forma'], "DOLARES")
+            efectivo_disponible = df_efec_base[mask_efec_base]['Monto'].sum()
+            if not df_dolar_base.empty:
+                df_dolar_desde = df_dolar_base[df_dolar_base.index > ultima_rendicion_idx] if ultima_rendicion_idx is not None else df_dolar_base
+                dolares_disponibles = df_dolar_desde['Monto'].sum()
+            else:
+                dolares_disponibles = df_efec_base[mask_dolar_base]['Monto'].sum()
 
             # ── Panel: efectivo disponible ──
             st.markdown("##### 💰 Disponible en caja")
