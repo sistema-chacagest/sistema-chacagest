@@ -520,7 +520,7 @@ def generar_html_factura(data):
         <div style='display:inline-block;vertical-align:middle;'>
           <h2>CHACABUCO NOROESTE TOUR S.R.L.</h2>
           <small>VIAJES ESPECIALES · TURISMO · TRASLADOS PERSONALES<br>
-          CUIT: 30-71114824-4 · IVA Responsable Inscripto<br>
+          CUIT: 30-71234567-9 · IVA Responsable Inscripto<br>
           Chacabuco, Buenos Aires</small>
         </div>
       </div>
@@ -2000,12 +2000,48 @@ elif sel == "TESORERIA":
 elif sel == "CTA CTE INDIVIDUAL":
     st.header("📑 Cuenta Corriente por Cliente")
     if not st.session_state.clientes.empty:
-        cl     = st.selectbox("Seleccionar Cliente", st.session_state.clientes['Razón Social'].unique())
-        df_ind = st.session_state.viajes[st.session_state.viajes['Cliente'] == cl].copy()
-        st.metric("SALDO TOTAL", f"$ {df_ind['Importe'].sum():,.2f}")
-        html_reporte = generar_html_resumen(cl, df_ind, df_ind['Importe'].sum())
-        st.download_button(label="📄 DESCARGAR RESUMEN", data=html_reporte, file_name=f"Resumen_{cl}.html", mime="text/html")
-        st.dataframe(df_ind, use_container_width=True)
+        cl = st.selectbox("Seleccionar Cliente", st.session_state.clientes['Razón Social'].unique())
+
+        TIPOS_CTA_CTE = ['FACTURA', 'NOTA DE CREDITO', 'NOTA DE DEBITO', 'COBRO', 'COBRANZA']
+        df_ind = st.session_state.tesoreria[
+            (st.session_state.tesoreria['Cliente/Proveedor'] == cl) &
+            (st.session_state.tesoreria['Tipo'].isin(TIPOS_CTA_CTE))
+        ].copy().sort_values('Fecha')
+
+        if df_ind.empty:
+            # fallback: mostrar viajes si no hay movimientos en tesorería
+            df_ind_v = st.session_state.viajes[st.session_state.viajes['Cliente'] == cl].copy()
+            st.metric("SALDO TOTAL (viajes)", f"$ {df_ind_v['Importe'].sum():,.2f}")
+            html_reporte = generar_html_resumen(cl, df_ind_v, df_ind_v['Importe'].sum())
+            st.download_button(label="📄 DESCARGAR RESUMEN", data=html_reporte, file_name=f"Resumen_{cl}.html", mime="text/html")
+            st.dataframe(df_ind_v, use_container_width=True)
+        else:
+            saldo_acum = 0.0
+            filas_cc = []
+            for _, r in df_ind.iterrows():
+                saldo_acum += float(r['Monto'])
+                filas_cc.append({
+                    "Fecha":        r['Fecha'],
+                    "Tipo":         r['Tipo'],
+                    "Comprobante":  r['Concepto'],
+                    "Debe":         f"$ {float(r['Monto']):,.2f}" if float(r['Monto']) > 0 else "",
+                    "Haber":        f"$ {abs(float(r['Monto'])):,.2f}" if float(r['Monto']) < 0 else "",
+                    "Saldo":        f"$ {saldo_acum:,.2f}"
+                })
+            df_cc_show = pd.DataFrame(filas_cc)
+            total_facturado = df_ind[df_ind['Monto'] > 0]['Monto'].sum()
+            total_cobrado   = df_ind[df_ind['Monto'] < 0]['Monto'].sum()
+            saldo_final     = total_facturado + total_cobrado
+
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Total Facturado", f"$ {total_facturado:,.2f}")
+            m2.metric("Total Cobrado",   f"$ {abs(total_cobrado):,.2f}")
+            m3.metric("Saldo Pendiente", f"$ {saldo_final:,.2f}")
+            st.markdown("---")
+            st.dataframe(df_cc_show, use_container_width=True, hide_index=True)
+
+            html_reporte = generar_html_resumen(cl, df_cc_show, saldo_final)
+            st.download_button(label="📄 DESCARGAR RESUMEN", data=html_reporte, file_name=f"Resumen_{cl}.html", mime="text/html")
 
 elif sel == "CTA CTE GENERAL":
     st.header("🌎 Estado Global de Deudores")
@@ -2669,7 +2705,7 @@ elif sel == "FACTURACION":
                     ci2.markdown(f"{it['cantidad']}")
                     ci3.markdown(f"$ {float(it['precio_unitario']):,.2f}")
                     ci4.markdown(f"{it['alicuota']}")
-                    ci5.markdown(f"$ {float(it['subtotal']):,.2f}")
+                    ci5.markdown(f"$ {float(it['subtotal']):,.2f} *(c/IVA)*")
                     if ci6.button("🗑️", key=f"del_item_{idx_i}"):
                         st.session_state.items_factura.pop(idx_i)
                         st.rerun()
@@ -2680,42 +2716,39 @@ elif sel == "FACTURACION":
                 ni1, ni2, ni3, ni4 = st.columns([4, 1.2, 2, 1.5])
                 desc_it  = ni1.text_input("Descripción del servicio/producto", key="it_desc")
                 cant_it  = ni2.number_input("Cant.", min_value=1, value=1, step=1, key="it_cant")
-                precio_it = ni3.number_input("Precio Unitario $", min_value=0.0, step=10.0, format="%.2f", key="it_precio")
+                precio_it = ni3.number_input("Precio Unitario $ (sin IVA)", min_value=0.0, step=10.0, format="%.2f", key="it_precio")
                 alicuota_it = ni4.selectbox("IVA %", ["21%", "10.5%", "27%", "0%", "Exento", "No Gravado"], key="it_alicuota")
                 if st.button("➕ Agregar ítem", key="btn_add_item"):
                     if desc_it and precio_it > 0:
-                        subtotal = float(cant_it) * float(precio_it)
+                        # precio_unitario es SIN IVA; subtotal = neto * cantidad
+                        subtotal_neto = float(cant_it) * float(precio_it)
+                        tasa = {"21%": 0.21, "10.5%": 0.105, "27%": 0.27}.get(alicuota_it, 0.0)
+                        subtotal_con_iva = subtotal_neto * (1 + tasa)
                         st.session_state.items_factura.append({
                             "descripcion": desc_it,
                             "cantidad": cant_it,
                             "precio_unitario": precio_it,
                             "alicuota": alicuota_it,
-                            "subtotal": subtotal
+                            "subtotal": round(subtotal_con_iva, 2),   # total con IVA para mostrar
+                            "subtotal_neto": round(subtotal_neto, 2)  # neto para los cálculos
                         })
                         st.rerun()
                     else:
                         st.warning("Completá descripción y precio.")
 
-            # Cálculo de totales
+            # Cálculo de totales — precio unitario ingresado SIN IVA
             neto_calc = 0.0
             iva_calc  = 0.0
             no_grav_calc = 0.0
             for it in st.session_state.items_factura:
-                sub = float(it['subtotal'])
-                ali = it['alicuota']
-                if ali == "21%":
-                    neto_calc += sub / 1.21
-                    iva_calc  += sub - (sub / 1.21)
-                elif ali == "10.5%":
-                    neto_calc += sub / 1.105
-                    iva_calc  += sub - (sub / 1.105)
-                elif ali == "27%":
-                    neto_calc += sub / 1.27
-                    iva_calc  += sub - (sub / 1.27)
-                elif ali in ["Exento", "0%"]:
-                    neto_calc += sub
-                else:  # No Gravado
-                    no_grav_calc += sub
+                ali  = it['alicuota']
+                neto = float(it.get('subtotal_neto', float(it['subtotal'])))  # compatibilidad ítems viejos
+                tasa = {"21%": 0.21, "10.5%": 0.105, "27%": 0.27}.get(ali, 0.0)
+                if ali == "No Gravado":
+                    no_grav_calc += neto
+                else:
+                    neto_calc += neto
+                    iva_calc  += neto * tasa
             total_calc = neto_calc + iva_calc + no_grav_calc
 
             if st.session_state.items_factura:
@@ -3255,4 +3288,3 @@ elif sel == "CHEQUES":
                 )
         else:
             st.success(f"✅ No hay cheques con vencimiento en los próximos {dias_filtro} días.")
-
