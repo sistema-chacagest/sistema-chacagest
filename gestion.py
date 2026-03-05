@@ -2487,9 +2487,11 @@ elif sel == "CTA CTE GENERAL PROV":
         res_p['CBU']   = res_p['CBU'].fillna('-')
         res_p['Alias'] = res_p['Alias'].fillna('-')
         res_p = res_p[['Proveedor', 'CBU', 'Alias', 'Total']]
+        # Filtrar saldos en 0
+        res_p = res_p[res_p['Total'].round(2) != 0].sort_values('Total', ascending=False)
         # Métricas
         mp1, mp2 = st.columns(2)
-        mp1.metric("Total proveedores con saldo", len(res_p[res_p['Total'].round(2) != 0]))
+        mp1.metric("Total proveedores con saldo", len(res_p))
         mp2.metric("Total a pagar", f"$ {res_p['Total'].sum():,.2f}")
         st.dataframe(res_p.style.format({"Total": "$ {:,.2f}"}), use_container_width=True)
         # Descarga PDF
@@ -3251,13 +3253,19 @@ elif sel == "CHEQUES":
 
         st.markdown("---")
 
-        # Filtro por estado
-        filtro_emit = st.radio("Mostrar", ["PENDIENTES", "CONCILIADOS", "TODOS"], horizontal=True, key="filtro_emit")
+        # Filtro por estado y beneficiario
+        fe_col1, fe_col2 = st.columns([2, 2])
+        filtro_emit = fe_col1.radio("Mostrar", ["TODOS", "PENDIENTES", "CONCILIADOS"], horizontal=True, key="filtro_emit")
         df_emit = st.session_state.cheques_emitidos.copy()
+        # Filtro por beneficiario
+        lista_benef = ["Todos"] + sorted(df_emit['Beneficiario'].dropna().unique().tolist())
+        filtro_benef = fe_col2.selectbox("Beneficiario", lista_benef, key="filtro_benef_emit")
         if filtro_emit == "PENDIENTES":
             df_emit = df_emit[df_emit['Estado'] == 'PENDIENTE']
         elif filtro_emit == "CONCILIADOS":
             df_emit = df_emit[df_emit['Estado'] == 'CONCILIADO']
+        if filtro_benef != "Todos":
+            df_emit = df_emit[df_emit['Beneficiario'] == filtro_benef]
 
         if df_emit.empty:
             st.info("No hay cheques en esta categoría.")
