@@ -3217,9 +3217,14 @@ elif sel == "CHEQUES":
     alertas = []
     if not st.session_state.cheques_emitidos.empty:
         for _, r in st.session_state.cheques_emitidos[st.session_state.cheques_emitidos['Estado'] == 'PENDIENTE'].iterrows():
-            d = dias_vencer(r['Fecha Vencimiento'])
-            if d is not None and 0 <= d <= 7:
+            est_e, d = estado_cheque_cartera(r['Fecha Vencimiento'])
+            if est_e == "pendiente" and d is not None and d <= 7:
                 alertas.append(f"⚠️ **Cheque emitido #{r['Nro Cheque']}** a {r['Beneficiario']} vence en **{d} día(s)** — $ {float(r['Importe']):,.2f}")
+            elif est_e == "listo":
+                dias_rest = 30 + d
+                alertas.append(f"🟡 **Cheque emitido #{r['Nro Cheque']}** a {r['Beneficiario']} — pendiente de cobro, puede presentarse hasta en **{dias_rest} día(s)** — $ {float(r['Importe']):,.2f}")
+            elif est_e == "vencido":
+                alertas.append(f"🔴 **Cheque emitido VENCIDO #{r['Nro Cheque']}** a {r['Beneficiario']} — pasaron los 30 días de gracia — $ {float(r['Importe']):,.2f}")
     if not st.session_state.cheques_cartera.empty:
         for _, r in st.session_state.cheques_cartera[st.session_state.cheques_cartera['Estado'] == 'EN CARTERA'].iterrows():
             estado_c, d = estado_cheque_cartera(r['Fecha Vencimiento'])
@@ -3299,12 +3304,22 @@ elif sel == "CHEQUES":
             st.info("No hay cheques en esta categoría.")
         else:
             for i, row in df_emit.iterrows():
-                d_venc = dias_vencer(row['Fecha Vencimiento'])
+                est_e, d_venc = estado_cheque_cartera(row['Fecha Vencimiento']) if row['Estado'] == 'PENDIENTE' else (None, None)
                 alerta_color = ""
-                if row['Estado'] == 'PENDIENTE' and d_venc is not None:
-                    if d_venc < 0:   alerta_color = "border-left:4px solid #e74c3c;"
-                    elif d_venc <= 7: alerta_color = "border-left:4px solid #f39c12;"
-                    else:             alerta_color = "border-left:4px solid #2ecc71;"
+                if est_e == "vencido":    alerta_color = "border-left:4px solid #e74c3c;"
+                elif est_e == "listo":    alerta_color = "border-left:4px solid #27ae60;"
+                elif est_e == "pendiente" and d_venc is not None and d_venc <= 7: alerta_color = "border-left:4px solid #f39c12;"
+                elif est_e == "pendiente": alerta_color = "border-left:4px solid #2ecc71;"
+
+                if est_e == "vencido":
+                    badge_venc = "&nbsp;·&nbsp; <b style=color:#e74c3c>⛔ VENCIDO (pasaron 30 días)</b>"
+                elif est_e == "listo":
+                    dias_rest = 30 + d_venc
+                    badge_venc = f"&nbsp;·&nbsp; <b style=color:#f39c12>⚠️ PENDIENTE DE COBRO — {dias_rest}d restantes</b>"
+                elif est_e == "pendiente" and d_venc is not None and d_venc <= 7:
+                    badge_venc = f"&nbsp;·&nbsp; <b style=color:#f39c12>Vence en {d_venc}d</b>"
+                else:
+                    badge_venc = ""
 
                 with st.container():
                     col_inf, col_acc = st.columns([0.82, 0.18])
@@ -3313,7 +3328,7 @@ elif sel == "CHEQUES":
                         f"<b>#{row['Nro Cheque']}</b> — {row['Tipo']} — {row['Banco']} &nbsp;|&nbsp; "
                         f"Beneficiario: <b>{row['Beneficiario']}</b><br>"
                         f"Emisión: {row['Fecha Emisión']} &nbsp;·&nbsp; Vencimiento: <b>{row['Fecha Vencimiento']}</b>"
-                        f"{'&nbsp;·&nbsp; <b style=color:#e74c3c>VENCIDO</b>' if d_venc is not None and d_venc < 0 else (f'&nbsp;·&nbsp; <b style=color:#f39c12>{d_venc}d</b>' if d_venc is not None and d_venc<=7 else '')}"
+                        f"{badge_venc}"
                         f"&nbsp;&nbsp; {badge_estado(row['Estado'])}<br>"
                         f"<b style='font-size:17px;color:#5e2d61;'>$ {float(row['Importe']):,.2f}</b>"
                         f"{'&nbsp;&nbsp;<small>' + str(row['Observaciones']) + '</small>' if str(row['Observaciones']) not in ['-',''] else ''}"
