@@ -529,50 +529,40 @@ def generar_html_cierre_caja(data):
         {subtotales_html if subtotales_html else '<tr><td colspan="2" style="padding:8px 12px;color:#aaa;">Sin movimientos</td></tr>'}
     </table>
 
-    <div class="total-box">
-        <span class="total-label">SALDO DEL PERÍODO</span>
-        <span class="total-monto">$ {total:,.2f}</span>
-    </div>
-
-    <div style="background:#f0f2f6;border-radius:10px;padding:16px 24px;margin-top:16px;display:flex;justify-content:space-between;align-items:center;">
-        <div>
-            <div style="font-size:12px;color:#888;font-weight:bold;">SALDO ACUMULADO ANTES DEL CIERRE</div>
-            <div style="font-size:22px;font-weight:bold;color:#5e2d61;">$ {data.get('saldo_previo', total):,.2f}</div>
-        </div>
-        <div style="text-align:right;">
-            <div style="font-size:12px;color:#888;font-weight:bold;">SALDO DESPUÉS DEL CIERRE</div>
-            <div style="font-size:22px;font-weight:bold;color:#27ae60;">$ 0,00 ✓</div>
-        </div>
-    </div>
-
-    <div style="margin-top:20px;border-radius:10px;overflow:hidden;border:1px solid #ddd;">
+    <div style="margin-top:20px;border-radius:10px;overflow:hidden;border:2px solid #5e2d61;">
         <div style="background:#5e2d61;color:white;padding:10px 16px;font-weight:bold;font-size:13px;letter-spacing:1px;">
-            💰 EFECTIVO DISPONIBLE EN CAJA (AL MOMENTO DEL CIERRE)
+            💰 EFECTIVO DISPONIBLE EN CAJA
         </div>
         <div style="display:flex;gap:0;">
             <div style="flex:1;padding:16px 20px;border-right:1px solid #eee;background:#f0fff4;">
                 <div style="font-size:11px;color:#888;font-weight:bold;">💵 EFECTIVO (PESOS)</div>
-                <div style="font-size:24px;font-weight:bold;color:#27ae60;margin-top:6px;">$ {data.get('efectivo_disponible', 0):,.2f}</div>
+                <div style="font-size:26px;font-weight:bold;color:#27ae60;margin-top:6px;">$ {data.get('efectivo_disponible', 0):,.2f}</div>
             </div>
             <div style="flex:1;padding:16px 20px;background:#fffaf0;">
                 <div style="font-size:11px;color:#888;font-weight:bold;">💲 DÓLARES</div>
-                <div style="font-size:24px;font-weight:bold;color:#d4a017;margin-top:6px;">USD {data.get('dolares_disponibles', 0):,.2f}</div>
+                <div style="font-size:26px;font-weight:bold;color:#d4a017;margin-top:6px;">USD {data.get('dolares_disponibles', 0):,.2f}</div>
             </div>
         </div>
-        {f"""
-        <div style="background:#fff3cd;border-top:1px solid #ffc107;padding:12px 20px;display:flex;justify-content:space-between;align-items:center;">
-            <div>
-                <div style="font-size:11px;color:#856404;font-weight:bold;">🏧 RETIRO AL CIERRE ({data.get('tipo_retiro','EFECTIVO')})</div>
-                <div style="font-size:20px;font-weight:bold;color:#856404;margin-top:4px;">{'$' if data.get('tipo_retiro') == 'EFECTIVO' else 'USD'} {data.get('monto_retiro', 0):,.2f}</div>
-            </div>
-            <div style="text-align:right;">
-                <div style="font-size:11px;color:#856404;font-weight:bold;">QUEDA EN CAJA ({data.get('tipo_retiro','EFECTIVO')})</div>
-                <div style="font-size:20px;font-weight:bold;color:#856404;margin-top:4px;">
-                    {'$' if data.get('tipo_retiro') == 'EFECTIVO' else 'USD'} {(data.get('efectivo_disponible', 0) - data.get('monto_retiro', 0)) if data.get('tipo_retiro') == 'EFECTIVO' else (data.get('dolares_disponibles', 0) - data.get('monto_retiro', 0)):,.2f}
+
+        <div style="background:#fff3cd;border-top:2px solid #ffc107;padding:14px 20px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+                <div>
+                    <div style="font-size:11px;color:#856404;font-weight:bold;text-transform:uppercase;">🏧 Monto retirado al cierre ({data.get('tipo_retiro','EFECTIVO')})</div>
+                    <div style="font-size:24px;font-weight:bold;color:#c0392b;margin-top:4px;">
+                        {'$' if data.get('tipo_retiro','EFECTIVO') == 'EFECTIVO' else 'USD'} {data.get('monto_retiro', 0):,.2f}
+                    </div>
+                </div>
+                <div style="font-size:28px;color:#888;">→</div>
+                <div style="text-align:right;">
+                    <div style="font-size:11px;color:#856404;font-weight:bold;text-transform:uppercase;">
+                        {'✅ Saldo restante en caja' if (data.get('efectivo_disponible',0) - data.get('monto_retiro',0) if data.get('tipo_retiro','EFECTIVO')=='EFECTIVO' else data.get('dolares_disponibles',0) - data.get('monto_retiro',0)) >= 0 else '⚠️ Saldo restante en caja'}
+                    </div>
+                    <div style="font-size:24px;font-weight:bold;margin-top:4px;color:{'#27ae60' if (data.get('efectivo_disponible',0) - data.get('monto_retiro',0) if data.get('tipo_retiro','EFECTIVO')=='EFECTIVO' else data.get('dolares_disponibles',0) - data.get('monto_retiro',0)) >= 0 else '#e74c3c'};">
+                        {'$' if data.get('tipo_retiro','EFECTIVO') == 'EFECTIVO' else 'USD'} {(data.get('efectivo_disponible',0) - data.get('monto_retiro',0)) if data.get('tipo_retiro','EFECTIVO')=='EFECTIVO' else (data.get('dolares_disponibles',0) - data.get('monto_retiro',0)):,.2f}
+                    </div>
                 </div>
             </div>
         </div>
-        """ if data.get('monto_retiro', 0) > 0 else ""}
     </div>
 
     {"<div style='background:#fff8e1;border:1px solid #f39c12;border-radius:8px;padding:14px;margin-top:20px;font-size:13px;'><b>📝 Observaciones:</b><br><br>" + data['observaciones'] + "</div>" if data.get('observaciones') else ""}
@@ -1491,29 +1481,16 @@ elif sel == "TESORERIA":
         else:
             st.markdown("Generá el cierre oficial de caja para el período que elijas. Se incluyen todos los movimientos y el saldo por forma de pago.")
 
-            c_cie1, c_cie2 = st.columns(2)
+            hoy = date.today()
+            c_cie1, c_cie2, c_cie3 = st.columns(3)
             if es_admin:
                 caja_cierre = c_cie1.selectbox("Caja a cerrar", TODAS_CAJAS, key="cierre_caja_sel")
             else:
                 caja_cierre = caja_propia
                 c_cie1.markdown(f"**Caja:** {caja_propia}")
 
-            periodo_cierre = c_cie2.radio("Período", ["Hoy", "Esta semana", "Este mes", "Personalizado"], horizontal=True, key="cierre_periodo")
-
-            hoy = date.today()
-            if periodo_cierre == "Hoy":
-                fecha_desde = hoy
-                fecha_hasta = hoy
-            elif periodo_cierre == "Esta semana":
-                fecha_desde = hoy - timedelta(days=hoy.weekday())
-                fecha_hasta = hoy
-            elif periodo_cierre == "Este mes":
-                fecha_desde = hoy.replace(day=1)
-                fecha_hasta = hoy
-            else:
-                cp1, cp2 = st.columns(2)
-                fecha_desde = cp1.date_input("Desde", value=hoy.replace(day=1), key="cierre_desde")
-                fecha_hasta = cp2.date_input("Hasta", value=hoy, key="cierre_hasta")
+            fecha_desde = c_cie2.date_input("Desde", value=hoy.replace(day=1), key="cierre_desde")
+            fecha_hasta = c_cie3.date_input("Hasta", value=hoy, key="cierre_hasta")
 
             obs_cierre = st.text_area("Observaciones (opcional)", placeholder="Ej: Se entregó efectivo al supervisor. Faltante de $...", key="cierre_obs", height=80)
 
