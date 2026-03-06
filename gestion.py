@@ -3382,7 +3382,7 @@ elif sel == "CHEQUES":
             for a in alertas:
                 st.warning(a)
 
-    tab_emit, tab_cart, tab_venc, tab_export = st.tabs(["📤 CHEQUES EMITIDOS", "📂 CHEQUES EN CARTERA", "📅 PRÓXIMOS VENCIMIENTOS", "📥 EXPORTAR A EXCEL"])
+    tab_emit, tab_cart, tab_venc, tab_buscar, tab_export = st.tabs(["📤 CHEQUES EMITIDOS", "📂 CHEQUES EN CARTERA", "📅 PRÓXIMOS VENCIMIENTOS", "🔍 BUSCADOR", "📥 EXPORTAR A EXCEL"])
 
     # ══════════════════════════════════════════════════════
     # TAB 1 — CHEQUES EMITIDOS
@@ -3734,7 +3734,151 @@ elif sel == "CHEQUES":
             st.success(f"✅ No hay cheques con vencimiento en los próximos {dias_filtro} días.")
 
     # ══════════════════════════════════════════════════════
-    # TAB 4 — EXPORTAR CHEQUES A EXCEL
+    # TAB 4 — BUSCADOR DE CHEQUES
+    # ══════════════════════════════════════════════════════
+    with tab_buscar:
+        st.markdown("##### 🔍 Buscador de Cheques")
+        st.markdown("Ingresá el número de cheque (total o parcial) para encontrarlo en cualquier cartera.")
+
+        busq_col1, busq_col2 = st.columns([2, 2])
+        nro_buscar   = busq_col1.text_input("Número de Cheque", placeholder="Ej: 001234", key="busq_nro")
+        tipo_buscar  = busq_col2.selectbox("Buscar en", ["Todos", "📤 Emitidos", "📂 Cartera"], key="busq_tipo")
+
+        resultados_emit = []
+        resultados_cart = []
+
+        if nro_buscar.strip():
+            nro_norm = nro_buscar.strip()
+
+            # ── Buscar en cheques emitidos ──
+            if tipo_buscar in ("Todos", "📤 Emitidos") and not st.session_state.cheques_emitidos.empty:
+                mask_e = st.session_state.cheques_emitidos['Nro Cheque'].astype(str).str.contains(nro_norm, case=False, na=False)
+                resultados_emit = st.session_state.cheques_emitidos[mask_e].copy()
+
+            # ── Buscar en cheques en cartera ──
+            if tipo_buscar in ("Todos", "📂 Cartera") and not st.session_state.cheques_cartera.empty:
+                mask_c = st.session_state.cheques_cartera['Nro Cheque'].astype(str).str.contains(nro_norm, case=False, na=False)
+                resultados_cart = st.session_state.cheques_cartera[mask_c].copy()
+
+            total_encontrados = (len(resultados_emit) if hasattr(resultados_emit, '__len__') else 0) + \
+                                (len(resultados_cart) if hasattr(resultados_cart, '__len__') else 0)
+
+            if total_encontrados == 0:
+                st.warning(f"⚠️ No se encontró ningún cheque con el número **{nro_norm}**.")
+            else:
+                st.success(f"✅ Se encontraron **{total_encontrados}** resultado(s) para el número **{nro_norm}**.")
+                st.markdown("---")
+
+                # ── Resultados EMITIDOS ──
+                if hasattr(resultados_emit, '__len__') and len(resultados_emit) > 0:
+                    st.markdown("#### 📤 Cheques Emitidos")
+                    for _, r in resultados_emit.iterrows():
+                        est_r, d_r = estado_cheque_cartera(r['Fecha Vencimiento']) if r['Estado'] == 'PENDIENTE' else (None, None)
+                        if r['Estado'] == 'CONCILIADO':
+                            color_b = "#2ecc71"; badge_txt = "✅ CONCILIADO"
+                        elif est_r == "vencido":
+                            color_b = "#e74c3c"; badge_txt = "⛔ VENCIDO"
+                        elif est_r == "listo":
+                            color_b = "#f39c12"; badge_txt = f"⚠️ LISTO PARA COBRAR"
+                        else:
+                            color_b = "#3498db"; badge_txt = f"🕐 PENDIENTE"
+
+                        st.markdown(
+                            f"<div style='background:#f0f7ff;border-radius:10px;padding:16px 20px;"
+                            f"border-left:6px solid {color_b};margin-bottom:12px;'>"
+                            f"<div style='display:flex;justify-content:space-between;align-items:flex-start;'>"
+                            f"<div>"
+                            f"<span style='font-size:18px;font-weight:bold;color:#5e2d61;'>Cheque #{r['Nro Cheque']}</span>"
+                            f"&nbsp;&nbsp;<span style='background:{color_b};color:white;padding:3px 10px;"
+                            f"border-radius:12px;font-size:12px;font-weight:bold;'>{badge_txt}</span><br><br>"
+                            f"<table style='font-size:13px;border-collapse:collapse;'>"
+                            f"<tr><td style='color:#888;padding:3px 16px 3px 0;'>🏦 Banco emisor</td>"
+                            f"<td style='font-weight:bold;'>{r.get('Banco','-')}</td></tr>"
+                            f"<tr><td style='color:#888;padding:3px 16px 3px 0;'>🏷️ Tipo</td>"
+                            f"<td>{r.get('Tipo','-')}</td></tr>"
+                            f"<tr><td style='color:#888;padding:3px 16px 3px 0;'>👤 Beneficiario</td>"
+                            f"<td style='font-weight:bold;'>{r.get('Beneficiario','-')}</td></tr>"
+                            f"<tr><td style='color:#888;padding:3px 16px 3px 0;'>📅 Fecha Emisión</td>"
+                            f"<td>{r.get('Fecha Emisión','-')}</td></tr>"
+                            f"<tr><td style='color:#888;padding:3px 16px 3px 0;'>📅 Fecha Vencimiento</td>"
+                            f"<td><b>{r.get('Fecha Vencimiento','-')}</b></td></tr>"
+                            f"{'<tr><td style=color:#888;padding:3px 16px 3px 0;>📅 Fecha Conciliación</td><td>' + str(r.get('Fecha Conciliación','-')) + '</td></tr>' if str(r.get('Fecha Conciliación','-')) not in ['-',''] else ''}"
+                            f"{'<tr><td style=color:#888;padding:3px 16px 3px 0;>📝 Observaciones</td><td>' + str(r.get('Observaciones','-')) + '</td></tr>' if str(r.get('Observaciones','-')) not in ['-','','nan'] else ''}"
+                            f"</table></div>"
+                            f"<div style='text-align:right;'>"
+                            f"<div style='font-size:28px;font-weight:bold;color:#5e2d61;'>$ {float(r['Importe']):,.2f}</div>"
+                            f"<div style='font-size:11px;color:#888;margin-top:4px;'>IMPORTE</div>"
+                            f"</div></div></div>",
+                            unsafe_allow_html=True
+                        )
+
+                # ── Resultados CARTERA ──
+                if hasattr(resultados_cart, '__len__') and len(resultados_cart) > 0:
+                    st.markdown("#### 📂 Cheques en Cartera")
+                    for _, r in resultados_cart.iterrows():
+                        est_r, d_r = estado_cheque_cartera(r['Fecha Vencimiento']) if r['Estado'] == 'EN CARTERA' else (None, None)
+                        if r['Estado'] == 'DEPOSITADO':
+                            color_b = "#2ecc71"; badge_txt = "✅ DEPOSITADO"
+                        elif r['Estado'] == 'APLICADO PAGO':
+                            color_b = "#9b59b6"; badge_txt = "💸 APLICADO A PAGO"
+                        elif est_r == "vencido":
+                            color_b = "#e74c3c"; badge_txt = "⛔ VENCIDO"
+                        elif est_r == "listo":
+                            color_b = "#27ae60"; badge_txt = "✅ LISTO PARA COBRAR"
+                        else:
+                            color_b = "#3498db"; badge_txt = "🕐 EN CARTERA"
+
+                        destino_txt = ""
+                        if str(r.get('Destino', '-')) not in ['-', '', 'nan']:
+                            destino_txt = f"<tr><td style='color:#888;padding:3px 16px 3px 0;'>🏁 Destino / Aplicado a</td><td style='font-weight:bold;'>{r['Destino']}</td></tr>"
+                        fecha_aplic_txt = ""
+                        if str(r.get('Fecha Aplicación', '-')) not in ['-', '', 'nan']:
+                            fecha_aplic_txt = f"<tr><td style='color:#888;padding:3px 16px 3px 0;'>📅 Fecha Aplicación</td><td>{r['Fecha Aplicación']}</td></tr>"
+
+                        st.markdown(
+                            f"<div style='background:#f0fff8;border-radius:10px;padding:16px 20px;"
+                            f"border-left:6px solid {color_b};margin-bottom:12px;'>"
+                            f"<div style='display:flex;justify-content:space-between;align-items:flex-start;'>"
+                            f"<div>"
+                            f"<span style='font-size:18px;font-weight:bold;color:#5e2d61;'>Cheque #{r['Nro Cheque']}</span>"
+                            f"&nbsp;&nbsp;<span style='background:{color_b};color:white;padding:3px 10px;"
+                            f"border-radius:12px;font-size:12px;font-weight:bold;'>{badge_txt}</span><br><br>"
+                            f"<table style='font-size:13px;border-collapse:collapse;'>"
+                            f"<tr><td style='color:#888;padding:3px 16px 3px 0;'>🏦 Banco librador</td>"
+                            f"<td style='font-weight:bold;'>{r.get('Banco Librador','-')}</td></tr>"
+                            f"<tr><td style='color:#888;padding:3px 16px 3px 0;'>🏷️ Tipo</td>"
+                            f"<td>{r.get('Tipo','-')}</td></tr>"
+                            f"<tr><td style='color:#888;padding:3px 16px 3px 0;'>✍️ Librador</td>"
+                            f"<td style='font-weight:bold;'>{r.get('Librador','-')}</td></tr>"
+                            f"<tr><td style='color:#888;padding:3px 16px 3px 0;'>📥 Recibido de</td>"
+                            f"<td>{r.get('Observaciones','-')}</td></tr>"
+                            f"<tr><td style='color:#888;padding:3px 16px 3px 0;'>📅 Fecha Recepción</td>"
+                            f"<td>{r.get('Fecha Recepción','-')}</td></tr>"
+                            f"<tr><td style='color:#888;padding:3px 16px 3px 0;'>📅 Fecha Vencimiento</td>"
+                            f"<td><b>{r.get('Fecha Vencimiento','-')}</b></td></tr>"
+                            f"{destino_txt}{fecha_aplic_txt}"
+                            f"</table></div>"
+                            f"<div style='text-align:right;'>"
+                            f"<div style='font-size:28px;font-weight:bold;color:#5e2d61;'>$ {float(r['Importe']):,.2f}</div>"
+                            f"<div style='font-size:11px;color:#888;margin-top:4px;'>IMPORTE</div>"
+                            f"</div></div></div>",
+                            unsafe_allow_html=True
+                        )
+        else:
+            # Estado inicial — mostrar stats rápidos
+            total_emit = len(st.session_state.cheques_emitidos) if not st.session_state.cheques_emitidos.empty else 0
+            total_cart = len(st.session_state.cheques_cartera)  if not st.session_state.cheques_cartera.empty  else 0
+            emit_pend  = len(st.session_state.cheques_emitidos[st.session_state.cheques_emitidos['Estado'] == 'PENDIENTE']) if not st.session_state.cheques_emitidos.empty else 0
+            cart_disp  = len(st.session_state.cheques_cartera[st.session_state.cheques_cartera['Estado'] == 'EN CARTERA'])  if not st.session_state.cheques_cartera.empty  else 0
+            sb1, sb2, sb3, sb4 = st.columns(4)
+            sb1.metric("📤 Emitidos (total)", total_emit)
+            sb2.metric("📤 Pendientes",        emit_pend)
+            sb3.metric("📂 En cartera (total)", total_cart)
+            sb4.metric("📂 Disponibles",        cart_disp)
+            st.info("💡 Escribí el número de cheque arriba para buscarlo.")
+
+    # ══════════════════════════════════════════════════════
+    # TAB 5 — EXPORTAR CHEQUES A EXCEL
     # ══════════════════════════════════════════════════════
     with tab_export:
         import io
