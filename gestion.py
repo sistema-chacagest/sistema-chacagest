@@ -2049,11 +2049,11 @@ elif sel == "TESORERIA":
                 df_cierre = df_caja_base.copy()
                 df_dolar_cierre = df_dolar_base.copy()
 
-            # ── Saldo disponible: TOTAL de todos los movimientos de la caja ──
-            # La forma de pago es informativa; el dinero está en caja independientemente de cómo entró.
+            # ── Saldo disponible por forma ──
             mask_dolar_base = mask_forma(df_cierre['Forma'], "DOLARES")
-            # Excluir dólares del total en pesos
-            efectivo_disponible = df_cierre[~mask_dolar_base]['Monto'].sum()
+            mask_efec_base  = mask_forma(df_cierre['Forma'], "EFECTIVO")
+            # Solo efectivo físico disponible para rendir
+            efectivo_disponible = df_cierre[mask_efec_base]['Monto'].sum()
             if not df_dolar_cierre.empty:
                 dolares_disponibles = df_dolar_cierre['Monto'].sum()
             else:
