@@ -2280,21 +2280,25 @@ elif sel == "TESORERIA":
 
                 # ── TRANSFERENCIA / EFECTIVO ─────────────────────────────────────────
                 if forma_op in ["TRANSFERENCIA", "EFECTIVO"]:
-                    cj_p = st.selectbox("Caja de Salida", opc_cajas, key="op_caja_std")
                     with st.form("f_op_std", clear_on_submit=True):
+                        cj_p  = st.selectbox("Caja de Salida", opc_cajas)
                         mon_p = st.number_input("Monto $", min_value=0.0, step=0.01, value=float(round(monto_sugerido_op, 2)))
+                        st.caption(f"Proveedor: **{p_sel}** | Forma: **{forma_op}**")
                         if facturas_op_desc:
                             st.markdown(f"*Comprobantes seleccionados: {len(facturas_op_desc)}*")
                         if st.form_submit_button("✅ GENERAR ORDEN DE PAGO"):
-                            if p_sel and mon_p > 0:
-                                nt = pd.DataFrame([[date.today(), "PAGO PROV", cj_p, forma_op, "Orden de Pago", p_sel, -mon_p, afip_p]], columns=COL_TESORERIA)
-                                nc = pd.DataFrame([[date.today(), p_sel, "-", "ORDEN PAGO", 0, 0, 0, 0, 0, 0, -mon_p]], columns=COL_COMPRAS)
+                            _prov  = st.session_state.get("op_prov", p_sel)
+                            _forma = st.session_state.get("op_forma", forma_op)
+                            _afip  = st.session_state.get("op_afip", afip_p)
+                            if _prov and mon_p > 0:
+                                nt = pd.DataFrame([[date.today(), "PAGO PROV", cj_p, _forma, "Orden de Pago", _prov, -mon_p, _afip]], columns=COL_TESORERIA)
+                                nc = pd.DataFrame([[date.today(), _prov, "-", "ORDEN PAGO", 0, 0, 0, 0, 0, 0, -mon_p]], columns=COL_COMPRAS)
                                 st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
                                 st.session_state.compras   = pd.concat([st.session_state.compras, nc], ignore_index=True)
                                 guardar_datos("tesoreria", st.session_state.tesoreria)
                                 guardar_datos("compras", st.session_state.compras)
-                                st.session_state.html_op_ready = generar_html_orden_pago({"Fecha": date.today(), "Proveedor": p_sel, "Concepto": f"Pago {forma_op}", "Caja/Banco": cj_p, "Monto": mon_p, "Ref AFIP": afip_p})
-                                st.session_state.prov_ready = p_sel
+                                st.session_state.html_op_ready = generar_html_orden_pago({"Fecha": date.today(), "Proveedor": _prov, "Concepto": f"Pago {_forma}", "Caja/Banco": cj_p, "Monto": mon_p, "Ref AFIP": _afip})
+                                st.session_state.prov_ready = _prov
                                 st.rerun()
                             else:
                                 st.warning("Seleccioná proveedor y completá el monto.")
@@ -2814,20 +2818,44 @@ elif sel == "CTA CTE PROVEEDOR":
                         st.warning("Ingresá un monto mayor a cero.")
 
         st.markdown("---")
-        df_p  = st.session_state.compras[st.session_state.compras['Proveedor'] == p_sel]
-        # Separar saldo inicial del resto para mostrarlo destacado
-        df_p_si   = df_p[df_p['Tipo Factura'] == 'SALDO INICIAL']
-        df_p_real = df_p[df_p['Tipo Factura'] != 'SALDO INICIAL']
-        saldo_ini_prov = df_p_si['Total'].sum()
-        saldo_mov_prov = df_p_real['Total'].sum()
-        saldo_total_prov = df_p['Total'].sum()
+        df_p  = st.session_state.compras[st.session_state.compras['Proveedor'] == p_sel].copy()
 
-        sp_m1, sp_m2, sp_m3 = st.columns(3)
-        if saldo_ini_prov != 0:
-            sp_m1.metric("Saldo Inicial Migrado", f"$ {saldo_ini_prov:,.2f}")
-        sp_m2.metric("Movimientos del Sistema", f"$ {saldo_mov_prov:,.2f}")
-        sp_m3.metric("SALDO TOTAL PENDIENTE",    f"$ {saldo_total_prov:,.2f}")
-        st.dataframe(df_p, use_container_width=True)
+        # Mostrar detalle cronológico con Debe/Haber/Saldo
+        if df_p.empty:
+            st.info(f"No hay movimientos registrados para {p_sel}.")
+        else:
+            df_p['Total'] = pd.to_numeric(df_p['Total'], errors='coerce').fillna(0)
+            df_p_sorted = df_p.sort_values('Fecha', na_position='last').reset_index(drop=True)
+
+            saldo_ini_prov   = df_p[df_p['Tipo Factura'] == 'SALDO INICIAL']['Total'].sum()
+            saldo_total_prov = df_p['Total'].sum()
+            total_facturas   = df_p[df_p['Total'] > 0]['Total'].sum()
+            total_pagos      = df_p[df_p['Total'] < 0]['Total'].sum()
+
+            sp_m1, sp_m2, sp_m3 = st.columns(3)
+            sp_m1.metric("Total Facturado",    f"$ {total_facturas:,.2f}")
+            sp_m2.metric("Total Pagado",        f"$ {abs(total_pagos):,.2f}")
+            sp_m3.metric("SALDO PENDIENTE",     f"$ {saldo_total_prov:,.2f}")
+            if saldo_ini_prov != 0:
+                st.caption(f"Incluye saldo inicial migrado: $ {saldo_ini_prov:,.2f}")
+
+            st.markdown("---")
+
+            # Tabla con Debe / Haber / Saldo acumulado
+            saldo_acum = 0.0
+            filas_det = []
+            for _, r in df_p_sorted.iterrows():
+                monto = float(r['Total'])
+                saldo_acum += monto
+                filas_det.append({
+                    "Fecha":        str(r.get('Fecha', '-')),
+                    "Tipo":         str(r.get('Tipo Factura', '-')),
+                    "Punto Venta":  str(r.get('Punto Venta', '-')),
+                    "Debe":         f"$ {monto:,.2f}"   if monto > 0 else "",
+                    "Haber":        f"$ {abs(monto):,.2f}" if monto < 0 else "",
+                    "Saldo":        f"$ {saldo_acum:,.2f}",
+                })
+            st.dataframe(pd.DataFrame(filas_det), use_container_width=True, hide_index=True)
     else:
         st.info("No hay proveedores registrados.")
 
