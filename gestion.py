@@ -943,11 +943,11 @@ with st.sidebar:
 
     # ── Menú principal: Admin ve todo, Operador no ve Dashboard ──
     if es_admin:
-        opciones_menu = ["CALENDARIO", "DASHBOARD", "VENTAS", "COMPRAS", "FACTURACION", "TESORERIA", "CHEQUES"]
-        iconos_menu   = ["calendar3", "bar-chart-line", "cart4", "bag-check", "receipt-cutoff", "safe", "bank2"]
+        opciones_menu = ["CALENDARIO", "DASHBOARD", "VENTAS", "COMPRAS", "FACTURACION", "TESORERIA", "CHEQUES", "BALANCE", "IMPORTAR"]
+        iconos_menu   = ["calendar3", "bar-chart-line", "cart4", "bag-check", "receipt-cutoff", "safe", "bank2", "bar-chart-steps", "cloud-upload"]
     else:
-        opciones_menu = ["CALENDARIO", "VENTAS", "COMPRAS", "FACTURACION", "TESORERIA", "CHEQUES"]
-        iconos_menu   = ["calendar3", "cart4", "bag-check", "receipt-cutoff", "safe", "bank2"]
+        opciones_menu = ["CALENDARIO", "VENTAS", "COMPRAS", "FACTURACION", "TESORERIA", "CHEQUES", "IMPORTAR"]
+        iconos_menu   = ["calendar3", "cart4", "bag-check", "receipt-cutoff", "safe", "bank2", "cloud-upload"]
 
     menu_principal = option_menu(
         menu_title=None,
@@ -1055,6 +1055,51 @@ else:
 if sel == "DASHBOARD" and es_operador:
     st.error("🚫 Acceso denegado. Solo el administrador puede ver el Dashboard.")
     st.stop()
+
+# ===========================================================
+# FUNCIONES AUXILIARES — PERÍODO DE BALANCE (SEP → AGO)
+# ===========================================================
+
+def get_periodos_balance(años_disponibles=None):
+    """
+    Devuelve lista de períodos de balance disponibles en formato
+    '2024-2025 (Sep 2024 – Ago 2025)'.
+    Si no se pasan años, genera desde 2023 hasta el actual+1.
+    """
+    hoy = date.today()
+    # Año de inicio del período actual: si estamos en Sep-Dic el período arranca este año,
+    # si estamos en Ene-Ago arranca el año anterior.
+    año_inicio_actual = hoy.year if hoy.month >= 9 else hoy.year - 1
+    periodos = []
+    # Generar desde 2022 hasta el período actual
+    for y in range(2022, año_inicio_actual + 1):
+        label = f"{y}-{y+1}  (Sep {y} – Ago {y+1})"
+        periodos.append((label, y))
+    return list(reversed(periodos))   # más reciente primero
+
+def filtrar_por_balance(df, col_fecha, año_inicio_balance):
+    """
+    Filtra un DataFrame por período de balance Sep/Ago.
+    año_inicio_balance: año en que comienza el período (ej. 2025 para Sep2025-Ago2026).
+    """
+    if df is None or df.empty:
+        return df
+    df = df.copy()
+    df[col_fecha] = pd.to_datetime(df[col_fecha], errors='coerce')
+    inicio = pd.Timestamp(año_inicio_balance, 9, 1)
+    fin    = pd.Timestamp(año_inicio_balance + 1, 8, 31)
+    return df[(df[col_fecha] >= inicio) & (df[col_fecha] <= fin)]
+
+def label_periodo_balance(año_inicio):
+    return f"Sep {año_inicio} – Ago {año_inicio + 1}"
+
+# Determinar período de balance actual automáticamente
+_hoy = date.today()
+BALANCE_ACTUAL_INICIO = _hoy.year if _hoy.month >= 9 else _hoy.year - 1
+
+# Selector de período de balance (se guarda en session_state para usar en toda la app)
+if "balance_año" not in st.session_state:
+    st.session_state.balance_año = BALANCE_ACTUAL_INICIO
 
 # --- 6. MÓDULOS ---
 
@@ -4437,3 +4482,527 @@ elif sel == "CHEQUES":
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 type="primary"
             )
+
+# =============================================================
+# MÓDULO: BALANCE POR PERÍODO (SEP – AGO)
+# =============================================================
+elif sel == "BALANCE":
+    st.header("📊 Balance por Período Sep – Ago")
+    st.markdown("El período de balance va de **1° de Septiembre** al **31 de Agosto** del año siguiente.")
+
+    # ── Selector de período ──
+    periodos = get_periodos_balance()
+    opciones_label = [p[0] for p in periodos]
+    opciones_año   = [p[1] for p in periodos]
+
+    idx_actual = 0
+    for i, a in enumerate(opciones_año):
+        if a == BALANCE_ACTUAL_INICIO:
+            idx_actual = i
+            break
+
+    col_per, _ = st.columns([2, 3])
+    sel_idx = col_per.selectbox(
+        "Período de Balance",
+        options=range(len(opciones_label)),
+        format_func=lambda i: opciones_label[i],
+        index=idx_actual,
+        key="balance_sel_idx"
+    )
+    año_bal = opciones_año[sel_idx]
+    st.session_state.balance_año = año_bal
+    lbl_bal = label_periodo_balance(año_bal)
+
+    st.markdown(f"### 📆 Período: {lbl_bal}")
+    st.markdown("---")
+
+    # ── Filtrar datos por período ──
+    df_v_bal = filtrar_por_balance(st.session_state.viajes.copy(), 'Fecha Viaje', año_bal)
+    df_v_bal = df_v_bal[df_v_bal['Importe'] > 0] if not df_v_bal.empty else df_v_bal
+
+    df_g_bal = filtrar_por_balance(st.session_state.compras.copy(), 'Fecha', año_bal)
+
+    df_t_bal = filtrar_por_balance(st.session_state.tesoreria.copy(), 'Fecha', año_bal)
+
+    # ── KPIs principales ──
+    total_ing_bal = df_v_bal['Importe'].sum() if not df_v_bal.empty else 0
+    total_gas_bal = df_g_bal['Total'].sum()   if not df_g_bal.empty else 0
+    resultado_bal = total_ing_bal - total_gas_bal
+    margen_bal    = (resultado_bal / total_ing_bal * 100) if total_ing_bal > 0 else 0
+
+    cobros_bal  = df_t_bal[df_t_bal['Monto'] > 0]['Monto'].sum() if not df_t_bal.empty else 0
+    pagos_bal   = df_t_bal[df_t_bal['Monto'] < 0]['Monto'].sum() if not df_t_bal.empty else 0
+    saldo_teso  = cobros_bal + pagos_bal
+
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("💰 Ingresos (Viajes)",  f"$ {total_ing_bal:,.0f}")
+    k2.metric("💸 Egresos (Compras)",  f"$ {total_gas_bal:,.0f}")
+    k3.metric("📈 Resultado Operativo", f"$ {resultado_bal:,.0f}",
+              delta=f"{'▲' if resultado_bal >= 0 else '▼'} {abs(resultado_bal):,.0f}",
+              delta_color="normal" if resultado_bal >= 0 else "inverse")
+    k4.metric("📊 Margen %", f"{margen_bal:.1f} %")
+
+    st.markdown("---")
+
+    # ── Gráficos ──
+    MESES_BAL = [9, 10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8]
+    MESES_NOMBRES_BAL = {
+        1:"Ene", 2:"Feb", 3:"Mar", 4:"Abr", 5:"May", 6:"Jun",
+        7:"Jul", 8:"Ago", 9:"Sep", 10:"Oct", 11:"Nov", 12:"Dic"
+    }
+    MESES_LABEL_BAL = [MESES_NOMBRES_BAL[m] for m in MESES_BAL]
+
+    col_g1, col_g2 = st.columns(2)
+
+    with col_g1:
+        if not df_v_bal.empty:
+            df_v_bal['Mes'] = df_v_bal['Fecha Viaje'].dt.month
+            ing_mes_bal = df_v_bal.groupby('Mes')['Importe'].sum().reindex(MESES_BAL, fill_value=0)
+        else:
+            import numpy as np
+            ing_mes_bal = pd.Series([0]*12, index=MESES_BAL)
+
+        if not df_g_bal.empty:
+            df_g_bal['Mes'] = df_g_bal['Fecha'].dt.month
+            gas_mes_bal = df_g_bal.groupby('Mes')['Total'].sum().reindex(MESES_BAL, fill_value=0)
+        else:
+            gas_mes_bal = pd.Series([0]*12, index=MESES_BAL)
+
+        fig_b1 = go.Figure()
+        fig_b1.add_trace(go.Bar(name="Ingresos", x=MESES_LABEL_BAL, y=ing_mes_bal.values, marker_color="#5e2d61"))
+        fig_b1.add_trace(go.Bar(name="Gastos",   x=MESES_LABEL_BAL, y=gas_mes_bal.values, marker_color="#f39c12"))
+        fig_b1.update_layout(
+            title=f"Ingresos vs Gastos — {lbl_bal}",
+            barmode='group', plot_bgcolor='white',
+            legend=dict(orientation="h", y=-0.2),
+            yaxis_tickprefix="$", margin=dict(t=40, b=10)
+        )
+        st.plotly_chart(fig_b1, use_container_width=True)
+
+    with col_g2:
+        res_mes_bal = ing_mes_bal.values - gas_mes_bal.values
+        fig_b2 = go.Figure()
+        fig_b2.add_trace(go.Scatter(
+            x=MESES_LABEL_BAL, y=res_mes_bal,
+            mode='lines+markers+text',
+            text=[f"${v:,.0f}" for v in res_mes_bal],
+            textposition="top center",
+            line=dict(color="#5e2d61", width=3),
+            marker=dict(size=8, color="#f39c12"),
+            fill='tozeroy', fillcolor='rgba(94,45,97,0.1)',
+            name="Resultado"
+        ))
+        fig_b2.add_hline(y=0, line_dash="dash", line_color="red", opacity=0.5)
+        fig_b2.update_layout(
+            title=f"Resultado Neto Mensual — {lbl_bal}",
+            plot_bgcolor='white', yaxis_tickprefix="$",
+            margin=dict(t=40, b=10)
+        )
+        st.plotly_chart(fig_b2, use_container_width=True)
+
+    # ── Tabla mes a mes ──
+    st.markdown("---")
+    st.subheader("📋 Detalle Mes a Mes")
+
+    filas_bal = []
+    for m in MESES_BAL:
+        año_m = año_bal if m >= 9 else año_bal + 1
+        ing_m = ing_mes_bal[m] if m in ing_mes_bal.index else 0
+        gas_m = gas_mes_bal[m] if m in gas_mes_bal.index else 0
+        res_m = ing_m - gas_m
+        filas_bal.append({
+            "Mes": f"{MESES_NOMBRES_BAL[m]} {año_m}",
+            "Ingresos": f"$ {ing_m:,.2f}",
+            "Gastos":   f"$ {gas_m:,.2f}",
+            "Resultado": f"$ {res_m:,.2f}",
+            "Margen %": f"{(res_m/ing_m*100):.1f} %" if ing_m > 0 else "-"
+        })
+    df_tabla_bal = pd.DataFrame(filas_bal)
+    st.dataframe(df_tabla_bal, use_container_width=True, hide_index=True)
+
+    # ── Resumen de Tesorería del Período ──
+    st.markdown("---")
+    st.subheader("🏦 Movimientos de Tesorería del Período")
+    if not df_t_bal.empty:
+        col_t1, col_t2, col_t3 = st.columns(3)
+        col_t1.metric("📥 Cobros",  f"$ {cobros_bal:,.2f}")
+        col_t2.metric("📤 Pagos",   f"$ {abs(pagos_bal):,.2f}")
+        col_t3.metric("💼 Saldo Neto", f"$ {saldo_teso:,.2f}",
+                      delta_color="normal" if saldo_teso >= 0 else "inverse")
+        with st.expander("Ver detalle de movimientos"):
+            st.dataframe(df_t_bal.reset_index(drop=True), use_container_width=True, hide_index=True)
+    else:
+        st.info("Sin movimientos de tesorería en el período seleccionado.")
+
+    # ── Cheques del período ──
+    st.markdown("---")
+    st.subheader("🏦 Cheques del Período")
+    col_che1, col_che2 = st.columns(2)
+    with col_che1:
+        df_ce_bal = filtrar_por_balance(st.session_state.cheques_emitidos.copy(), 'Fecha Emisión', año_bal)
+        st.markdown("**📤 Cheques Emitidos**")
+        if not df_ce_bal.empty:
+            st.metric("Total Emitido", f"$ {df_ce_bal['Importe'].sum():,.2f}")
+            st.dataframe(df_ce_bal.reset_index(drop=True), use_container_width=True, hide_index=True)
+        else:
+            st.info("Sin cheques emitidos en el período.")
+    with col_che2:
+        df_cc_bal = filtrar_por_balance(st.session_state.cheques_cartera.copy(), 'Fecha Recepción', año_bal)
+        st.markdown("**📂 Cheques en Cartera**")
+        if not df_cc_bal.empty:
+            st.metric("Total en Cartera", f"$ {df_cc_bal['Importe'].sum():,.2f}")
+            st.dataframe(df_cc_bal.reset_index(drop=True), use_container_width=True, hide_index=True)
+        else:
+            st.info("Sin cheques en cartera en el período.")
+
+    st.caption(f"Período: {lbl_bal} | Generado: {pd.Timestamp.now().strftime('%d/%m/%Y %H:%M')} hs")
+
+
+# =============================================================
+# MÓDULO: IMPORTAR DATOS (Movimientos Bancarios y Cheques)
+# =============================================================
+elif sel == "IMPORTAR":
+    st.header("📥 Importar Datos desde Archivo")
+    st.info("Este módulo permite migrar movimientos bancarios y cheques desde otro sistema. **No modifica ningún dato existente** — solo agrega registros nuevos.")
+
+    sub_import = st.radio(
+        "¿Qué querés importar?",
+        ["🏦 Movimientos Bancarios / Tesorería", "📤 Cheques Emitidos", "📂 Cheques en Cartera"],
+        horizontal=True,
+        key="sub_import_sel"
+    )
+
+    # ─────────────────────────────────────────
+    # IMPORTAR MOVIMIENTOS BANCARIOS
+    # ─────────────────────────────────────────
+    if sub_import == "🏦 Movimientos Bancarios / Tesorería":
+        st.subheader("🏦 Importar Movimientos Bancarios / Tesorería")
+
+        with st.expander("📋 Ver formato esperado del archivo", expanded=False):
+            st.markdown("""
+**El archivo CSV o Excel debe tener estas columnas** (en cualquier orden, los nombres deben coincidir exactamente):
+
+| Columna | Descripción | Ejemplo |
+|---|---|---|
+| `Fecha` | Fecha del movimiento (DD/MM/AAAA) | 15/09/2025 |
+| `Tipo` | INGRESO o EGRESO | INGRESO |
+| `Caja/Banco` | Nombre de la caja o banco | BANCO PROVINCIA |
+| `Forma` | Forma de pago | TRANSFERENCIA |
+| `Concepto` | Descripción del movimiento | Cobro viaje Junín |
+| `Cliente/Proveedor` | Nombre del cliente o proveedor | Juan Pérez |
+| `Monto` | Importe (positivo=ingreso, negativo=egreso) | 15000 |
+| `Ref AFIP` | Referencia AFIP (puede estar vacío) | CBU 1234 |
+
+**Tip:** Para egresos podés poner el monto negativo (-5000) o positivo con Tipo=EGRESO.
+            """)
+            # Plantilla descargable
+            df_plantilla_t = pd.DataFrame(columns=COL_TESORERIA)
+            df_plantilla_t.loc[0] = ["15/09/2025", "INGRESO", "BANCO PROVINCIA", "TRANSFERENCIA",
+                                      "Cobro viaje", "Cliente Ejemplo", 15000, ""]
+            df_plantilla_t.loc[1] = ["16/09/2025", "EGRESO", "CAJA PRINCIPAL", "EFECTIVO",
+                                      "Pago combustible", "Proveedor Ejemplo", -5000, ""]
+            import io as _io
+            buf_t = _io.BytesIO()
+            df_plantilla_t.to_excel(buf_t, index=False)
+            buf_t.seek(0)
+            st.download_button("⬇️ Descargar plantilla Excel", data=buf_t.getvalue(),
+                               file_name="plantilla_movimientos.xlsx",
+                               mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+        archivo_teso = st.file_uploader(
+            "Subir archivo de movimientos (CSV o Excel)",
+            type=["csv", "xlsx", "xls"],
+            key="uploader_teso"
+        )
+
+        if archivo_teso is not None:
+            try:
+                if archivo_teso.name.endswith(".csv"):
+                    df_imp_t = pd.read_csv(archivo_teso, sep=None, engine='python', dtype=str)
+                else:
+                    df_imp_t = pd.read_excel(archivo_teso, dtype=str)
+
+                df_imp_t.columns = [c.strip() for c in df_imp_t.columns]
+
+                # Verificar columnas requeridas
+                cols_faltantes = [c for c in COL_TESORERIA if c not in df_imp_t.columns]
+                if cols_faltantes:
+                    st.error(f"❌ Faltan las columnas: {cols_faltantes}")
+                    st.stop()
+
+                # Normalizar
+                df_imp_t = df_imp_t[COL_TESORERIA].copy()
+                df_imp_t['Monto'] = pd.to_numeric(df_imp_t['Monto'], errors='coerce').fillna(0)
+
+                # Ajustar signo según Tipo si el monto viene positivo para egresos
+                mask_egr = df_imp_t['Tipo'].str.upper().str.contains('EGRESO', na=False)
+                df_imp_t.loc[mask_egr & (df_imp_t['Monto'] > 0), 'Monto'] *= -1
+
+                st.markdown(f"**{len(df_imp_t)} registros encontrados en el archivo:**")
+                st.dataframe(df_imp_t.head(20), use_container_width=True, hide_index=True)
+                if len(df_imp_t) > 20:
+                    st.caption(f"... y {len(df_imp_t)-20} más.")
+
+                # Filtro de período de balance
+                st.markdown("---")
+                periodos_imp = get_periodos_balance()
+                col_fi1, col_fi2 = st.columns(2)
+                filtrar_periodo = col_fi1.checkbox("Filtrar por período de balance antes de importar", value=False)
+                if filtrar_periodo:
+                    idx_imp = col_fi2.selectbox(
+                        "Período",
+                        options=range(len(periodos_imp)),
+                        format_func=lambda i: periodos_imp[i][0],
+                        key="imp_periodo_teso"
+                    )
+                    año_imp = periodos_imp[idx_imp][1]
+                    df_imp_t_fil = filtrar_por_balance(df_imp_t.copy(), 'Fecha', año_imp)
+                    st.info(f"Registros en el período {label_periodo_balance(año_imp)}: **{len(df_imp_t_fil)}**")
+                else:
+                    df_imp_t_fil = df_imp_t.copy()
+
+                # Detección de duplicados
+                df_actual_t = st.session_state.tesoreria.copy()
+                n_antes = len(df_actual_t)
+
+                # Clave de dedup: Fecha + Monto + Concepto + Cliente/Proveedor
+                def clave_teso(df):
+                    return (df['Fecha'].astype(str).str.strip() + "|" +
+                            df['Monto'].astype(str) + "|" +
+                            df['Concepto'].astype(str).str.strip() + "|" +
+                            df['Cliente/Proveedor'].astype(str).str.strip())
+
+                if not df_actual_t.empty:
+                    claves_existentes = set(clave_teso(df_actual_t))
+                    df_imp_t_fil['_clave'] = clave_teso(df_imp_t_fil)
+                    nuevos = df_imp_t_fil[~df_imp_t_fil['_clave'].isin(claves_existentes)].drop(columns=['_clave'])
+                    duplicados = len(df_imp_t_fil) - len(nuevos)
+                else:
+                    nuevos = df_imp_t_fil.copy()
+                    duplicados = 0
+
+                col_dup1, col_dup2 = st.columns(2)
+                col_dup1.metric("✅ Registros a importar", len(nuevos))
+                col_dup2.metric("⚠️ Duplicados detectados (no se importarán)", duplicados)
+
+                if len(nuevos) == 0:
+                    st.warning("Todos los registros ya existen en el sistema. No hay nada nuevo para importar.")
+                else:
+                    if st.button(f"✅ CONFIRMAR IMPORTACIÓN de {len(nuevos)} movimientos", type="primary", key="btn_imp_teso"):
+                        nuevos_clean = nuevos[COL_TESORERIA].copy()
+                        nuevos_clean['Monto'] = pd.to_numeric(nuevos_clean['Monto'], errors='coerce').fillna(0)
+                        df_actualizado = pd.concat(
+                            [st.session_state.tesoreria, nuevos_clean],
+                            ignore_index=True
+                        )
+                        ok = guardar_datos("tesoreria", df_actualizado)
+                        if ok:
+                            st.session_state.tesoreria = df_actualizado
+                            st.success(f"✅ {len(nuevos_clean)} movimientos importados correctamente. Total ahora: {len(df_actualizado)} registros.")
+                            st.balloons()
+                        else:
+                            st.error("❌ Error al guardar. Revisá la conexión e intentá de nuevo.")
+
+            except Exception as e:
+                st.error(f"❌ Error al procesar el archivo: {e}")
+
+    # ─────────────────────────────────────────
+    # IMPORTAR CHEQUES EMITIDOS
+    # ─────────────────────────────────────────
+    elif sub_import == "📤 Cheques Emitidos":
+        st.subheader("📤 Importar Cheques Emitidos")
+
+        with st.expander("📋 Ver formato esperado del archivo", expanded=False):
+            st.markdown("""
+**Columnas requeridas** (los nombres deben coincidir exactamente):
+
+| Columna | Descripción | Ejemplo |
+|---|---|---|
+| `Fecha Emisión` | DD/MM/AAAA | 10/09/2025 |
+| `Nro Cheque` | Número de cheque | 00012345 |
+| `Tipo` | PROPIO o DIFERIDO | PROPIO |
+| `Banco` | Nombre del banco | BANCO NACIÓN |
+| `Beneficiario` | A quién se emitió | Proveedor SA |
+| `Importe` | Monto del cheque | 50000 |
+| `Fecha Vencimiento` | DD/MM/AAAA | 10/10/2025 |
+| `Estado` | PENDIENTE / COBRADO / RECHAZADO | PENDIENTE |
+| `Fecha Conciliación` | DD/MM/AAAA (puede estar vacío) | |
+| `Observaciones` | Notas (puede estar vacío) | |
+            """)
+            df_plant_ce = pd.DataFrame(columns=COL_CHEQ_EMITIDOS)
+            df_plant_ce.loc[0] = ["10/09/2025","00012345","PROPIO","BANCO NACIÓN",
+                                   "Proveedor SA",50000,"10/10/2025","PENDIENTE","",""]
+            import io as _io2
+            buf_ce = _io2.BytesIO()
+            df_plant_ce.to_excel(buf_ce, index=False)
+            buf_ce.seek(0)
+            st.download_button("⬇️ Descargar plantilla Excel", data=buf_ce.getvalue(),
+                               file_name="plantilla_cheques_emitidos.xlsx",
+                               mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+        archivo_ce = st.file_uploader(
+            "Subir archivo de cheques emitidos (CSV o Excel)",
+            type=["csv", "xlsx", "xls"],
+            key="uploader_ce"
+        )
+
+        if archivo_ce is not None:
+            try:
+                if archivo_ce.name.endswith(".csv"):
+                    df_imp_ce = pd.read_csv(archivo_ce, sep=None, engine='python', dtype=str)
+                else:
+                    df_imp_ce = pd.read_excel(archivo_ce, dtype=str)
+
+                df_imp_ce.columns = [c.strip() for c in df_imp_ce.columns]
+                cols_faltantes_ce = [c for c in COL_CHEQ_EMITIDOS if c not in df_imp_ce.columns]
+                if cols_faltantes_ce:
+                    st.error(f"❌ Faltan las columnas: {cols_faltantes_ce}")
+                    st.stop()
+
+                df_imp_ce = df_imp_ce[COL_CHEQ_EMITIDOS].copy()
+                df_imp_ce['Importe'] = pd.to_numeric(df_imp_ce['Importe'], errors='coerce').fillna(0)
+
+                st.markdown(f"**{len(df_imp_ce)} registros encontrados:**")
+                st.dataframe(df_imp_ce.head(20), use_container_width=True, hide_index=True)
+
+                # Dedup por Nro Cheque + Banco + Beneficiario
+                if not st.session_state.cheques_emitidos.empty:
+                    claves_ce_exist = set(
+                        st.session_state.cheques_emitidos['Nro Cheque'].astype(str).str.strip() + "|" +
+                        st.session_state.cheques_emitidos['Banco'].astype(str).str.strip()
+                    )
+                    df_imp_ce['_clave_ce'] = (df_imp_ce['Nro Cheque'].astype(str).str.strip() + "|" +
+                                              df_imp_ce['Banco'].astype(str).str.strip())
+                    nuevos_ce = df_imp_ce[~df_imp_ce['_clave_ce'].isin(claves_ce_exist)].drop(columns=['_clave_ce'])
+                    dup_ce = len(df_imp_ce) - len(nuevos_ce)
+                else:
+                    nuevos_ce = df_imp_ce.copy()
+                    dup_ce = 0
+
+                col_ce1, col_ce2 = st.columns(2)
+                col_ce1.metric("✅ A importar", len(nuevos_ce))
+                col_ce2.metric("⚠️ Duplicados", dup_ce)
+
+                if len(nuevos_ce) == 0:
+                    st.warning("No hay registros nuevos para importar.")
+                else:
+                    if st.button(f"✅ CONFIRMAR IMPORTACIÓN de {len(nuevos_ce)} cheques emitidos", type="primary", key="btn_imp_ce"):
+                        nuevos_ce_clean = nuevos_ce[COL_CHEQ_EMITIDOS].copy()
+                        nuevos_ce_clean['Importe'] = pd.to_numeric(nuevos_ce_clean['Importe'], errors='coerce').fillna(0)
+                        df_ce_actualizado = pd.concat(
+                            [st.session_state.cheques_emitidos, nuevos_ce_clean],
+                            ignore_index=True
+                        )
+                        ok_ce = guardar_datos("cheques_emitidos", df_ce_actualizado)
+                        if ok_ce:
+                            st.session_state.cheques_emitidos = df_ce_actualizado
+                            st.success(f"✅ {len(nuevos_ce_clean)} cheques emitidos importados. Total: {len(df_ce_actualizado)}.")
+                            st.balloons()
+                        else:
+                            st.error("❌ Error al guardar. Revisá la conexión.")
+
+            except Exception as e:
+                st.error(f"❌ Error al procesar el archivo: {e}")
+
+    # ─────────────────────────────────────────
+    # IMPORTAR CHEQUES EN CARTERA
+    # ─────────────────────────────────────────
+    elif sub_import == "📂 Cheques en Cartera":
+        st.subheader("📂 Importar Cheques en Cartera (Terceros)")
+
+        with st.expander("📋 Ver formato esperado del archivo", expanded=False):
+            st.markdown("""
+**Columnas requeridas** (los nombres deben coincidir exactamente):
+
+| Columna | Descripción | Ejemplo |
+|---|---|---|
+| `Fecha Recepción` | DD/MM/AAAA | 05/09/2025 |
+| `Nro Cheque` | Número de cheque | 00054321 |
+| `Tipo` | COMÚN o DIFERIDO | COMÚN |
+| `Banco Librador` | Banco que lo emitió | BANCO MACRO |
+| `Librador` | Quién firmó el cheque | Cliente SA |
+| `Importe` | Monto | 30000 |
+| `Fecha Vencimiento` | DD/MM/AAAA | 05/10/2025 |
+| `Estado` | EN CARTERA / DEPOSITADO / ENDOSADO / RECHAZADO | EN CARTERA |
+| `Destino` | Dónde fue aplicado | |
+| `Fecha Aplicación` | DD/MM/AAAA | |
+| `Observaciones` | Notas | |
+            """)
+            df_plant_cc = pd.DataFrame(columns=COL_CHEQ_CARTERA)
+            df_plant_cc.loc[0] = ["05/09/2025","00054321","COMÚN","BANCO MACRO",
+                                   "Cliente SA",30000,"05/10/2025","EN CARTERA","","",""]
+            import io as _io3
+            buf_cc = _io3.BytesIO()
+            df_plant_cc.to_excel(buf_cc, index=False)
+            buf_cc.seek(0)
+            st.download_button("⬇️ Descargar plantilla Excel", data=buf_cc.getvalue(),
+                               file_name="plantilla_cheques_cartera.xlsx",
+                               mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+        archivo_cc = st.file_uploader(
+            "Subir archivo de cheques en cartera (CSV o Excel)",
+            type=["csv", "xlsx", "xls"],
+            key="uploader_cc"
+        )
+
+        if archivo_cc is not None:
+            try:
+                if archivo_cc.name.endswith(".csv"):
+                    df_imp_cc = pd.read_csv(archivo_cc, sep=None, engine='python', dtype=str)
+                else:
+                    df_imp_cc = pd.read_excel(archivo_cc, dtype=str)
+
+                df_imp_cc.columns = [c.strip() for c in df_imp_cc.columns]
+                cols_faltantes_cc = [c for c in COL_CHEQ_CARTERA if c not in df_imp_cc.columns]
+                if cols_faltantes_cc:
+                    st.error(f"❌ Faltan las columnas: {cols_faltantes_cc}")
+                    st.stop()
+
+                df_imp_cc = df_imp_cc[COL_CHEQ_CARTERA].copy()
+                df_imp_cc['Importe'] = pd.to_numeric(df_imp_cc['Importe'], errors='coerce').fillna(0)
+
+                st.markdown(f"**{len(df_imp_cc)} registros encontrados:**")
+                st.dataframe(df_imp_cc.head(20), use_container_width=True, hide_index=True)
+
+                # Dedup por Nro Cheque + Banco Librador + Librador
+                if not st.session_state.cheques_cartera.empty:
+                    claves_cc_exist = set(
+                        st.session_state.cheques_cartera['Nro Cheque'].astype(str).str.strip() + "|" +
+                        st.session_state.cheques_cartera['Banco Librador'].astype(str).str.strip() + "|" +
+                        st.session_state.cheques_cartera['Librador'].astype(str).str.strip()
+                    )
+                    df_imp_cc['_clave_cc'] = (
+                        df_imp_cc['Nro Cheque'].astype(str).str.strip() + "|" +
+                        df_imp_cc['Banco Librador'].astype(str).str.strip() + "|" +
+                        df_imp_cc['Librador'].astype(str).str.strip()
+                    )
+                    nuevos_cc = df_imp_cc[~df_imp_cc['_clave_cc'].isin(claves_cc_exist)].drop(columns=['_clave_cc'])
+                    dup_cc = len(df_imp_cc) - len(nuevos_cc)
+                else:
+                    nuevos_cc = df_imp_cc.copy()
+                    dup_cc = 0
+
+                col_cc1, col_cc2 = st.columns(2)
+                col_cc1.metric("✅ A importar", len(nuevos_cc))
+                col_cc2.metric("⚠️ Duplicados", dup_cc)
+
+                if len(nuevos_cc) == 0:
+                    st.warning("No hay registros nuevos para importar.")
+                else:
+                    if st.button(f"✅ CONFIRMAR IMPORTACIÓN de {len(nuevos_cc)} cheques en cartera", type="primary", key="btn_imp_cc"):
+                        nuevos_cc_clean = nuevos_cc[COL_CHEQ_CARTERA].copy()
+                        nuevos_cc_clean['Importe'] = pd.to_numeric(nuevos_cc_clean['Importe'], errors='coerce').fillna(0)
+                        df_cc_actualizado = pd.concat(
+                            [st.session_state.cheques_cartera, nuevos_cc_clean],
+                            ignore_index=True
+                        )
+                        ok_cc = guardar_datos("cheques_cartera", df_cc_actualizado)
+                        if ok_cc:
+                            st.session_state.cheques_cartera = df_cc_actualizado
+                            st.success(f"✅ {len(nuevos_cc_clean)} cheques en cartera importados. Total: {len(df_cc_actualizado)}.")
+                            st.balloons()
+                        else:
+                            st.error("❌ Error al guardar. Revisá la conexión.")
+
+            except Exception as e:
+                st.error(f"❌ Error al procesar el archivo: {e}")
