@@ -1947,13 +1947,15 @@ elif sel == "TESORERIA":
 
         df_caja_full = st.session_state.tesoreria[st.session_state.tesoreria['Caja/Banco'].astype(str).str.startswith(cj_v)].copy()
 
-        # ── Mostrar solo movimientos DESDE el último cierre (inclusive el cierre no, post-cierre) ──
-        cierres_idx = df_caja_full[df_caja_full['Tipo'] == 'CIERRE DE CAJA'].index
+        # ── Mostrar solo movimientos DESDE la última rendición/cierre ──
+        cierres_idx = df_caja_full[
+            df_caja_full['Tipo'].isin(['CIERRE DE CAJA', 'RENDICION', 'RENDICIÓN'])
+        ].index
         if len(cierres_idx) > 0:
             ultimo_cierre_idx = cierres_idx[-1]
             df_ver = df_caja_full[df_caja_full.index > ultimo_cierre_idx].copy()
             ultimo_cierre_row = df_caja_full.loc[ultimo_cierre_idx]
-            st.caption(f"📌 Último cierre: {ultimo_cierre_row['Fecha']} — mostrando movimientos posteriores al cierre.")
+            st.caption(f"📌 Última rendición: {ultimo_cierre_row['Fecha']} — mostrando movimientos posteriores.")
         else:
             df_ver = df_caja_full.copy()
 
