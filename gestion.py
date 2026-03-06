@@ -211,7 +211,9 @@ def generar_html_cta_cte_general(tipo, df_resumen, fecha_emision):
     total_general = 0
     for _, row in df_resumen.iterrows():
         nombre = row.get('Cliente', row.get('Proveedor', '-'))
-        saldo  = float(row.get('Importe', row.get('Total', 0)))
+        saldo  = round(float(row.get('Importe', row.get('Total', 0))), 2)
+        if abs(saldo) <= 0.01:   # excluir saldos en cero o centavos residuales
+            continue
         total_general += saldo
         color = "#e74c3c" if saldo < 0 else "#2ecc71"
         filas_html += f"""
