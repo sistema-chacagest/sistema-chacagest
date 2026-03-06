@@ -1502,10 +1502,66 @@ elif sel == "TESORERIA":
         FORMAS_COBRO_VIAJE = FORMAS_PAGO + ["CHEQUE DE TERCEROS", "OTROS"]
 
         if not st.session_state.html_recibo_ready:
-            # ── Selectbox de forma FUERA del form para mostrar campos dinámicamente ──
+            # ── Selectbox de cliente y forma FUERA del form para mostrar viajes ──
             cob_col1, cob_col2 = st.columns(2)
             c_sel_prev = cob_col1.selectbox("Cliente", st.session_state.clientes['Razón Social'].unique() if not st.session_state.clientes.empty else [""], key="cob_cli_sel")
             forma_cob_prev = cob_col2.selectbox("Forma de Cobro", FORMAS_COBRO_VIAJE, key="cob_forma_sel")
+
+            # ── VIAJES PENDIENTES DEL CLIENTE ──
+            monto_sugerido_cob = 0.0
+            viajes_desc_sel = []
+            if c_sel_prev and not st.session_state.viajes.empty:
+                df_viajes_cli = st.session_state.viajes[
+                    (st.session_state.viajes['Cliente'] == c_sel_prev) &
+                    (st.session_state.viajes['Importe'] > 0)
+                ].copy()
+                pagos_cli = st.session_state.viajes[
+                    (st.session_state.viajes['Cliente'] == c_sel_prev) &
+                    (st.session_state.viajes['Importe'] < 0)
+                ]['Importe'].sum()
+                saldo_viajes_cli = df_viajes_cli['Importe'].sum() if not df_viajes_cli.empty else 0.0
+                saldo_neto_cli = saldo_viajes_cli + pagos_cli
+
+                if not df_viajes_cli.empty:
+                    st.markdown("---")
+                    st.markdown(f"##### 🚛 Viajes pendientes de cobro — {c_sel_prev}")
+                    ms1, ms2, ms3 = st.columns(3)
+                    ms1.metric("Total Viajes", f"$ {saldo_viajes_cli:,.2f}")
+                    ms2.metric("Ya Cobrado",   f"$ {abs(pagos_cli):,.2f}")
+                    ms3.metric("Saldo Pendiente", f"$ {saldo_neto_cli:,.2f}")
+                    st.markdown("---")
+                    st.markdown("**Seleccioná los viajes a imputar:**")
+                    viajes_chequeados = {}
+                    for _, vrow in df_viajes_cli.iterrows():
+                        vidx = vrow.name
+                        fecha_v   = vrow.get('Fecha Viaje', '-')
+                        origen_v  = vrow.get('Origen', '-')
+                        destino_v = vrow.get('Destino', '-')
+                        nro_comp_v = vrow.get('Nro Comp Asoc', '-')
+                        patente_v  = vrow.get('Patente / Móvil', '-')
+                        label_v = f"📅 {fecha_v} | {origen_v} → {destino_v} | 🚐 {patente_v} | $ {float(vrow['Importe']):,.2f}"
+                        if str(nro_comp_v) not in ['-', '', 'nan']:
+                            label_v += f" | Comp: {nro_comp_v}"
+                        chk_v = st.checkbox(label_v, key=f"chk_viaje_{vidx}", value=False)
+                        viajes_chequeados[vidx] = (chk_v, float(vrow['Importe']), label_v)
+
+                    monto_sugerido_cob = sum(v for c, v, l in viajes_chequeados.values() if c)
+                    viajes_desc_sel    = [l for c, v, l in viajes_chequeados.values() if c]
+
+                    if monto_sugerido_cob > 0:
+                        st.markdown(
+                            f"<div style='background:#eafaf1;border:2px solid #27ae60;border-radius:8px;"
+                            f"padding:12px 20px;margin:10px 0;display:flex;justify-content:space-between;'>"
+                            f"<b>Total seleccionado a cobrar:</b>"
+                            f"<b style='color:#27ae60;font-size:18px;'>$ {monto_sugerido_cob:,.2f}</b></div>",
+                            unsafe_allow_html=True
+                        )
+                    st.markdown("---")
+                else:
+                    if saldo_neto_cli == 0:
+                        st.success(f"✅ {c_sel_prev} no tiene viajes pendientes.")
+                    else:
+                        st.info(f"No hay viajes registrados como débitos para {c_sel_prev}.")
 
             es_cheque = (forma_cob_prev == "CHEQUE DE TERCEROS")
 
@@ -1517,7 +1573,9 @@ elif sel == "TESORERIA":
                 else:
                     cj = caja_propia
                     fb1.markdown(f"**Caja:** {caja_propia}")
-                mon  = fb2.number_input("Monto $", min_value=0.0)
+                mon  = fb2.number_input("Monto $", min_value=0.0, value=float(round(monto_sugerido_cob, 2)), step=100.0, format="%.2f")
+                if viajes_desc_sel:
+                    st.markdown(f"*Viajes seleccionados: {len(viajes_desc_sel)}*")
                 afip = st.text_input("Comprobante Asociado (AFIP/Recibo)")
 
                 # ── Campos del cheque: aparecen solo si forma = CHEQUE DE TERCEROS ──
@@ -2118,11 +2176,62 @@ elif sel == "TESORERIA":
                 forma_op = st.selectbox("Forma de Pago", ["TRANSFERENCIA", "EFECTIVO", "CHEQUE PROPIO", "CHEQUE DE TERCERO"], key="op_forma")
                 afip_p  = st.text_input("Referencia AFIP / Concepto", key="op_afip")
 
+                # ── FACTURAS/COMPRAS PENDIENTES DEL PROVEEDOR ──
+                monto_sugerido_op = 0.0
+                facturas_op_desc = []
+                if p_sel and not st.session_state.compras.empty:
+                    df_comp_prov = st.session_state.compras[
+                        st.session_state.compras['Proveedor'] == p_sel
+                    ].copy()
+                    # Solo facturas positivas (excluir órdenes de pago ya registradas)
+                    df_facturas_prov = df_comp_prov[df_comp_prov['Total'] > 0].copy()
+                    # Pagos ya realizados al proveedor
+                    pagos_op = df_comp_prov[df_comp_prov['Total'] < 0]['Total'].sum()
+                    total_facturado_op = df_facturas_prov['Total'].sum() if not df_facturas_prov.empty else 0.0
+                    saldo_prov = total_facturado_op + pagos_op
+
+                    if not df_facturas_prov.empty:
+                        st.markdown("---")
+                        st.markdown(f"##### 📋 Comprobantes de {p_sel}")
+                        op1m, op2m, op3m = st.columns(3)
+                        op1m.metric("Total Facturado", f"$ {total_facturado_op:,.2f}")
+                        op2m.metric("Ya Pagado",       f"$ {abs(pagos_op):,.2f}")
+                        op3m.metric("Saldo a Pagar",   f"$ {saldo_prov:,.2f}")
+                        st.markdown("---")
+                        st.markdown("**Seleccioná las facturas a pagar:**")
+                        comp_chequeados = {}
+                        for _, crow in df_facturas_prov.iterrows():
+                            cidx = crow.name
+                            fecha_c = crow.get('Fecha', '-')
+                            tipo_c  = crow.get('Tipo Factura', '-')
+                            pv_c    = crow.get('Punto Venta', '-')
+                            total_c = float(crow['Total'])
+                            label_c = f"📄 {fecha_c} | {tipo_c} {pv_c} | $ {total_c:,.2f}"
+                            chk_c = st.checkbox(label_c, key=f"chk_comp_{cidx}", value=False)
+                            comp_chequeados[cidx] = (chk_c, total_c, label_c)
+
+                        monto_sugerido_op = sum(v for c, v, l in comp_chequeados.values() if c)
+                        facturas_op_desc  = [l for c, v, l in comp_chequeados.values() if c]
+
+                        if monto_sugerido_op > 0:
+                            st.markdown(
+                                f"<div style='background:#fef9f0;border:2px solid #e67e22;border-radius:8px;"
+                                f"padding:12px 20px;margin:10px 0;display:flex;justify-content:space-between;'>"
+                                f"<b>Total seleccionado a pagar:</b>"
+                                f"<b style='color:#e67e22;font-size:18px;'>$ {monto_sugerido_op:,.2f}</b></div>",
+                                unsafe_allow_html=True
+                            )
+                        st.markdown("---")
+                    else:
+                        st.info(f"No hay comprobantes de compra registrados para {p_sel}.")
+
                 # ── TRANSFERENCIA / EFECTIVO ─────────────────────────────────────────
                 if forma_op in ["TRANSFERENCIA", "EFECTIVO"]:
                     with st.form("f_op_std", clear_on_submit=True):
                         cj_p  = st.selectbox("Caja de Salida", opc_cajas)
-                        mon_p = st.number_input("Monto $", min_value=0.0, step=0.01)
+                        mon_p = st.number_input("Monto $", min_value=0.0, step=0.01, value=float(round(monto_sugerido_op, 2)))
+                        if facturas_op_desc:
+                            st.markdown(f"*Comprobantes seleccionados: {len(facturas_op_desc)}*")
                         if st.form_submit_button("✅ GENERAR ORDEN DE PAGO"):
                             if p_sel and mon_p > 0:
                                 nt = pd.DataFrame([[date.today(), "PAGO PROV", cj_p, forma_op, "Orden de Pago", p_sel, -mon_p, afip_p]], columns=COL_TESORERIA)
@@ -2146,7 +2255,7 @@ elif sel == "TESORERIA":
                         tipo_op  = op2.selectbox("Tipo", ["FÍSICO", "ECHEQ"])
                         banco_op = op3.text_input("Banco Emisor")
                         op4, op5 = st.columns(2)
-                        mon_op   = op4.number_input("Importe $", min_value=0.0, step=0.01)
+                        mon_op   = op4.number_input("Importe $", min_value=0.0, step=0.01, value=float(round(monto_sugerido_op, 2)))
                         f_venc_op = op5.date_input("Fecha de Vencimiento del Cheque", value=date.today() + timedelta(days=30))
                         obs_op   = st.text_input("Observaciones")
                         if st.form_submit_button("✅ EMITIR CHEQUE Y GENERAR ORDEN DE PAGO"):
