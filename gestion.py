@@ -173,6 +173,17 @@ def guardar_tesoreria_y_compras():
         st.error("CRITICO: No se pudo guardar COMPRAS (cuenta corriente proveedor). Revisa la conexion.")
     return ok_t and ok_c
 
+
+def guardar_tesoreria_rerun(msg_key=None, msg_texto=None):
+    """Guarda tesoreria. Si falla, muestra error y NO hace rerun. Si ok, guarda msg y hace rerun."""
+    ok = guardar_datos("tesoreria", st.session_state.tesoreria)
+    if ok:
+        if msg_key and msg_texto:
+            st.session_state[msg_key] = msg_texto
+        st.rerun()
+    else:
+        st.error("❌ No se pudo guardar el movimiento. Revisá la conexión e intentá de nuevo.")
+
 # =========================================================
 # --- FUNCIONES PARA REPORTES HTML PROFESIONALES ---
 # =========================================================
@@ -1481,9 +1492,7 @@ elif sel == "TESORERIA":
                     concepto_completo = con if con else "-"
                     nt = pd.DataFrame([[f, "INGRESO VARIO", cj, forma, concepto_completo, "Varios", mon, "-"]], columns=COL_TESORERIA)
                     st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
-                    guardar_datos("tesoreria", st.session_state.tesoreria)
-                    st.session_state.msg_ingreso = f"✅ Ingreso de $ {mon:,.2f} ({forma}) registrado en {cj}."
-                    st.rerun()
+                    guardar_tesoreria_rerun("msg_ingreso", f"✅ Ingreso de $ {mon:,.2f} ({forma}) registrado en {cj}.")
                 else:
                     st.warning("Ingresá un monto mayor a cero.")
 
@@ -1509,9 +1518,7 @@ elif sel == "TESORERIA":
                     concepto_completo = f"[{cuenta_gasto}] {con}" if con else f"[{cuenta_gasto}]"
                     nt = pd.DataFrame([[f, "EGRESO VARIO", cj, forma, concepto_completo, "Varios", -mon, "-"]], columns=COL_TESORERIA)
                     st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
-                    guardar_datos("tesoreria", st.session_state.tesoreria)
-                    st.session_state.msg_egreso = f"✅ Egreso de $ {mon:,.2f} ({forma}) — {cuenta_gasto} — registrado desde {cj}."
-                    st.rerun()
+                    guardar_tesoreria_rerun("msg_egreso", f"✅ Egreso de $ {mon:,.2f} ({forma}) — {cuenta_gasto} — registrado desde {cj}.")
                 else:
                     st.warning("Ingresá un monto mayor a cero.")
 
