@@ -1964,12 +1964,22 @@ elif sel == "TESORERIA":
             st.markdown("Registrá lo que rendís y el sistema calcula automáticamente cuánto queda en caja.")
 
             hoy = date.today()
+
+            # Solo cajas con efectivo/dólares pueden rendir
+            CAJAS_NO_RENDICION = ["BANCO GALICIA", "BANCO PROVINCIA", "BANCO SUPERVIELLE", "TARJETA DE CREDITO"]
+            CAJAS_RENDICION = [c for c in TODAS_CAJAS if not any(c.upper().startswith(b) for b in CAJAS_NO_RENDICION)]
+
             c_cie1, c_cie2 = st.columns([2, 3])
             if es_admin:
-                caja_cierre = c_cie1.selectbox("Caja", TODAS_CAJAS, key="cierre_caja_sel")
+                caja_cierre = c_cie1.selectbox("Caja", CAJAS_RENDICION, key="cierre_caja_sel")
             else:
-                caja_cierre = caja_propia
-                c_cie1.markdown(f"**Caja:** {caja_propia}")
+                if caja_propia in CAJAS_RENDICION:
+                    caja_cierre = caja_propia
+                    c_cie1.markdown(f"**Caja:** {caja_propia}")
+                else:
+                    st.info("ℹ️ Tu cuenta no requiere rendición de efectivo.")
+                    st.stop()
+                    caja_cierre = caja_propia
             c_cie2.markdown(f"📅 **Fecha:** {hoy.strftime('%d/%m/%Y')}")
 
             obs_cierre = st.text_area("Observaciones (opcional)", placeholder="Ej: Se rindieron $400.000 al supervisor.", key="cierre_obs", height=70)
@@ -2000,7 +2010,7 @@ elif sel == "TESORERIA":
                 df_cierre = df_caja_base.copy()
                 df_dolar_cierre = df_dolar_base.copy()
 
-            # ── Efectivo disponible: calculado sobre movimientos post-último cierre ──
+            # ── Saldo disponible: solo efectivo y dólares (cajas físicas) ──
             mask_efec_base  = mask_forma(df_cierre['Forma'], "EFECTIVO")
             mask_dolar_base = mask_forma(df_cierre['Forma'], "DOLARES")
             efectivo_disponible = df_cierre[mask_efec_base]['Monto'].sum()
@@ -2076,7 +2086,7 @@ elif sel == "TESORERIA":
 
             st.markdown("---")
 
-            # ── Vista previa de movimientos del período ──
+            # ── Vista previa: desglose por forma de pago ──
             FORMAS_PREV = ["EFECTIVO", "TRANSFERENCIA", "TARJETA DE CREDITO", "DÓLARES", "OTROS"]
             ICONOS_PREV = {"EFECTIVO":"💵","TRANSFERENCIA":"🏦","TARJETA DE CREDITO":"💳","DÓLARES":"💲","OTROS":"📋"}
             st.markdown(f"##### 📊 Saldo actual en caja — {caja_cierre}")
