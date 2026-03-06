@@ -2842,9 +2842,12 @@ elif sel == "CTA CTE GENERAL PROV":
         res_p['CBU']   = res_p['CBU'].fillna('-')
         res_p['Alias'] = res_p['Alias'].fillna('-')
         res_p = res_p[['Proveedor', 'CBU', 'Alias', 'Total']]
+        # Excluir saldos cero o residuales
+        res_p['Total'] = res_p['Total'].apply(lambda x: round(float(x), 2))
+        res_p = res_p[res_p['Total'].apply(lambda x: abs(x) > 0.01)].reset_index(drop=True)
         # Métricas
         mp1, mp2 = st.columns(2)
-        mp1.metric("Total proveedores con saldo", len(res_p[res_p['Total'].round(2) != 0]))
+        mp1.metric("Total proveedores con saldo", len(res_p))
         mp2.metric("Total a pagar", f"$ {res_p['Total'].sum():,.2f}")
         st.dataframe(res_p.style.format({"Total": "$ {:,.2f}"}), use_container_width=True)
         # Descarga PDF — excluir saldos en cero o residuales
