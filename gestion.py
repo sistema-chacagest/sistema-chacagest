@@ -2280,8 +2280,8 @@ elif sel == "TESORERIA":
 
                 # ── TRANSFERENCIA / EFECTIVO ─────────────────────────────────────────
                 if forma_op in ["TRANSFERENCIA", "EFECTIVO"]:
+                    cj_p = st.selectbox("Caja de Salida", opc_cajas, key="op_caja_std")
                     with st.form("f_op_std", clear_on_submit=True):
-                        cj_p  = st.selectbox("Caja de Salida", opc_cajas)
                         mon_p = st.number_input("Monto $", min_value=0.0, step=0.01, value=float(round(monto_sugerido_op, 2)))
                         if facturas_op_desc:
                             st.markdown(f"*Comprobantes seleccionados: {len(facturas_op_desc)}*")
