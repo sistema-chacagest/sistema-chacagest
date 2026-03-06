@@ -1508,42 +1508,57 @@ elif sel == "TESORERIA":
             forma_cob_prev = cob_col2.selectbox("Forma de Cobro", FORMAS_COBRO_VIAJE, key="cob_forma_sel")
 
             # ── VIAJES PENDIENTES DEL CLIENTE ──
+            # Lógica: distribuir los pagos (negativos) contra los viajes (positivos)
+            # ordenados por fecha, y solo mostrar los que tienen saldo > 0.
             monto_sugerido_cob = 0.0
             viajes_desc_sel = []
             if c_sel_prev and not st.session_state.viajes.empty:
-                df_viajes_cli = st.session_state.viajes[
-                    (st.session_state.viajes['Cliente'] == c_sel_prev) &
-                    (st.session_state.viajes['Importe'] > 0)
+                df_todos_cli = st.session_state.viajes[
+                    st.session_state.viajes['Cliente'] == c_sel_prev
                 ].copy()
-                pagos_cli = st.session_state.viajes[
-                    (st.session_state.viajes['Cliente'] == c_sel_prev) &
-                    (st.session_state.viajes['Importe'] < 0)
-                ]['Importe'].sum()
+                df_viajes_cli = df_todos_cli[df_todos_cli['Importe'] > 0].copy()
+                pagos_cli_total = df_todos_cli[df_todos_cli['Importe'] < 0]['Importe'].sum()
                 saldo_viajes_cli = df_viajes_cli['Importe'].sum() if not df_viajes_cli.empty else 0.0
-                saldo_neto_cli = saldo_viajes_cli + pagos_cli
+                saldo_neto_cli = round(saldo_viajes_cli + pagos_cli_total, 2)
 
-                if not df_viajes_cli.empty:
+                # Calcular saldo pendiente por viaje (distribuir pagos FIFO)
+                saldo_restante_pagos = abs(pagos_cli_total)
+                viajes_con_saldo = []
+                for idx, vrow in df_viajes_cli.sort_values('Fecha Viaje').iterrows():
+                    imp = float(vrow['Importe'])
+                    if saldo_restante_pagos >= imp:
+                        saldo_restante_pagos -= imp
+                        # Viaje totalmente pagado → no mostrar
+                    else:
+                        saldo_pendiente_v = imp - saldo_restante_pagos
+                        saldo_restante_pagos = 0.0
+                        viajes_con_saldo.append((idx, vrow, round(saldo_pendiente_v, 2)))
+
+                if viajes_con_saldo:
                     st.markdown("---")
                     st.markdown(f"##### 🚛 Viajes pendientes de cobro — {c_sel_prev}")
                     ms1, ms2, ms3 = st.columns(3)
                     ms1.metric("Total Viajes", f"$ {saldo_viajes_cli:,.2f}")
-                    ms2.metric("Ya Cobrado",   f"$ {abs(pagos_cli):,.2f}")
+                    ms2.metric("Ya Cobrado",   f"$ {abs(pagos_cli_total):,.2f}")
                     ms3.metric("Saldo Pendiente", f"$ {saldo_neto_cli:,.2f}")
                     st.markdown("---")
                     st.markdown("**Seleccioná los viajes a imputar:**")
                     viajes_chequeados = {}
-                    for _, vrow in df_viajes_cli.iterrows():
-                        vidx = vrow.name
+                    for vidx, vrow, saldo_v in viajes_con_saldo:
                         fecha_v   = vrow.get('Fecha Viaje', '-')
                         origen_v  = vrow.get('Origen', '-')
                         destino_v = vrow.get('Destino', '-')
                         nro_comp_v = vrow.get('Nro Comp Asoc', '-')
                         patente_v  = vrow.get('Patente / Móvil', '-')
-                        label_v = f"📅 {fecha_v} | {origen_v} → {destino_v} | 🚐 {patente_v} | $ {float(vrow['Importe']):,.2f}"
+                        imp_orig   = float(vrow['Importe'])
+                        if saldo_v < imp_orig:
+                            label_v = f"📅 {fecha_v} | {origen_v} → {destino_v} | 🚐 {patente_v} | $ {saldo_v:,.2f} (saldo de $ {imp_orig:,.2f})"
+                        else:
+                            label_v = f"📅 {fecha_v} | {origen_v} → {destino_v} | 🚐 {patente_v} | $ {saldo_v:,.2f}"
                         if str(nro_comp_v) not in ['-', '', 'nan']:
                             label_v += f" | Comp: {nro_comp_v}"
                         chk_v = st.checkbox(label_v, key=f"chk_viaje_{vidx}", value=False)
-                        viajes_chequeados[vidx] = (chk_v, float(vrow['Importe']), label_v)
+                        viajes_chequeados[vidx] = (chk_v, saldo_v, label_v)
 
                     monto_sugerido_cob = sum(v for c, v, l in viajes_chequeados.values() if c)
                     viajes_desc_sel    = [l for c, v, l in viajes_chequeados.values() if c]
@@ -1557,11 +1572,10 @@ elif sel == "TESORERIA":
                             unsafe_allow_html=True
                         )
                     st.markdown("---")
+                elif not df_viajes_cli.empty:
+                    st.success(f"✅ {c_sel_prev} no tiene viajes pendientes de cobro.")
                 else:
-                    if saldo_neto_cli == 0:
-                        st.success(f"✅ {c_sel_prev} no tiene viajes pendientes.")
-                    else:
-                        st.info(f"No hay viajes registrados como débitos para {c_sel_prev}.")
+                    st.info(f"No hay viajes registrados para {c_sel_prev}.")
 
             es_cheque = (forma_cob_prev == "CHEQUE DE TERCEROS")
 
@@ -2177,38 +2191,53 @@ elif sel == "TESORERIA":
                 afip_p  = st.text_input("Referencia AFIP / Concepto", key="op_afip")
 
                 # ── FACTURAS/COMPRAS PENDIENTES DEL PROVEEDOR ──
+                # Lógica FIFO: distribuir pagos negativos contra facturas positivas
+                # ordenadas por fecha, mostrar solo las que tienen saldo > 0.
                 monto_sugerido_op = 0.0
                 facturas_op_desc = []
                 if p_sel and not st.session_state.compras.empty:
                     df_comp_prov = st.session_state.compras[
                         st.session_state.compras['Proveedor'] == p_sel
                     ].copy()
-                    # Solo facturas positivas (excluir órdenes de pago ya registradas)
                     df_facturas_prov = df_comp_prov[df_comp_prov['Total'] > 0].copy()
-                    # Pagos ya realizados al proveedor
-                    pagos_op = df_comp_prov[df_comp_prov['Total'] < 0]['Total'].sum()
+                    pagos_op_total   = df_comp_prov[df_comp_prov['Total'] < 0]['Total'].sum()
                     total_facturado_op = df_facturas_prov['Total'].sum() if not df_facturas_prov.empty else 0.0
-                    saldo_prov = total_facturado_op + pagos_op
+                    saldo_prov = round(total_facturado_op + pagos_op_total, 2)
 
-                    if not df_facturas_prov.empty:
+                    # Calcular saldo pendiente por factura (FIFO)
+                    saldo_restante_pago_op = abs(pagos_op_total)
+                    facturas_con_saldo = []
+                    for idx, crow in df_facturas_prov.sort_values('Fecha').iterrows():
+                        total_c = float(crow['Total'])
+                        if saldo_restante_pago_op >= total_c:
+                            saldo_restante_pago_op -= total_c
+                            # Factura totalmente pagada → no mostrar
+                        else:
+                            saldo_pend_c = total_c - saldo_restante_pago_op
+                            saldo_restante_pago_op = 0.0
+                            facturas_con_saldo.append((idx, crow, round(saldo_pend_c, 2)))
+
+                    if facturas_con_saldo:
                         st.markdown("---")
-                        st.markdown(f"##### 📋 Comprobantes de {p_sel}")
+                        st.markdown(f"##### 📋 Comprobantes pendientes de {p_sel}")
                         op1m, op2m, op3m = st.columns(3)
                         op1m.metric("Total Facturado", f"$ {total_facturado_op:,.2f}")
-                        op2m.metric("Ya Pagado",       f"$ {abs(pagos_op):,.2f}")
+                        op2m.metric("Ya Pagado",       f"$ {abs(pagos_op_total):,.2f}")
                         op3m.metric("Saldo a Pagar",   f"$ {saldo_prov:,.2f}")
                         st.markdown("---")
                         st.markdown("**Seleccioná las facturas a pagar:**")
                         comp_chequeados = {}
-                        for _, crow in df_facturas_prov.iterrows():
-                            cidx = crow.name
+                        for cidx, crow, saldo_c in facturas_con_saldo:
                             fecha_c = crow.get('Fecha', '-')
                             tipo_c  = crow.get('Tipo Factura', '-')
                             pv_c    = crow.get('Punto Venta', '-')
                             total_c = float(crow['Total'])
-                            label_c = f"📄 {fecha_c} | {tipo_c} {pv_c} | $ {total_c:,.2f}"
+                            if saldo_c < total_c:
+                                label_c = f"📄 {fecha_c} | {tipo_c} {pv_c} | $ {saldo_c:,.2f} (saldo de $ {total_c:,.2f})"
+                            else:
+                                label_c = f"📄 {fecha_c} | {tipo_c} {pv_c} | $ {saldo_c:,.2f}"
                             chk_c = st.checkbox(label_c, key=f"chk_comp_{cidx}", value=False)
-                            comp_chequeados[cidx] = (chk_c, total_c, label_c)
+                            comp_chequeados[cidx] = (chk_c, saldo_c, label_c)
 
                         monto_sugerido_op = sum(v for c, v, l in comp_chequeados.values() if c)
                         facturas_op_desc  = [l for c, v, l in comp_chequeados.values() if c]
@@ -2222,6 +2251,8 @@ elif sel == "TESORERIA":
                                 unsafe_allow_html=True
                             )
                         st.markdown("---")
+                    elif not df_facturas_prov.empty:
+                        st.success(f"✅ {p_sel} no tiene comprobantes pendientes de pago.")
                     else:
                         st.info(f"No hay comprobantes de compra registrados para {p_sel}.")
 
@@ -2367,7 +2398,8 @@ elif sel == "CTA CTE GENERAL":
     st.header("🌎 Estado Global de Deudores")
     if not st.session_state.viajes.empty:
         res = st.session_state.viajes.groupby('Cliente')['Importe'].sum().reset_index()
-        res = res[res['Importe'].round(2) != 0].sort_values('Importe', ascending=False)
+        # Excluir clientes con saldo cero (tolerancia de 1 centavo)
+        res = res[res['Importe'].abs().round(2) > 0.01].sort_values('Importe', ascending=False)
         # Métricas
         m1, m2, m3 = st.columns(3)
         m1.metric("Total clientes con saldo", len(res))
