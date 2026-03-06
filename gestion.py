@@ -138,23 +138,40 @@ def cargar_datos():
     except:
         return None, None, None, None, None, None, None, None, None
 
-def guardar_datos(nombre_hoja, df):
-    try:
-        sh = conectar_google()
-        if sh is None: return False
-        # Intentar obtener la hoja; si no existe, crearla
+def guardar_datos(nombre_hoja, df, reintentos=3):
+    """Guarda un DataFrame en Google Sheets. Reintenta hasta 3 veces ante errores de red."""
+    import time
+    ultimo_error = None
+    for intento in range(reintentos):
         try:
-            ws = sh.worksheet(nombre_hoja)
-        except gspread.exceptions.WorksheetNotFound:
-            ws = sh.add_worksheet(title=nombre_hoja, rows=1000, cols=20)
-        ws.clear()
-        df_save = df.fillna("-").copy()
-        datos   = [df_save.columns.values.tolist()] + df_save.astype(str).values.tolist()
-        ws.update(datos)
-        return True
-    except Exception as e:
-        st.error(f"Error al guardar en '{nombre_hoja}': {e}")
-        return False
+            sh = conectar_google()
+            if sh is None: return False
+            try:
+                ws = sh.worksheet(nombre_hoja)
+            except gspread.exceptions.WorksheetNotFound:
+                ws = sh.add_worksheet(title=nombre_hoja, rows=2000, cols=25)
+            df_save = df.fillna("-").copy()
+            datos   = [df_save.columns.values.tolist()] + df_save.astype(str).values.tolist()
+            ws.clear()
+            ws.update(datos)
+            return True
+        except Exception as e:
+            ultimo_error = e
+            if intento < reintentos - 1:
+                time.sleep(1.5)
+    st.error(f"❌ Error al guardar '{nombre_hoja}' tras {reintentos} intentos: {ultimo_error}")
+    return False
+
+
+def guardar_tesoreria_y_compras():
+    """Guarda tesoreria y compras atomicamente. Muestra error claro si alguna falla."""
+    ok_t = guardar_datos("tesoreria", st.session_state.tesoreria)
+    ok_c = guardar_datos("compras",   st.session_state.compras)
+    if not ok_t:
+        st.error("CRITICO: No se pudo guardar TESORERIA. Revisa la conexion y vuelve a intentar.")
+    if not ok_c:
+        st.error("CRITICO: No se pudo guardar COMPRAS (cuenta corriente proveedor). Revisa la conexion.")
+    return ok_t and ok_c
 
 # =========================================================
 # --- FUNCIONES PARA REPORTES HTML PROFESIONALES ---
@@ -2295,11 +2312,11 @@ elif sel == "TESORERIA":
                                 nc = pd.DataFrame([[date.today(), _prov, "-", "ORDEN PAGO", 0, 0, 0, 0, 0, 0, -mon_p]], columns=COL_COMPRAS)
                                 st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
                                 st.session_state.compras   = pd.concat([st.session_state.compras, nc], ignore_index=True)
-                                guardar_datos("tesoreria", st.session_state.tesoreria)
-                                guardar_datos("compras", st.session_state.compras)
-                                st.session_state.html_op_ready = generar_html_orden_pago({"Fecha": date.today(), "Proveedor": _prov, "Concepto": f"Pago {_forma}", "Caja/Banco": cj_p, "Monto": mon_p, "Ref AFIP": _afip})
-                                st.session_state.prov_ready = _prov
-                                st.rerun()
+                                ok = guardar_tesoreria_y_compras()
+                                if ok:
+                                    st.session_state.html_op_ready = generar_html_orden_pago({"Fecha": date.today(), "Proveedor": _prov, "Concepto": f"Pago {_forma}", "Caja/Banco": cj_p, "Monto": mon_p, "Ref AFIP": _afip})
+                                    st.session_state.prov_ready = _prov
+                                    st.rerun()
                             else:
                                 st.warning("Seleccioná proveedor y completá el monto.")
 
@@ -2323,17 +2340,17 @@ elif sel == "TESORERIA":
                                     mon_op, str(f_venc_op), "PENDIENTE", "-", obs_op
                                 ]], columns=COL_CHEQ_EMITIDOS)
                                 st.session_state.cheques_emitidos = pd.concat([st.session_state.cheques_emitidos, nuevo_cheq], ignore_index=True)
-                                guardar_datos("cheques_emitidos", st.session_state.cheques_emitidos)
-                                # Registrar egreso en tesorería
+                                # Registrar egreso en tesorería y cuenta corriente
                                 nt = pd.DataFrame([[date.today(), "PAGO PROV", f"CHEQUE {tipo_op}", f"CHEQUE PROPIO #{nro_op}", "Orden de Pago", p_sel, -mon_op, afip_p]], columns=COL_TESORERIA)
                                 nc = pd.DataFrame([[date.today(), p_sel, "-", "ORDEN PAGO CHEQUE", 0, 0, 0, 0, 0, 0, -mon_op]], columns=COL_COMPRAS)
                                 st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
                                 st.session_state.compras   = pd.concat([st.session_state.compras, nc], ignore_index=True)
-                                guardar_datos("tesoreria", st.session_state.tesoreria)
-                                guardar_datos("compras", st.session_state.compras)
-                                st.session_state.html_op_ready = generar_html_orden_pago({"Fecha": date.today(), "Proveedor": p_sel, "Concepto": f"Cheque {tipo_op} #{nro_op} — Vto: {f_venc_op}", "Caja/Banco": f"Cheque {banco_op}", "Monto": mon_op, "Ref AFIP": afip_p})
-                                st.session_state.prov_ready = p_sel
-                                st.rerun()
+                                ok = guardar_tesoreria_y_compras()
+                                if ok:
+                                    guardar_datos("cheques_emitidos", st.session_state.cheques_emitidos)
+                                    st.session_state.html_op_ready = generar_html_orden_pago({"Fecha": date.today(), "Proveedor": p_sel, "Concepto": f"Cheque {tipo_op} #{nro_op} — Vto: {f_venc_op}", "Caja/Banco": f"Cheque {banco_op}", "Monto": mon_op, "Ref AFIP": afip_p})
+                                    st.session_state.prov_ready = p_sel
+                                    st.rerun()
                             else:
                                 st.warning("Completá proveedor, número de cheque e importe.")
 
@@ -2373,11 +2390,11 @@ elif sel == "TESORERIA":
                                     nc = pd.DataFrame([[date.today(), p_sel, "-", "ORDEN PAGO CHEQUE TERCERO", 0, 0, 0, 0, 0, 0, -mon_ct]], columns=COL_COMPRAS)
                                     st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
                                     st.session_state.compras   = pd.concat([st.session_state.compras, nc], ignore_index=True)
-                                    guardar_datos("tesoreria", st.session_state.tesoreria)
-                                    guardar_datos("compras", st.session_state.compras)
-                                    st.session_state.html_op_ready = generar_html_orden_pago({"Fecha": date.today(), "Proveedor": p_sel, "Concepto": f"Cheque de {cheq_row['Librador']} #{cheq_row['Nro Cheque']} — Vto: {cheq_row['Fecha Vencimiento']}", "Caja/Banco": f"Cheque {cheq_row['Banco Librador']}", "Monto": mon_ct, "Ref AFIP": afip_p})
-                                    st.session_state.prov_ready = p_sel
-                                    st.rerun()
+                                    ok = guardar_tesoreria_y_compras()
+                                    if ok:
+                                        st.session_state.html_op_ready = generar_html_orden_pago({"Fecha": date.today(), "Proveedor": p_sel, "Concepto": f"Cheque de {cheq_row['Librador']} #{cheq_row['Nro Cheque']} — Vto: {cheq_row['Fecha Vencimiento']}", "Caja/Banco": f"Cheque {cheq_row['Banco Librador']}", "Monto": mon_ct, "Ref AFIP": afip_p})
+                                        st.session_state.prov_ready = p_sel
+                                        st.rerun()
                                 else:
                                     st.warning("Seleccioná proveedor y cheque.")
 
