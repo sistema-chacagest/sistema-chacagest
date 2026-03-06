@@ -2551,8 +2551,9 @@ elif sel == "CTA CTE GENERAL":
 
     if saldos_dict:
         res = pd.DataFrame(list(saldos_dict.items()), columns=['Cliente', 'Saldo'])
-        # Excluir saldos cero
-        res = res[res['Saldo'].abs().round(2) > 0.01].sort_values('Saldo', ascending=False).reset_index(drop=True)
+        # Redondear y excluir saldos cero o residuales
+        res['Saldo'] = res['Saldo'].apply(lambda x: round(float(x), 2))
+        res = res[res['Saldo'].apply(lambda x: abs(x) > 0.01)].sort_values('Saldo', ascending=False).reset_index(drop=True)
 
         if res.empty:
             st.success("✅ Todos los clientes tienen saldo en cero.")
@@ -2846,8 +2847,11 @@ elif sel == "CTA CTE GENERAL PROV":
         mp1.metric("Total proveedores con saldo", len(res_p[res_p['Total'].round(2) != 0]))
         mp2.metric("Total a pagar", f"$ {res_p['Total'].sum():,.2f}")
         st.dataframe(res_p.style.format({"Total": "$ {:,.2f}"}), use_container_width=True)
-        # Descarga PDF
-        res_p_pdf = res_p[['Proveedor','Total']].rename(columns={'Proveedor':'Cliente','Total':'Importe'})
+        # Descarga PDF — excluir saldos en cero o residuales
+        res_p_pdf = res_p[['Proveedor','Total']].copy()
+        res_p_pdf['Total'] = res_p_pdf['Total'].apply(lambda x: round(float(x), 2))
+        res_p_pdf = res_p_pdf[res_p_pdf['Total'].apply(lambda x: abs(x) > 0.01)]
+        res_p_pdf = res_p_pdf.rename(columns={'Proveedor':'Cliente','Total':'Importe'})
         html_prov_pdf = generar_html_cta_cte_general("Proveedores", res_p_pdf, date.today())
         st.download_button(
             label="🖨️ DESCARGAR PDF / IMPRIMIR",
