@@ -2029,16 +2029,17 @@ elif sel == "TESORERIA":
                 df_cierre = df_caja_base.copy()
                 df_dolar_cierre = df_dolar_base.copy()
 
-            # ── Saldo disponible: solo efectivo y dólares (cajas físicas) ──
-            mask_efec_base  = mask_forma(df_cierre['Forma'], "EFECTIVO")
+            # ── Saldo disponible: TOTAL de todos los movimientos de la caja ──
+            # La forma de pago es informativa; el dinero está en caja independientemente de cómo entró.
             mask_dolar_base = mask_forma(df_cierre['Forma'], "DOLARES")
-            efectivo_disponible = df_cierre[mask_efec_base]['Monto'].sum()
+            # Excluir dólares del total en pesos
+            efectivo_disponible = df_cierre[~mask_dolar_base]['Monto'].sum()
             if not df_dolar_cierre.empty:
                 dolares_disponibles = df_dolar_cierre['Monto'].sum()
             else:
                 dolares_disponibles = df_cierre[mask_dolar_base]['Monto'].sum()
 
-            # ── Panel: efectivo disponible ──
+            # ── Panel: saldo disponible ──
             st.markdown("##### 💰 Disponible en caja")
             col_ef1, col_ef2 = st.columns(2)
             col_ef1_color = "#27ae60" if efectivo_disponible >= 0 else "#e74c3c"
@@ -2046,7 +2047,7 @@ elif sel == "TESORERIA":
             col_ef1.markdown(
                 f"<div style='background:#f0fff4;border-radius:10px;padding:16px;text-align:center;border:2px solid {col_ef1_color};'>"
                 f"<div style='font-size:24px;'>💵</div>"
-                f"<div style='font-size:11px;color:#666;font-weight:bold;margin-top:4px;'>EFECTIVO (PESOS)</div>"
+                f"<div style='font-size:11px;color:#666;font-weight:bold;margin-top:4px;'>TOTAL EN CAJA (PESOS)</div>"
                 f"<div style='font-size:28px;font-weight:bold;color:{col_ef1_color};margin-top:6px;'>$ {efectivo_disponible:,.2f}</div>"
                 f"</div>", unsafe_allow_html=True
             )
