@@ -1976,28 +1976,38 @@ elif sel == "TESORERIA":
 
             st.markdown("---")
 
-            # ── Base: TODOS los movimientos de la caja → saldo real físico acumulado ──
+            # ── Base: TODOS los movimientos de la caja ──
             df_caja_base = st.session_state.tesoreria[
                 st.session_state.tesoreria['Caja/Banco'].astype(str).str.startswith(caja_cierre)
             ].copy()
 
-            # ── Base dólares: movimientos de la caja DOLAR correspondiente (ej: "DOLAR CAJA COTI") ──
+            # ── Base dólares: movimientos de la caja DOLAR correspondiente ──
             caja_dolar_nombre = f"DOLAR {caja_cierre}"
             df_dolar_base = st.session_state.tesoreria[
                 st.session_state.tesoreria['Caja/Banco'].astype(str).str.startswith(caja_dolar_nombre)
             ].copy()
 
-            # Sin filtro de fechas: df_cierre = todo lo acumulado (saldo real)
-            df_cierre = df_caja_base.copy()
-
-            # ── Efectivo disponible TOTAL (saldo real acumulado de todos los movimientos) ──
-            mask_efec_base = mask_forma(df_caja_base['Forma'], "EFECTIVO")
-            mask_dolar_base = mask_forma(df_caja_base['Forma'], "DOLARES")
-            efectivo_disponible = df_caja_base[mask_efec_base]['Monto'].sum()
-            if not df_dolar_base.empty:
-                dolares_disponibles = df_dolar_base['Monto'].sum()
+            # ── df_cierre = solo movimientos DESDE el último cierre/rendición ──
+            # Esto evita que el saldo acumule movimientos de rendiciones anteriores ya procesadas
+            cierres_cierre_idx = df_caja_base[
+                df_caja_base['Tipo'].isin(['CIERRE DE CAJA', 'RENDICION', 'RENDICIÓN'])
+            ].index
+            if len(cierres_cierre_idx) > 0:
+                ultimo_idx = cierres_cierre_idx[-1]
+                df_cierre = df_caja_base[df_caja_base.index > ultimo_idx].copy()
+                df_dolar_cierre = df_dolar_base[df_dolar_base.index > ultimo_idx].copy() if not df_dolar_base.empty else df_dolar_base.copy()
             else:
-                dolares_disponibles = df_caja_base[mask_dolar_base]['Monto'].sum()
+                df_cierre = df_caja_base.copy()
+                df_dolar_cierre = df_dolar_base.copy()
+
+            # ── Efectivo disponible: calculado sobre movimientos post-último cierre ──
+            mask_efec_base  = mask_forma(df_cierre['Forma'], "EFECTIVO")
+            mask_dolar_base = mask_forma(df_cierre['Forma'], "DOLARES")
+            efectivo_disponible = df_cierre[mask_efec_base]['Monto'].sum()
+            if not df_dolar_cierre.empty:
+                dolares_disponibles = df_dolar_cierre['Monto'].sum()
+            else:
+                dolares_disponibles = df_cierre[mask_dolar_base]['Monto'].sum()
 
             # ── Panel: efectivo disponible ──
             st.markdown("##### 💰 Disponible en caja")
@@ -2082,7 +2092,7 @@ elif sel == "TESORERIA":
                     f"<div style='font-size:14px;font-weight:bold;color:{col_p};'>$ {sub_p:,.2f}</div>"
                     f"</div>", unsafe_allow_html=True
                 )
-            st.caption(f"Saldo calculado sobre {len(df_cierre)} movimiento(s) totales en {caja_cierre}")
+            st.caption(f"Saldo calculado sobre {len(df_cierre)} movimiento(s) desde la última rendición en {caja_cierre}")
             st.markdown("---")
 
             if st.button("📋 GENERAR RENDICIÓN", type="primary"):
