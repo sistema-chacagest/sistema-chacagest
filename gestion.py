@@ -2358,7 +2358,7 @@ elif sel == "TESORERIA":
 elif sel == "CTA CTE INDIVIDUAL":
     st.header("📑 Cuenta Corriente por Cliente")
     if not st.session_state.clientes.empty:
-        cl = st.selectbox("Seleccionar Cliente", st.session_state.clientes['Razón Social'].unique())
+        cl = st.selectbox("Seleccionar Cliente", sorted(st.session_state.clientes['Razón Social'].unique()))
 
         # ── SALDO INICIAL (MIGRACIÓN) ──
         with st.expander("⚙️ Cargar Saldo Inicial (migración desde otro sistema)", expanded=False):
@@ -2373,16 +2373,13 @@ elif sel == "CTA CTE INDIVIDUAL":
                 si1, si2, si3 = st.columns(3)
                 fecha_si   = si1.date_input("Fecha del saldo", value=date.today(), key="si_cli_fecha")
                 monto_si   = si2.number_input("Saldo a favor de la empresa (deuda del cliente) $",
-                                              min_value=0.0, step=100.0, format="%.2f", key="si_cli_monto",
-                                              help="Ingresá el monto que el cliente te debe. Si tiene saldo a su favor, ingresá el monto y marcá 'A favor del cliente'.")
-                favor_cli  = si3.checkbox("¿Saldo a favor del CLIENTE?", value=False, key="si_cli_favor",
-                                          help="Marcá si el cliente tiene un crédito a su favor (saldo negativo para la empresa).")
+                                              min_value=0.0, step=100.0, format="%.2f", key="si_cli_monto")
+                favor_cli  = si3.checkbox("¿Saldo a favor del CLIENTE?", value=False, key="si_cli_favor")
                 obs_si     = st.text_input("Observación (opcional)", placeholder="Ej: Saldo migrado de sistema anterior", key="si_cli_obs")
                 if st.form_submit_button("✅ CARGAR SALDO INICIAL"):
                     if monto_si > 0:
                         importe_final = -monto_si if favor_cli else monto_si
                         concepto_si   = obs_si if obs_si else "SALDO INICIAL — migración"
-                        # Registrar en viajes como ajuste de apertura
                         nv_si = pd.DataFrame([[
                             str(fecha_si), cl, str(fecha_si), "AJUSTE", "SALDO INICIAL",
                             "-", importe_final, "AJUSTE", concepto_si
@@ -2396,62 +2393,163 @@ elif sel == "CTA CTE INDIVIDUAL":
                         st.warning("Ingresá un monto mayor a cero.")
 
         st.markdown("---")
-        TIPOS_CTA_CTE = ['FACTURA', 'NOTA DE CREDITO', 'NOTA DE DEBITO', 'COBRO', 'COBRANZA']
-        df_ind = st.session_state.tesoreria[
+
+        # ══════════════════════════════════════════════════════════════
+        # CUENTA CORRIENTE UNIFICADA: viajes + facturas + cobros
+        # ══════════════════════════════════════════════════════════════
+        filas_unif = []
+
+        # 1) VIAJES (débitos por servicios prestados y pagos de viajes)
+        df_v_cli = st.session_state.viajes[
+            st.session_state.viajes['Cliente'] == cl
+        ].copy()
+        for _, r in df_v_cli.iterrows():
+            imp = float(r['Importe'])
+            origen = str(r.get('Origen', '-'))
+            destino = str(r.get('Destino', '-'))
+            comp_nro = str(r.get('Nro Comp Asoc', '-'))
+
+            if origen in ("AJUSTE", "SALDO INICIAL"):
+                tipo_mov = "SALDO INICIAL"
+                concepto = str(r.get('Nro Comp Asoc', 'Saldo inicial migrado'))
+            elif imp < 0:
+                tipo_mov = "COBRANZA VIAJE"
+                concepto = f"Cobro viaje | Ref: {comp_nro}"
+            else:
+                tipo_mov = "VIAJE"
+                concepto = f"{origen} → {destino}" + (f" | {comp_nro}" if comp_nro not in ['-','','nan'] else "")
+
+            filas_unif.append({
+                "Fecha":       str(r.get('Fecha Viaje', r.get('Fecha Carga', '-'))),
+                "Tipo":        tipo_mov,
+                "Comprobante": concepto,
+                "Debe":        imp if imp > 0 else 0.0,
+                "Haber":       abs(imp) if imp < 0 else 0.0,
+            })
+
+        # 2) FACTURAS emitidas (desde tesorería: FACTURA, NC, ND)
+        TIPOS_FAC = ['FACTURA', 'NOTA DE CREDITO', 'NOTA DE DEBITO']
+        df_t_cli = st.session_state.tesoreria[
             (st.session_state.tesoreria['Cliente/Proveedor'] == cl) &
-            (st.session_state.tesoreria['Tipo'].isin(TIPOS_CTA_CTE))
-        ].copy().sort_values('Fecha')
-        if df_ind.empty:
-            df_ind_v = st.session_state.viajes[st.session_state.viajes['Cliente'] == cl].copy()
-            st.metric("SALDO TOTAL (viajes)", f"$ {df_ind_v['Importe'].sum():,.2f}")
-            html_reporte = generar_html_resumen(cl, df_ind_v, df_ind_v['Importe'].sum())
-            st.download_button(label="📄 DESCARGAR RESUMEN", data=html_reporte, file_name=f"Resumen_{cl}.html", mime="text/html")
-            st.dataframe(df_ind_v, use_container_width=True)
+            (st.session_state.tesoreria['Tipo'].isin(TIPOS_FAC))
+        ].copy()
+        for _, r in df_t_cli.iterrows():
+            monto = float(r['Monto'])
+            filas_unif.append({
+                "Fecha":       str(r['Fecha']),
+                "Tipo":        r['Tipo'],
+                "Comprobante": str(r['Concepto']),
+                "Debe":        monto if monto > 0 else 0.0,
+                "Haber":       abs(monto) if monto < 0 else 0.0,
+            })
+
+        # 3) COBRANZAS de facturas (desde tesorería: COBRO, COBRANZA, COBRANZA FACTURA)
+        TIPOS_COB = ['COBRO', 'COBRANZA', 'COBRANZA FACTURA']
+        df_cob_cli = st.session_state.tesoreria[
+            (st.session_state.tesoreria['Cliente/Proveedor'] == cl) &
+            (st.session_state.tesoreria['Tipo'].isin(TIPOS_COB))
+        ].copy()
+        for _, r in df_cob_cli.iterrows():
+            monto = float(r['Monto'])
+            filas_unif.append({
+                "Fecha":       str(r['Fecha']),
+                "Tipo":        "COBRO",
+                "Comprobante": str(r['Concepto']),
+                "Debe":        monto if monto > 0 else 0.0,
+                "Haber":       abs(monto) if monto < 0 else 0.0,
+            })
+
+        if not filas_unif:
+            st.info(f"No hay movimientos registrados para {cl}.")
         else:
+            # Ordenar por fecha y calcular saldo acumulado
+            df_unif = pd.DataFrame(filas_unif)
+            df_unif['Fecha_dt'] = pd.to_datetime(df_unif['Fecha'], errors='coerce')
+            df_unif = df_unif.sort_values('Fecha_dt', na_position='last').reset_index(drop=True)
+
             saldo_acum = 0.0
             filas_cc = []
-            for _, r in df_ind.iterrows():
-                saldo_acum += float(r['Monto'])
+            for _, r in df_unif.iterrows():
+                saldo_acum += r['Debe'] - r['Haber']
                 filas_cc.append({
-                    "Fecha": r['Fecha'], "Tipo": r['Tipo'], "Comprobante": r['Concepto'],
-                    "Debe":  f"$ {float(r['Monto']):,.2f}" if float(r['Monto']) > 0 else "",
-                    "Haber": f"$ {abs(float(r['Monto'])):,.2f}" if float(r['Monto']) < 0 else "",
-                    "Saldo": f"$ {saldo_acum:,.2f}"
+                    "Fecha":       r['Fecha'],
+                    "Tipo":        r['Tipo'],
+                    "Comprobante": r['Comprobante'],
+                    "Debe":        f"$ {r['Debe']:,.2f}" if r['Debe'] > 0 else "",
+                    "Haber":       f"$ {r['Haber']:,.2f}" if r['Haber'] > 0 else "",
+                    "Saldo":       f"$ {saldo_acum:,.2f}",
                 })
+
             df_cc_show = pd.DataFrame(filas_cc)
-            total_facturado = df_ind[df_ind['Monto'] > 0]['Monto'].sum()
-            total_cobrado   = df_ind[df_ind['Monto'] < 0]['Monto'].sum()
-            saldo_final     = total_facturado + total_cobrado
+            total_debe  = df_unif['Debe'].sum()
+            total_haber = df_unif['Haber'].sum()
+            saldo_final = total_debe - total_haber
+
+            # Métricas
             m1, m2, m3 = st.columns(3)
-            m1.metric("Total Facturado", f"$ {total_facturado:,.2f}")
-            m2.metric("Total Cobrado",   f"$ {abs(total_cobrado):,.2f}")
-            m3.metric("Saldo Pendiente", f"$ {saldo_final:,.2f}")
+            m1.metric("Total Facturado / Viajes", f"$ {total_debe:,.2f}")
+            m2.metric("Total Cobrado",             f"$ {total_haber:,.2f}")
+            color_s = "inverse" if saldo_final > 0 else "normal"
+            m3.metric("Saldo Pendiente",            f"$ {saldo_final:,.2f}", delta_color=color_s)
             st.markdown("---")
+
+            # Tabla con colores por tipo
             st.dataframe(df_cc_show, use_container_width=True, hide_index=True)
+
+            # Descarga
             html_reporte = generar_html_resumen(cl, df_cc_show, saldo_final)
-            st.download_button(label="📄 DESCARGAR RESUMEN", data=html_reporte, file_name=f"Resumen_{cl}.html", mime="text/html")
+            st.download_button(
+                label="📄 DESCARGAR RESUMEN",
+                data=html_reporte,
+                file_name=f"CuentaCorriente_{cl.replace(' ','_')}.html",
+                mime="text/html"
+            )
+    else:
+        st.info("No hay clientes registrados.")
 
 elif sel == "CTA CTE GENERAL":
     st.header("🌎 Estado Global de Deudores")
+
+    # Unificar saldos: viajes + facturas/cobros de tesorería
+    saldos_dict = {}
+
+    # 1) Viajes
     if not st.session_state.viajes.empty:
-        res = st.session_state.viajes.groupby('Cliente')['Importe'].sum().reset_index()
-        # Excluir clientes con saldo cero (tolerancia de 1 centavo)
-        res = res[res['Importe'].abs().round(2) > 0.01].sort_values('Importe', ascending=False)
-        # Métricas
-        m1, m2, m3 = st.columns(3)
-        m1.metric("Total clientes con saldo", len(res))
-        m2.metric("Total a cobrar", f"$ {res[res['Importe']>0]['Importe'].sum():,.2f}")
-        m3.metric("Total a favor clientes", f"$ {res[res['Importe']<0]['Importe'].sum():,.2f}")
-        st.table(res.style.format({"Importe": "$ {:,.2f}"}))
-        # Descarga PDF
-        html_cta_cte = generar_html_cta_cte_general("Clientes", res, date.today())
-        st.download_button(
-            label="🖨️ DESCARGAR PDF / IMPRIMIR",
-            data=html_cta_cte,
-            file_name=f"CTA_CTE_General_Clientes_{date.today()}.html",
-            mime="text/html",
-            help="Abrí el archivo descargado en el navegador y usá Ctrl+P para imprimir o guardar como PDF"
-        )
+        for cli, grp in st.session_state.viajes.groupby('Cliente'):
+            saldos_dict[cli] = saldos_dict.get(cli, 0.0) + float(grp['Importe'].sum())
+
+    # 2) Tesorería (facturas, NC, ND, cobros de factura)
+    TIPOS_CC_GRAL = ['FACTURA', 'NOTA DE CREDITO', 'NOTA DE DEBITO', 'COBRO', 'COBRANZA', 'COBRANZA FACTURA']
+    if not st.session_state.tesoreria.empty:
+        df_t_gral = st.session_state.tesoreria[
+            st.session_state.tesoreria['Tipo'].isin(TIPOS_CC_GRAL)
+        ]
+        for cli, grp in df_t_gral.groupby('Cliente/Proveedor'):
+            saldos_dict[cli] = saldos_dict.get(cli, 0.0) + float(grp['Monto'].sum())
+
+    if saldos_dict:
+        res = pd.DataFrame(list(saldos_dict.items()), columns=['Cliente', 'Saldo'])
+        # Excluir saldos cero
+        res = res[res['Saldo'].abs().round(2) > 0.01].sort_values('Saldo', ascending=False).reset_index(drop=True)
+
+        if res.empty:
+            st.success("✅ Todos los clientes tienen saldo en cero.")
+        else:
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Clientes con saldo", len(res))
+            m2.metric("Total a cobrar",     f"$ {res[res['Saldo']>0]['Saldo'].sum():,.2f}")
+            m3.metric("Total a favor clientes", f"$ {res[res['Saldo']<0]['Saldo'].sum():,.2f}")
+            # Renombrar para compatibilidad con generar_html_cta_cte_general
+            res_show = res.rename(columns={'Saldo': 'Importe'})
+            st.table(res_show.style.format({"Importe": "$ {:,.2f}"}))
+            html_cta_cte = generar_html_cta_cte_general("Clientes", res_show, date.today())
+            st.download_button(
+                label="🖨️ DESCARGAR PDF / IMPRIMIR",
+                data=html_cta_cte,
+                file_name=f"CTA_CTE_General_Clientes_{date.today()}.html",
+                mime="text/html",
+                help="Abrí el archivo descargado en el navegador y usá Ctrl+P para imprimir o guardar como PDF"
+            )
     else:
         st.info("No hay movimientos registrados.")
 
@@ -3338,55 +3436,87 @@ elif sel == "FACTURACION":
                                        mime="text/html", key="dl_reemision")
 
     # ─────────────────────────────────────────────
-    # TAB 3 — CUENTA CORRIENTE CLIENTES (desde tesorería)
+    # TAB 3 — CUENTA CORRIENTE CLIENTES (unificada)
     # ─────────────────────────────────────────────
     with tab_ctacte:
         st.markdown("##### 📒 Cuenta Corriente por Cliente")
+        st.info("💡 La cuenta corriente unificada (viajes + facturas + cobros) está disponible en **VENTAS → CTA CTE INDIVIDUAL**.")
         if st.session_state.clientes.empty:
             st.info("No hay clientes cargados.")
         else:
             clientes_cc = sorted(st.session_state.clientes['Razón Social'].tolist())
             cli_cc = st.selectbox("Cliente", clientes_cc, key="cc_cliente_fac")
 
-            df_cc_cli = st.session_state.tesoreria[
+            filas_unif_fac = []
+
+            # Viajes del cliente
+            df_v_fac = st.session_state.viajes[st.session_state.viajes['Cliente'] == cli_cc].copy()
+            for _, r in df_v_fac.iterrows():
+                imp = float(r['Importe'])
+                origen = str(r.get('Origen', '-'))
+                destino = str(r.get('Destino', '-'))
+                comp_nro = str(r.get('Nro Comp Asoc', '-'))
+                if origen in ("AJUSTE", "SALDO INICIAL"):
+                    tipo_mov = "SALDO INICIAL"
+                    concepto = str(r.get('Nro Comp Asoc', 'Saldo inicial'))
+                elif imp < 0:
+                    tipo_mov = "COBRANZA VIAJE"
+                    concepto = f"Cobro viaje | Ref: {comp_nro}"
+                else:
+                    tipo_mov = "VIAJE"
+                    concepto = f"{origen} → {destino}" + (f" | {comp_nro}" if comp_nro not in ['-','','nan'] else "")
+                filas_unif_fac.append({
+                    "Fecha": str(r.get('Fecha Viaje', r.get('Fecha Carga', '-'))),
+                    "Tipo": tipo_mov, "Comprobante": concepto,
+                    "Debe": imp if imp > 0 else 0.0,
+                    "Haber": abs(imp) if imp < 0 else 0.0,
+                })
+
+            # Facturas y cobros desde tesorería
+            df_t_fac = st.session_state.tesoreria[
                 (st.session_state.tesoreria['Cliente/Proveedor'] == cli_cc) &
-                (st.session_state.tesoreria['Tipo'].isin(['FACTURA', 'NOTA DE CREDITO', 'NOTA DE DEBITO', 'COBRO', 'COBRANZA']))
-            ].copy().sort_values('Fecha')
+                (st.session_state.tesoreria['Tipo'].isin(['FACTURA','NOTA DE CREDITO','NOTA DE DEBITO','COBRO','COBRANZA','COBRANZA FACTURA']))
+            ].copy()
+            for _, r in df_t_fac.iterrows():
+                monto = float(r['Monto'])
+                tipo_m = r['Tipo'] if r['Tipo'] in ['FACTURA','NOTA DE CREDITO','NOTA DE DEBITO'] else 'COBRO'
+                filas_unif_fac.append({
+                    "Fecha": str(r['Fecha']), "Tipo": tipo_m,
+                    "Comprobante": str(r['Concepto']),
+                    "Debe": monto if monto > 0 else 0.0,
+                    "Haber": abs(monto) if monto < 0 else 0.0,
+                })
 
-            if df_cc_cli.empty:
-                st.info(f"No hay movimientos de cuenta corriente para {cli_cc}.")
+            if not filas_unif_fac:
+                st.info(f"No hay movimientos para {cli_cc}.")
             else:
-                saldo_acum = 0.0
-                filas_cc = []
-                for _, r in df_cc_cli.iterrows():
-                    saldo_acum += float(r['Monto'])
-                    tipo_cc = r['Tipo']
-                    color_row = "#eafaf1" if float(r['Monto']) > 0 else "#fef9f0"
-                    filas_cc.append({
-                        "Fecha": r['Fecha'], "Tipo": tipo_cc,
-                        "Comprobante": r['Concepto'], "Debe": f"$ {float(r['Monto']):,.2f}" if float(r['Monto']) > 0 else "",
-                        "Haber": f"$ {abs(float(r['Monto'])):,.2f}" if float(r['Monto']) < 0 else "",
-                        "Saldo": f"$ {saldo_acum:,.2f}"
+                df_unif_fac = pd.DataFrame(filas_unif_fac)
+                df_unif_fac['Fecha_dt'] = pd.to_datetime(df_unif_fac['Fecha'], errors='coerce')
+                df_unif_fac = df_unif_fac.sort_values('Fecha_dt', na_position='last').reset_index(drop=True)
+                saldo_a = 0.0
+                filas_show = []
+                for _, r in df_unif_fac.iterrows():
+                    saldo_a += r['Debe'] - r['Haber']
+                    filas_show.append({
+                        "Fecha": r['Fecha'], "Tipo": r['Tipo'], "Comprobante": r['Comprobante'],
+                        "Debe":  f"$ {r['Debe']:,.2f}"  if r['Debe']  > 0 else "",
+                        "Haber": f"$ {r['Haber']:,.2f}" if r['Haber'] > 0 else "",
+                        "Saldo": f"$ {saldo_a:,.2f}",
                     })
-
-                df_cc_show = pd.DataFrame(filas_cc)
-                total_debe  = df_cc_cli[df_cc_cli['Monto'] > 0]['Monto'].sum()
-                total_haber = df_cc_cli[df_cc_cli['Monto'] < 0]['Monto'].sum()
-                saldo_final = total_debe + total_haber
-
+                df_show = pd.DataFrame(filas_show)
+                total_d = df_unif_fac['Debe'].sum()
+                total_h = df_unif_fac['Haber'].sum()
+                sf = total_d - total_h
                 cm1, cm2, cm3 = st.columns(3)
-                cm1.metric("Total Facturado", f"$ {total_debe:,.2f}")
-                cm2.metric("Total Cobrado", f"$ {abs(total_haber):,.2f}")
-                color_saldo = "normal" if saldo_final <= 0 else "inverse"
-                cm3.metric("Saldo Pendiente", f"$ {saldo_final:,.2f}", delta_color=color_saldo)
+                cm1.metric("Total Facturado / Viajes", f"$ {total_d:,.2f}")
+                cm2.metric("Total Cobrado",             f"$ {total_h:,.2f}")
+                cm3.metric("Saldo Pendiente",            f"$ {sf:,.2f}")
                 st.markdown("---")
-                st.dataframe(df_cc_show, use_container_width=True, hide_index=True)
-
-                if st.button("📄 Exportar Resumen", key="btn_export_cc"):
-                    html_resumen = generar_html_resumen(cli_cc, df_cc_show, saldo_final)
-                    st.download_button("⬇️ Descargar HTML", html_resumen,
-                                       file_name=f"CuentaCorriente_{cli_cc.replace(' ','_')}.html",
-                                       mime="text/html", key="dl_cc_fac")
+                st.dataframe(df_show, use_container_width=True, hide_index=True)
+                html_r = generar_html_resumen(cli_cc, df_show, sf)
+                st.download_button("📄 Descargar resumen", html_r,
+                                   file_name=f"CuentaCorriente_{cli_cc.replace(' ','_')}.html",
+                                   mime="text/html", key="dl_cc_fac")
 
 
 
