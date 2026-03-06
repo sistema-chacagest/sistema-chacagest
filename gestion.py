@@ -44,16 +44,25 @@ COL_FACTURAS = ["Fecha", "Tipo", "Punto Venta", "Numero", "Cliente", "CUIT Clien
                 "Detalle", "Neto", "IVA", "No Gravado", "Total", "Estado", "Comp Asoc Tipo", "Comp Asoc Nro", "Observaciones"]
 
 def conectar_google():
+    """Devuelve la conexión a Google Sheets, reutilizando la del session_state si ya existe."""
     nombre_planilla = "Base_Chacagest"
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+
+    # Reutilizar conexión existente para no agotar cuota de lecturas
+    if "gsheets_conn" in st.session_state and st.session_state.gsheets_conn is not None:
+        return st.session_state.gsheets_conn
+
     try:
         if "gcp_service_account" in st.secrets:
             creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
         else:
             creds = Credentials.from_service_account_file("llave_google.json", scopes=scope)
         client = gspread.authorize(creds)
-        return client.open(nombre_planilla)
+        sh = client.open(nombre_planilla)
+        st.session_state.gsheets_conn = sh   # cachear para toda la sesión
+        return sh
     except Exception as e:
+        st.session_state.gsheets_conn = None
         st.error(f"Error de conexión: {e}")
         return None
 
@@ -157,6 +166,8 @@ def guardar_datos(nombre_hoja, df, reintentos=3):
             return True
         except Exception as e:
             ultimo_error = e
+            # Limpiar conexión cacheada para forzar reconexión en el próximo intento
+            st.session_state.gsheets_conn = None
             if intento < reintentos - 1:
                 time.sleep(1.5)
     st.error(f"❌ Error al guardar '{nombre_hoja}' tras {reintentos} intentos: {ultimo_error}")
