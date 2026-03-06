@@ -2359,6 +2359,43 @@ elif sel == "CTA CTE INDIVIDUAL":
     st.header("📑 Cuenta Corriente por Cliente")
     if not st.session_state.clientes.empty:
         cl = st.selectbox("Seleccionar Cliente", st.session_state.clientes['Razón Social'].unique())
+
+        # ── SALDO INICIAL (MIGRACIÓN) ──
+        with st.expander("⚙️ Cargar Saldo Inicial (migración desde otro sistema)", expanded=False):
+            st.markdown(
+                "<div style='background:#fff8e1;border-left:4px solid #f39c12;border-radius:6px;"
+                "padding:10px 16px;font-size:13px;margin-bottom:12px;'>"
+                "⚠️ <b>Usá esta opción solo para cargar el saldo que traía el cliente de un sistema anterior.</b><br>"
+                "Se registrará como <i>SALDO INICIAL</i> con la fecha que indiques. No afecta facturas ni viajes."
+                "</div>", unsafe_allow_html=True
+            )
+            with st.form("f_saldo_ini_cli", clear_on_submit=True):
+                si1, si2, si3 = st.columns(3)
+                fecha_si   = si1.date_input("Fecha del saldo", value=date.today(), key="si_cli_fecha")
+                monto_si   = si2.number_input("Saldo a favor de la empresa (deuda del cliente) $",
+                                              min_value=0.0, step=100.0, format="%.2f", key="si_cli_monto",
+                                              help="Ingresá el monto que el cliente te debe. Si tiene saldo a su favor, ingresá el monto y marcá 'A favor del cliente'.")
+                favor_cli  = si3.checkbox("¿Saldo a favor del CLIENTE?", value=False, key="si_cli_favor",
+                                          help="Marcá si el cliente tiene un crédito a su favor (saldo negativo para la empresa).")
+                obs_si     = st.text_input("Observación (opcional)", placeholder="Ej: Saldo migrado de sistema anterior", key="si_cli_obs")
+                if st.form_submit_button("✅ CARGAR SALDO INICIAL"):
+                    if monto_si > 0:
+                        importe_final = -monto_si if favor_cli else monto_si
+                        concepto_si   = obs_si if obs_si else "SALDO INICIAL — migración"
+                        # Registrar en viajes como ajuste de apertura
+                        nv_si = pd.DataFrame([[
+                            str(fecha_si), cl, str(fecha_si), "AJUSTE", "SALDO INICIAL",
+                            "-", importe_final, "AJUSTE", concepto_si
+                        ]], columns=COL_VIAJES)
+                        st.session_state.viajes = pd.concat([st.session_state.viajes, nv_si], ignore_index=True)
+                        guardar_datos("viajes", st.session_state.viajes)
+                        signo_txt = "a favor del cliente" if favor_cli else "a cobrar"
+                        st.success(f"✅ Saldo inicial de $ {monto_si:,.2f} ({signo_txt}) cargado para {cl}.")
+                        st.rerun()
+                    else:
+                        st.warning("Ingresá un monto mayor a cero.")
+
+        st.markdown("---")
         TIPOS_CTA_CTE = ['FACTURA', 'NOTA DE CREDITO', 'NOTA DE DEBITO', 'COBRO', 'COBRANZA']
         df_ind = st.session_state.tesoreria[
             (st.session_state.tesoreria['Cliente/Proveedor'] == cl) &
@@ -2618,8 +2655,57 @@ elif sel == "CTA CTE PROVEEDOR":
     st.header("📊 Cuenta Corriente por Proveedor")
     if not st.session_state.proveedores.empty:
         p_sel = st.selectbox("Seleccionar Proveedor", st.session_state.proveedores['Razón Social'].unique())
+
+        # ── SALDO INICIAL (MIGRACIÓN) ──
+        with st.expander("⚙️ Cargar Saldo Inicial (migración desde otro sistema)", expanded=False):
+            st.markdown(
+                "<div style='background:#fff8e1;border-left:4px solid #f39c12;border-radius:6px;"
+                "padding:10px 16px;font-size:13px;margin-bottom:12px;'>"
+                "⚠️ <b>Usá esta opción solo para cargar el saldo que le debías al proveedor en el sistema anterior.</b><br>"
+                "Se registrará como <i>SALDO INICIAL</i> con la fecha que indiques. No genera comprobante fiscal."
+                "</div>", unsafe_allow_html=True
+            )
+            with st.form("f_saldo_ini_prov", clear_on_submit=True):
+                sp1, sp2, sp3 = st.columns(3)
+                fecha_sp  = sp1.date_input("Fecha del saldo", value=date.today(), key="si_prov_fecha")
+                monto_sp  = sp2.number_input("Saldo que le debés al proveedor $",
+                                             min_value=0.0, step=100.0, format="%.2f", key="si_prov_monto",
+                                             help="Ingresá lo que le debés. Si el proveedor tiene crédito a tu favor, marcá 'A favor de la empresa'.")
+                favor_emp = sp3.checkbox("¿Saldo a favor de la EMPRESA?", value=False, key="si_prov_favor",
+                                         help="Marcá si el proveedor te debe algo (anticipo, devolución, etc.).")
+                obs_sp    = st.text_input("Observación (opcional)", placeholder="Ej: Saldo migrado de sistema anterior", key="si_prov_obs")
+                if st.form_submit_button("✅ CARGAR SALDO INICIAL"):
+                    if monto_sp > 0:
+                        # Si debemos al proveedor → total positivo (deuda nuestra)
+                        # Si el proveedor nos debe → total negativo (crédito nuestro)
+                        total_sp  = -monto_sp if favor_emp else monto_sp
+                        concepto_sp = obs_sp if obs_sp else "SALDO INICIAL — migración"
+                        nc_si = pd.DataFrame([[
+                            str(fecha_sp), p_sel, "-", "SALDO INICIAL",
+                            0, 0, 0, 0, 0, 0, total_sp
+                        ]], columns=COL_COMPRAS)
+                        st.session_state.compras = pd.concat([st.session_state.compras, nc_si], ignore_index=True)
+                        guardar_datos("compras", st.session_state.compras)
+                        signo_txt = "a favor de la empresa" if favor_emp else "a pagar al proveedor"
+                        st.success(f"✅ Saldo inicial de $ {monto_sp:,.2f} ({signo_txt}) cargado para {p_sel}.")
+                        st.rerun()
+                    else:
+                        st.warning("Ingresá un monto mayor a cero.")
+
+        st.markdown("---")
         df_p  = st.session_state.compras[st.session_state.compras['Proveedor'] == p_sel]
-        st.metric("SALDO PENDIENTE", f"$ {df_p['Total'].sum():,.2f}")
+        # Separar saldo inicial del resto para mostrarlo destacado
+        df_p_si   = df_p[df_p['Tipo Factura'] == 'SALDO INICIAL']
+        df_p_real = df_p[df_p['Tipo Factura'] != 'SALDO INICIAL']
+        saldo_ini_prov = df_p_si['Total'].sum()
+        saldo_mov_prov = df_p_real['Total'].sum()
+        saldo_total_prov = df_p['Total'].sum()
+
+        sp_m1, sp_m2, sp_m3 = st.columns(3)
+        if saldo_ini_prov != 0:
+            sp_m1.metric("Saldo Inicial Migrado", f"$ {saldo_ini_prov:,.2f}")
+        sp_m2.metric("Movimientos del Sistema", f"$ {saldo_mov_prov:,.2f}")
+        sp_m3.metric("SALDO TOTAL PENDIENTE",    f"$ {saldo_total_prov:,.2f}")
         st.dataframe(df_p, use_container_width=True)
     else:
         st.info("No hay proveedores registrados.")
