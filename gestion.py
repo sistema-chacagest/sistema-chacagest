@@ -3848,6 +3848,53 @@ elif sel == "CHEQUES":
                     else:
                         st.warning("Completá Nro de Cheque, Librador e Importe.")
 
+        with st.expander("📋 CARGA MASIVA DE CHEQUES (varios a la vez)", expanded=False):
+            st.markdown("Completá los datos de cada cheque. Dejá en blanco las filas que no uses.")
+            if "cheques_masivos" not in st.session_state:
+                st.session_state.cheques_masivos = 5
+            cant_filas = st.number_input("Cantidad de cheques a ingresar", min_value=1, max_value=50, value=st.session_state.cheques_masivos, step=1, key="cant_cheq_masivos")
+            st.session_state.cheques_masivos = int(cant_filas)
+
+            librador_global = st.text_input("Librador (se aplica a todos si completás aquí)", key="librador_global_masivo")
+            banco_global     = st.text_input("Banco Librador (se aplica a todos si completás aquí)", key="banco_global_masivo")
+            tipo_global      = st.selectbox("Tipo (se aplica a todos)", ["FÍSICO", "ECHEQ"], key="tipo_global_masivo")
+            f_rec_global     = st.date_input("Fecha de Recepción (para todos)", value=hoy, key="frec_global_masivo")
+
+            st.markdown("##### Detalle de cheques")
+            cheques_ingresados = []
+            for idx_m in range(int(cant_filas)):
+                cm1, cm2, cm3, cm4 = st.columns([2, 2, 2, 2])
+                nro_m  = cm1.text_input(f"Nro Cheque #{idx_m+1}", key=f"mnro_{idx_m}")
+                imp_m  = cm2.number_input(f"Importe #{idx_m+1}", min_value=0.0, step=0.01, key=f"mimp_{idx_m}")
+                fv_m   = cm3.date_input(f"Vencimiento #{idx_m+1}", value=f_rec_global + timedelta(days=30), key=f"mfv_{idx_m}")
+                obs_m  = cm4.text_input(f"Obs #{idx_m+1}", key=f"mobs_{idx_m}")
+                if nro_m and imp_m > 0:
+                    cheques_ingresados.append({
+                        "nro": nro_m,
+                        "importe": imp_m,
+                        "vencimiento": fv_m,
+                        "obs": obs_m
+                    })
+
+            if st.button("✅ GUARDAR TODOS LOS CHEQUES", key="btn_masivo_cartera", type="primary"):
+                if not cheques_ingresados:
+                    st.warning("No hay cheques válidos para guardar. Completá al menos Nro y Importe.")
+                else:
+                    librador_uso = librador_global.strip() if librador_global.strip() else "SIN DATOS"
+                    banco_uso    = banco_global.strip()    if banco_global.strip()    else "-"
+                    nuevos = []
+                    for ch in cheques_ingresados:
+                        nuevos.append([
+                            str(f_rec_global), ch["nro"], tipo_global, banco_uso,
+                            librador_uso, ch["importe"], str(ch["vencimiento"]),
+                            "EN CARTERA", "-", "-", ch["obs"]
+                        ])
+                    df_nuevos = pd.DataFrame(nuevos, columns=COL_CHEQ_CARTERA)
+                    st.session_state.cheques_cartera = pd.concat([st.session_state.cheques_cartera, df_nuevos], ignore_index=True)
+                    guardar_datos("cheques_cartera", st.session_state.cheques_cartera)
+                    st.session_state.msg_cheq_cart = f"✅ {len(nuevos)} cheques de {librador_uso} ingresados a cartera."
+                    st.rerun()
+
         st.markdown("---")
 
         filtro_cart = st.radio("Mostrar", ["EN CARTERA", "APLICADOS/DEPOSITADOS", "TODOS"], horizontal=True, key="filtro_cart")
