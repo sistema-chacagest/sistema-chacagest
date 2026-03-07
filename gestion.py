@@ -1849,20 +1849,32 @@ elif sel == "TESORERIA":
                 # ── Cheque ──
                 if es_cheque_fac:
                     st.markdown("---")
-                    st.markdown("##### 🏦 Datos del Cheque Recibido")
-                    chf1, chf2 = st.columns(2)
-                    chf_nro      = chf1.text_input("Nro. de Cheque *", key="chf_nro")
-                    chf_tipo     = chf2.selectbox("Tipo", ["COMÚN", "DIFERIDO", "ELECTRÓNICO"], key="chf_tipo")
-                    chf3, chf4   = st.columns(2)
-                    chf_banco    = chf3.text_input("Banco Librador *", key="chf_banco")
-                    chf_librador = chf4.text_input("Librador *", key="chf_librador")
-                    chf5, chf6   = st.columns(2)
-                    chf_fvenc    = chf5.date_input("Fecha Vencimiento *", date.today() + timedelta(days=30), key="chf_fvenc")
-                    chf_femision = chf6.date_input("Fecha Emisión", date.today(), key="chf_femision")
-                    chf_obs      = st.text_input("Observaciones cheque", key="chf_obs")
+                    st.markdown("##### 🏦 Datos del/los Cheque/s Recibidos")
+                    cant_cheques_fac = st.number_input("¿Cuántos cheques recibiste?", min_value=1, max_value=30, value=1, step=1, key="cant_cheques_fac")
+                    # Librador y banco comunes
+                    chfg1, chfg2, chfg3 = st.columns(3)
+                    chf_librador = chfg1.text_input("Librador * (para todos)", key="chf_librador")
+                    chf_banco    = chfg2.text_input("Banco Librador * (para todos)", key="chf_banco")
+                    chf_tipo     = chfg3.selectbox("Tipo (para todos)", ["COMÚN", "DIFERIDO", "ELECTRÓNICO"], key="chf_tipo")
+                    chf_femision = st.date_input("Fecha Emisión (para todos)", date.today(), key="chf_femision")
+                    st.markdown("**Detalle por cheque:**")
+                    cheques_fac_lista = []
+                    for _ci in range(int(cant_cheques_fac)):
+                        _c1, _c2, _c3, _c4 = st.columns([2, 2, 2, 2])
+                        _nro  = _c1.text_input(f"Nro Cheque #{_ci+1}", key=f"chf_nro_{_ci}")
+                        _imp  = _c2.number_input(f"Importe #{_ci+1} $", min_value=0.0, step=0.01, key=f"chf_imp_{_ci}")
+                        _fv   = _c3.date_input(f"Vencimiento #{_ci+1}", date.today() + timedelta(days=30), key=f"chf_fv_{_ci}")
+                        _obs  = _c4.text_input(f"Obs #{_ci+1}", key=f"chf_obs_{_ci}")
+                        if _nro and _imp > 0:
+                            cheques_fac_lista.append({"nro": _nro, "importe": _imp, "fvenc": _fv, "obs": _obs})
+                    # Para compatibilidad con validación posterior usamos el primero (o vacío)
+                    chf_nro   = cheques_fac_lista[0]["nro"]   if cheques_fac_lista else ""
+                    chf_fvenc = cheques_fac_lista[0]["fvenc"] if cheques_fac_lista else date.today()
+                    chf_obs   = ""
                 else:
                     chf_nro = chf_tipo = chf_banco = chf_librador = chf_obs = ""
                     chf_fvenc = chf_femision = date.today()
+                    cheques_fac_lista = []
 
                 # ── Transferencia ──
                 if es_transf_fac:
@@ -1925,14 +1937,17 @@ elif sel == "TESORERIA":
                         if facturas_sel_indices:
                             guardar_datos("facturas", st.session_state.facturas)
 
-                        # 4) Registrar cheque en cartera si corresponde
-                        if es_cheque_fac and chf_nro and chf_banco and chf_librador:
-                            nuevo_cheq = pd.DataFrame([[
-                                str(date.today()), chf_nro, chf_tipo, chf_banco, chf_librador,
-                                monto_cobro, str(chf_fvenc), "EN CARTERA", "-", "-",
-                                f"Emisión:{chf_femision} | Cob.Factura {cli_fac_sel} | {chf_obs}"
-                            ]], columns=COL_CHEQ_CARTERA)
-                            st.session_state.cheques_cartera = pd.concat([st.session_state.cheques_cartera, nuevo_cheq], ignore_index=True)
+                        # 4) Registrar cheque/s en cartera si corresponde
+                        if es_cheque_fac and chf_banco and chf_librador and cheques_fac_lista:
+                            filas_cheq = []
+                            for _ch in cheques_fac_lista:
+                                filas_cheq.append([
+                                    str(date.today()), _ch["nro"], chf_tipo, chf_banco, chf_librador,
+                                    _ch["importe"], str(_ch["fvenc"]), "EN CARTERA", "-", "-",
+                                    f"Emisión:{chf_femision} | Cob.Factura {cli_fac_sel} | {_ch['obs']}"
+                                ])
+                            df_cheqs_nuevos = pd.DataFrame(filas_cheq, columns=COL_CHEQ_CARTERA)
+                            st.session_state.cheques_cartera = pd.concat([st.session_state.cheques_cartera, df_cheqs_nuevos], ignore_index=True)
                             guardar_datos("cheques_cartera", st.session_state.cheques_cartera)
 
                         # 5) Generar recibo
