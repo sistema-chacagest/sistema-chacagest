@@ -4200,9 +4200,11 @@ elif sel == "CHEQUES":
         st.markdown("##### 📥 Exportar cheques a Excel")
         st.markdown("Elegí el rango de fechas y qué cheques exportar.")
 
+        exportar_todos = st.checkbox("📋 Exportar TODOS los cheques registrados (sin filtro de fecha)", value=False, key="exp_todos")
+
         ex1, ex2, ex3 = st.columns(3)
-        fecha_desde = ex1.date_input("Desde", value=date.today().replace(day=1), key="exp_desde")
-        fecha_hasta = ex2.date_input("Hasta", value=date.today(), key="exp_hasta")
+        fecha_desde = ex1.date_input("Desde", value=date.today().replace(day=1), key="exp_desde", disabled=exportar_todos)
+        fecha_hasta = ex2.date_input("Hasta", value=date.today(), key="exp_hasta", disabled=exportar_todos)
         tipo_export = ex3.multiselect(
             "Incluir",
             ["📤 Emitidos", "📂 Cartera"],
@@ -4270,7 +4272,8 @@ elif sel == "CHEQUES":
 
                 df_e = st.session_state.cheques_emitidos.copy()
                 df_e['_fecha'] = pd.to_datetime(df_e['Fecha Emisión'], errors='coerce').dt.date
-                df_e = df_e[(df_e['_fecha'] >= fecha_desde) & (df_e['_fecha'] <= fecha_hasta)]
+                if not exportar_todos:
+                    df_e = df_e[(df_e['_fecha'] >= fecha_desde) & (df_e['_fecha'] <= fecha_hasta)]
 
                 data_row = 3
                 for _, r in df_e.iterrows():
@@ -4335,7 +4338,8 @@ elif sel == "CHEQUES":
 
                 df_c = st.session_state.cheques_cartera.copy()
                 df_c['_fecha'] = pd.to_datetime(df_c['Fecha Recepción'], errors='coerce').dt.date
-                df_c = df_c[(df_c['_fecha'] >= fecha_desde) & (df_c['_fecha'] <= fecha_hasta)]
+                if not exportar_todos:
+                    df_c = df_c[(df_c['_fecha'] >= fecha_desde) & (df_c['_fecha'] <= fecha_hasta)]
 
                 data_row_c = 3
                 for _, r in df_c.iterrows():
