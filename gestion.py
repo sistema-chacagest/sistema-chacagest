@@ -1824,6 +1824,31 @@ elif sel == "TESORERIA":
 
             st.markdown("---")
 
+            # ── Cheques: FUERA del form para que el número de filas sea reactivo ──
+            cheques_fac_lista = []
+            chf_nro = chf_tipo = chf_banco = chf_librador = chf_obs = ""
+            chf_fvenc = chf_femision = date.today()
+            if es_cheque_fac:
+                st.markdown("##### 🏦 Datos del/los Cheque/s Recibidos")
+                cant_cheques_fac = st.number_input("¿Cuántos cheques recibiste?", min_value=1, max_value=30, value=1, step=1, key="cant_cheques_fac")
+                chfg1, chfg2, chfg3 = st.columns(3)
+                chf_librador = chfg1.text_input("Librador * (para todos)", key="chf_librador")
+                chf_banco    = chfg2.text_input("Banco Librador * (para todos)", key="chf_banco")
+                chf_tipo     = chfg3.selectbox("Tipo (para todos)", ["COMÚN", "DIFERIDO", "ELECTRÓNICO"], key="chf_tipo")
+                chf_femision = st.date_input("Fecha Emisión (para todos)", date.today(), key="chf_femision")
+                st.markdown("**Detalle por cheque:**")
+                for _ci in range(int(cant_cheques_fac)):
+                    _c1, _c2, _c3, _c4 = st.columns([2, 2, 2, 2])
+                    _nro = _c1.text_input(f"Nro Cheque #{_ci+1}", key=f"chf_nro_{_ci}")
+                    _imp = _c2.number_input(f"Importe #{_ci+1} $", min_value=0.0, step=0.01, key=f"chf_imp_{_ci}")
+                    _fv  = _c3.date_input(f"Vencimiento #{_ci+1}", date.today() + timedelta(days=30), key=f"chf_fv_{_ci}")
+                    _obs = _c4.text_input(f"Obs #{_ci+1}", key=f"chf_obs_{_ci}")
+                    if _nro and _imp > 0:
+                        cheques_fac_lista.append({"nro": _nro, "importe": _imp, "fvenc": _fv, "obs": _obs})
+                chf_nro   = cheques_fac_lista[0]["nro"]   if cheques_fac_lista else ""
+                chf_fvenc = cheques_fac_lista[0]["fvenc"] if cheques_fac_lista else date.today()
+                st.markdown("---")
+
             with st.form("f_cob_fac", clear_on_submit=True):
                 st.markdown("##### 💰 Datos del Cobro")
                 fcf1, fcf2 = st.columns(2)
@@ -1845,36 +1870,6 @@ elif sel == "TESORERIA":
                 ret_suss     = ret3.number_input("Ret. SUSS $",     min_value=0.0, step=10.0, format="%.2f", key="ret_suss")
                 total_retenciones = ret_iva + ret_ganancias + ret_suss
                 neto_cobro = monto_cobro - total_retenciones
-
-                # ── Cheque ──
-                if es_cheque_fac:
-                    st.markdown("---")
-                    st.markdown("##### 🏦 Datos del/los Cheque/s Recibidos")
-                    cant_cheques_fac = st.number_input("¿Cuántos cheques recibiste?", min_value=1, max_value=30, value=1, step=1, key="cant_cheques_fac")
-                    # Librador y banco comunes
-                    chfg1, chfg2, chfg3 = st.columns(3)
-                    chf_librador = chfg1.text_input("Librador * (para todos)", key="chf_librador")
-                    chf_banco    = chfg2.text_input("Banco Librador * (para todos)", key="chf_banco")
-                    chf_tipo     = chfg3.selectbox("Tipo (para todos)", ["COMÚN", "DIFERIDO", "ELECTRÓNICO"], key="chf_tipo")
-                    chf_femision = st.date_input("Fecha Emisión (para todos)", date.today(), key="chf_femision")
-                    st.markdown("**Detalle por cheque:**")
-                    cheques_fac_lista = []
-                    for _ci in range(int(cant_cheques_fac)):
-                        _c1, _c2, _c3, _c4 = st.columns([2, 2, 2, 2])
-                        _nro  = _c1.text_input(f"Nro Cheque #{_ci+1}", key=f"chf_nro_{_ci}")
-                        _imp  = _c2.number_input(f"Importe #{_ci+1} $", min_value=0.0, step=0.01, key=f"chf_imp_{_ci}")
-                        _fv   = _c3.date_input(f"Vencimiento #{_ci+1}", date.today() + timedelta(days=30), key=f"chf_fv_{_ci}")
-                        _obs  = _c4.text_input(f"Obs #{_ci+1}", key=f"chf_obs_{_ci}")
-                        if _nro and _imp > 0:
-                            cheques_fac_lista.append({"nro": _nro, "importe": _imp, "fvenc": _fv, "obs": _obs})
-                    # Para compatibilidad con validación posterior usamos el primero (o vacío)
-                    chf_nro   = cheques_fac_lista[0]["nro"]   if cheques_fac_lista else ""
-                    chf_fvenc = cheques_fac_lista[0]["fvenc"] if cheques_fac_lista else date.today()
-                    chf_obs   = ""
-                else:
-                    chf_nro = chf_tipo = chf_banco = chf_librador = chf_obs = ""
-                    chf_fvenc = chf_femision = date.today()
-                    cheques_fac_lista = []
 
                 # ── Transferencia ──
                 if es_transf_fac:
