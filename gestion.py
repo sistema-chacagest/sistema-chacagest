@@ -1072,13 +1072,27 @@ if sel == "DASHBOARD":
     MESES_ORDEN = list(range(1, 13))
     MESES_LABEL = [cal_module.month_abbr[m] for m in MESES_ORDEN]
 
-    # ── Preparar INGRESOS ──
+    # ── Preparar INGRESOS (viajes + facturas) ──
     df_ing = st.session_state.viajes.copy()
     df_ing = df_ing[df_ing['Importe'] > 0].copy()
     df_ing['Fecha Viaje'] = pd.to_datetime(df_ing['Fecha Viaje'], errors='coerce')
     df_ing = df_ing.dropna(subset=['Fecha Viaje'])
     df_ing['Año'] = df_ing['Fecha Viaje'].dt.year
     df_ing['Mes'] = df_ing['Fecha Viaje'].dt.month
+
+    # Sumar facturas emitidas (tipo FACTURA, excluyendo NC/ND)
+    if 'facturas' in st.session_state and not st.session_state.facturas.empty:
+        df_fac_dash = st.session_state.facturas.copy()
+        df_fac_dash = df_fac_dash[df_fac_dash['Tipo'] == 'FACTURA'].copy()
+        df_fac_dash['Total'] = pd.to_numeric(df_fac_dash['Total'], errors='coerce').fillna(0)
+        df_fac_dash = df_fac_dash[df_fac_dash['Total'] > 0]
+        df_fac_dash['Fecha Viaje'] = pd.to_datetime(df_fac_dash['Fecha'], errors='coerce')
+        df_fac_dash = df_fac_dash.dropna(subset=['Fecha Viaje'])
+        df_fac_dash['Año'] = df_fac_dash['Fecha Viaje'].dt.year
+        df_fac_dash['Mes'] = df_fac_dash['Fecha Viaje'].dt.month
+        df_fac_dash = df_fac_dash.rename(columns={'Total': 'Importe'})
+        df_fac_dash = df_fac_dash[['Fecha Viaje', 'Año', 'Mes', 'Importe']]
+        df_ing = pd.concat([df_ing, df_fac_dash], ignore_index=True)
 
     # ── Preparar GASTOS ──
     df_gas = st.session_state.compras.copy()
@@ -4200,11 +4214,9 @@ elif sel == "CHEQUES":
         st.markdown("##### 📥 Exportar cheques a Excel")
         st.markdown("Elegí el rango de fechas y qué cheques exportar.")
 
-        exportar_todos = st.checkbox("📋 Exportar TODOS los cheques registrados (sin filtro de fecha)", value=False, key="exp_todos")
-
         ex1, ex2, ex3 = st.columns(3)
-        fecha_desde = ex1.date_input("Desde", value=date.today().replace(day=1), key="exp_desde", disabled=exportar_todos)
-        fecha_hasta = ex2.date_input("Hasta", value=date.today(), key="exp_hasta", disabled=exportar_todos)
+        fecha_desde = ex1.date_input("Desde", value=date.today().replace(day=1), key="exp_desde")
+        fecha_hasta = ex2.date_input("Hasta", value=date.today(), key="exp_hasta")
         tipo_export = ex3.multiselect(
             "Incluir",
             ["📤 Emitidos", "📂 Cartera"],
@@ -4272,8 +4284,7 @@ elif sel == "CHEQUES":
 
                 df_e = st.session_state.cheques_emitidos.copy()
                 df_e['_fecha'] = pd.to_datetime(df_e['Fecha Emisión'], errors='coerce').dt.date
-                if not exportar_todos:
-                    df_e = df_e[(df_e['_fecha'] >= fecha_desde) & (df_e['_fecha'] <= fecha_hasta)]
+                df_e = df_e[(df_e['_fecha'] >= fecha_desde) & (df_e['_fecha'] <= fecha_hasta)]
 
                 data_row = 3
                 for _, r in df_e.iterrows():
@@ -4338,8 +4349,7 @@ elif sel == "CHEQUES":
 
                 df_c = st.session_state.cheques_cartera.copy()
                 df_c['_fecha'] = pd.to_datetime(df_c['Fecha Recepción'], errors='coerce').dt.date
-                if not exportar_todos:
-                    df_c = df_c[(df_c['_fecha'] >= fecha_desde) & (df_c['_fecha'] <= fecha_hasta)]
+                df_c = df_c[(df_c['_fecha'] >= fecha_desde) & (df_c['_fecha'] <= fecha_hasta)]
 
                 data_row_c = 3
                 for _, r in df_c.iterrows():
