@@ -1972,6 +1972,8 @@ elif sel == "TESORERIA":
         df_caja_full = st.session_state.tesoreria[st.session_state.tesoreria['Caja/Banco'].astype(str).str.startswith(cj_v)].copy()
 
         # ── Mostrar solo movimientos DESDE la última rendición/cierre ──
+        # El corte se hace por forma: efectivo/transferencia/tarjeta usan el último cierre general,
+        # dólares usan su propio último cierre de DÓLARES para no quedar en cero tras una rendición de efectivo.
         cierres_idx = df_caja_full[
             df_caja_full['Tipo'].isin(['CIERRE DE CAJA', 'RENDICION', 'RENDICIÓN'])
         ].index
@@ -1984,14 +1986,30 @@ elif sel == "TESORERIA":
             df_ver = df_caja_full.copy()
 
         # ── Resumen desglosado por Forma ──
+        # Para DÓLARES: corte independiente basado en la última rendición de DÓLARES
         FORMAS_RESUMEN = ["EFECTIVO", "TRANSFERENCIA", "TARJETA DE CREDITO", "DÓLARES", "OTROS"]
         ICONOS_FORMA   = {"EFECTIVO": "💵", "TRANSFERENCIA": "🏦", "TARJETA DE CREDITO": "💳", "DÓLARES": "💲", "OTROS": "📋"}
+
+        # Calcular saldo de dólares con su propio corte independiente
+        mask_rend_dolar_vis = (
+            df_caja_full['Tipo'].isin(['CIERRE DE CAJA', 'RENDICION', 'RENDICIÓN']) &
+            mask_forma(df_caja_full['Forma'], 'DOLARES')
+        )
+        cierres_dolar_vis = df_caja_full[mask_rend_dolar_vis].index
+        if len(cierres_dolar_vis) > 0:
+            df_dolar_vis = df_caja_full[df_caja_full.index > cierres_dolar_vis[-1]]
+        else:
+            df_dolar_vis = df_caja_full
+        saldo_dolares_vis = df_dolar_vis[mask_forma(df_dolar_vis['Forma'], 'DOLARES')]['Monto'].sum()
 
         cols_formas = st.columns(len(FORMAS_RESUMEN))
 
         for idx, forma_r in enumerate(FORMAS_RESUMEN):
-            mask = mask_forma(df_ver['Forma'], forma_r.replace("DÓLARES","DOLARES").replace("TARJETA DE CREDITO","TARJETA"))
-            saldo_forma = df_ver[mask]['Monto'].sum()
+            if forma_r == "DÓLARES":
+                saldo_forma = saldo_dolares_vis
+            else:
+                mask = mask_forma(df_ver['Forma'], forma_r.replace("TARJETA DE CREDITO","TARJETA"))
+                saldo_forma = df_ver[mask]['Monto'].sum()
             icono = ICONOS_FORMA.get(forma_r, "💰")
             color = "#2ecc71" if saldo_forma >= 0 else "#e74c3c"
             cols_formas[idx].markdown(
