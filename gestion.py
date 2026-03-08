@@ -1971,11 +1971,11 @@ elif sel == "TESORERIA":
 
         df_caja_full = st.session_state.tesoreria[st.session_state.tesoreria['Caja/Banco'].astype(str).str.startswith(cj_v)].copy()
 
-        # ── Mostrar solo movimientos DESDE la última rendición/cierre ──
-        # El corte se hace por forma: efectivo/transferencia/tarjeta usan el último cierre general,
-        # dólares usan su propio último cierre de DÓLARES para no quedar en cero tras una rendición de efectivo.
+        # ── Mostrar solo movimientos DESDE la última rendición/cierre de PESOS ──
+        # Se excluyen rendiciones de DÓLARES para que no corten el historial de pesos.
         cierres_idx = df_caja_full[
-            df_caja_full['Tipo'].isin(['CIERRE DE CAJA', 'RENDICION', 'RENDICIÓN'])
+            df_caja_full['Tipo'].isin(['CIERRE DE CAJA', 'RENDICION', 'RENDICIÓN']) &
+            ~mask_forma(df_caja_full['Forma'], 'DOLARES')
         ].index
         if len(cierres_idx) > 0:
             ultimo_cierre_idx = cierres_idx[-1]
@@ -2084,10 +2084,11 @@ elif sel == "TESORERIA":
                 st.session_state.tesoreria['Caja/Banco'].astype(str).str.startswith(caja_dolar_nombre)
             ].copy()
 
-            # ── df_cierre = solo movimientos DESDE el último cierre/rendición ──
-            # Esto evita que el saldo acumule movimientos de rendiciones anteriores ya procesadas
+            # ── df_cierre = solo movimientos DESDE el último cierre/rendición de PESOS ──
+            # Se excluyen rendiciones de DÓLARES para que no corten el historial de pesos.
             cierres_cierre_idx = df_caja_base[
-                df_caja_base['Tipo'].isin(['CIERRE DE CAJA', 'RENDICION', 'RENDICIÓN'])
+                df_caja_base['Tipo'].isin(['CIERRE DE CAJA', 'RENDICION', 'RENDICIÓN']) &
+                ~mask_forma(df_caja_base['Forma'], 'DOLARES')
             ].index
             if len(cierres_cierre_idx) > 0:
                 ultimo_idx = cierres_cierre_idx[-1]
