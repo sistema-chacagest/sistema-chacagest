@@ -1996,28 +1996,30 @@ elif sel == "TESORERIA":
         df_dolar_full_vis = st.session_state.tesoreria[
             st.session_state.tesoreria['Caja/Banco'].astype(str).str.startswith(caja_dolar_vis)
         ].copy()
-        if not df_dolar_full_vis.empty:
-            # Dólares en caja separada: buscar su propio último cierre/rendición
-            cierres_dolar_vis = df_dolar_full_vis[
-                df_dolar_full_vis['Tipo'].isin(['CIERRE DE CAJA', 'RENDICION', 'RENDICIÓN'])
-            ].index
-            if len(cierres_dolar_vis) > 0:
-                df_dolar_vis = df_dolar_full_vis[df_dolar_full_vis.index > cierres_dolar_vis[-1]]
-            else:
-                df_dolar_vis = df_dolar_full_vis
-            saldo_dolares_vis = df_dolar_vis['Monto'].sum()
+        # Calcular saldo de dólares: siempre usar corte independiente en AMBAS fuentes y sumar
+        # Fuente 1: caja DOLAR separada (DOLAR CAJA JUNIN)
+        cierres_dolar_sep = df_dolar_full_vis[
+            df_dolar_full_vis['Tipo'].isin(['CIERRE DE CAJA', 'RENDICION', 'RENDICIÓN'])
+        ].index if not df_dolar_full_vis.empty else []
+        if len(cierres_dolar_sep) > 0:
+            df_dolar_sep_activo = df_dolar_full_vis[df_dolar_full_vis.index > cierres_dolar_sep[-1]]
         else:
-            # Dólares mezclados en la caja principal: corte independiente por Forma=DÓLARES
-            mask_rend_dolar_vis = (
-                df_caja_full['Tipo'].isin(['CIERRE DE CAJA', 'RENDICION', 'RENDICIÓN']) &
-                mask_forma(df_caja_full['Forma'], 'DOLARES')
-            )
-            cierres_dolar_vis = df_caja_full[mask_rend_dolar_vis].index
-            if len(cierres_dolar_vis) > 0:
-                df_dolar_vis = df_caja_full[df_caja_full.index > cierres_dolar_vis[-1]]
-            else:
-                df_dolar_vis = df_caja_full
-            saldo_dolares_vis = df_dolar_vis[mask_forma(df_dolar_vis['Forma'], 'DOLARES')]['Monto'].sum()
+            df_dolar_sep_activo = df_dolar_full_vis
+        saldo_dolar_sep = df_dolar_sep_activo['Monto'].sum()
+
+        # Fuente 2: dólares mezclados en caja principal con Forma=DÓLARES, con su propio corte
+        mask_rend_dolar_vis = (
+            df_caja_full['Tipo'].isin(['CIERRE DE CAJA', 'RENDICION', 'RENDICIÓN']) &
+            mask_forma(df_caja_full['Forma'], 'DOLARES')
+        )
+        cierres_dolar_mix = df_caja_full[mask_rend_dolar_vis].index
+        if len(cierres_dolar_mix) > 0:
+            df_dolar_mix_activo = df_caja_full[df_caja_full.index > cierres_dolar_mix[-1]]
+        else:
+            df_dolar_mix_activo = df_caja_full
+        saldo_dolar_mix = df_dolar_mix_activo[mask_forma(df_dolar_mix_activo['Forma'], 'DOLARES')]['Monto'].sum()
+
+        saldo_dolares_vis = saldo_dolar_sep + saldo_dolar_mix
 
         cols_formas = st.columns(len(FORMAS_RESUMEN))
 
@@ -2122,26 +2124,23 @@ elif sel == "TESORERIA":
 
             # ── Saldo disponible por forma ──
             mask_efec_base  = mask_forma(df_cierre['Forma'], "EFECTIVO")
-            # Solo efectivo físico disponible para rendir (desde último corte)
             efectivo_disponible = df_cierre[mask_efec_base]['Monto'].sum()
-            # Dólares: si hay caja DOLAR separada usar df_dolar_cierre (con su propio corte).
-            # Si no, aplicar su propio corte independiente sobre df_caja_base (no df_cierre),
-            # para que una rendición de EFECTIVO no borre el saldo de dólares.
-            if not df_dolar_cierre.empty:
-                dolares_disponibles = df_dolar_cierre['Monto'].sum()
+
+            # Dólares: sumar AMBAS fuentes con corte independiente cada una.
+            # Fuente 1: caja DOLAR separada
+            saldo_dolar_sep = df_dolar_cierre['Monto'].sum() if not df_dolar_cierre.empty else 0.0
+            # Fuente 2: dólares con Forma=DÓLARES en la caja principal, con su propio corte
+            mask_rend_dolar = (
+                df_caja_base['Tipo'].isin(['CIERRE DE CAJA', 'RENDICION', 'RENDICIÓN']) &
+                mask_forma(df_caja_base['Forma'], "DOLARES")
+            )
+            cierres_dolar_en_base = df_caja_base[mask_rend_dolar].index
+            if len(cierres_dolar_en_base) > 0:
+                df_dolar_mix = df_caja_base[df_caja_base.index > cierres_dolar_en_base[-1]]
             else:
-                mask_rend_dolar = (
-                    df_caja_base['Tipo'].isin(['CIERRE DE CAJA', 'RENDICION', 'RENDICIÓN']) &
-                    mask_forma(df_caja_base['Forma'], "DOLARES")
-                )
-                cierres_dolar_en_base = df_caja_base[mask_rend_dolar].index
-                if len(cierres_dolar_en_base) > 0:
-                    ultimo_idx_dol = cierres_dolar_en_base[-1]
-                    df_dolar_fallback = df_caja_base[df_caja_base.index > ultimo_idx_dol]
-                else:
-                    df_dolar_fallback = df_caja_base
-                mask_dolar_fb = mask_forma(df_dolar_fallback['Forma'], "DOLARES")
-                dolares_disponibles = df_dolar_fallback[mask_dolar_fb]['Monto'].sum()
+                df_dolar_mix = df_caja_base
+            saldo_dolar_mix = df_dolar_mix[mask_forma(df_dolar_mix['Forma'], "DOLARES")]['Monto'].sum()
+            dolares_disponibles = saldo_dolar_sep + saldo_dolar_mix
 
             # ── Panel: saldo disponible ──
             st.markdown("##### 💰 Disponible en caja")
