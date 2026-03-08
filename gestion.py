@@ -2068,9 +2068,21 @@ elif sel == "TESORERIA":
             if len(cierres_cierre_idx) > 0:
                 ultimo_idx = cierres_cierre_idx[-1]
                 df_cierre = df_caja_base[df_caja_base.index > ultimo_idx].copy()
-                df_dolar_cierre = df_dolar_base[df_dolar_base.index > ultimo_idx].copy() if not df_dolar_base.empty else df_dolar_base.copy()
             else:
                 df_cierre = df_caja_base.copy()
+
+            # ── Corte de dólares: usa el último cierre/rendición PROPIO de la caja dólar ──
+            # (independiente del corte de pesos, para que una rendición de efectivo no borre los dólares)
+            if not df_dolar_base.empty:
+                cierres_dolar_idx = df_dolar_base[
+                    df_dolar_base['Tipo'].isin(['CIERRE DE CAJA', 'RENDICION', 'RENDICIÓN'])
+                ].index
+                if len(cierres_dolar_idx) > 0:
+                    ultimo_idx_dolar = cierres_dolar_idx[-1]
+                    df_dolar_cierre = df_dolar_base[df_dolar_base.index > ultimo_idx_dolar].copy()
+                else:
+                    df_dolar_cierre = df_dolar_base.copy()
+            else:
                 df_dolar_cierre = df_dolar_base.copy()
 
             # ── Saldo disponible por forma ──
