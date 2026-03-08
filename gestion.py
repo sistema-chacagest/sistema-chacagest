@@ -2086,14 +2086,27 @@ elif sel == "TESORERIA":
                 df_dolar_cierre = df_dolar_base.copy()
 
             # ── Saldo disponible por forma ──
-            mask_dolar_base = mask_forma(df_cierre['Forma'], "DOLARES")
             mask_efec_base  = mask_forma(df_cierre['Forma'], "EFECTIVO")
-            # Solo efectivo físico disponible para rendir
+            # Solo efectivo físico disponible para rendir (desde último corte)
             efectivo_disponible = df_cierre[mask_efec_base]['Monto'].sum()
+            # Dólares: si hay caja DOLAR separada usar df_dolar_cierre (con su propio corte).
+            # Si no, aplicar su propio corte independiente sobre df_caja_base (no df_cierre),
+            # para que una rendición de EFECTIVO no borre el saldo de dólares.
             if not df_dolar_cierre.empty:
                 dolares_disponibles = df_dolar_cierre['Monto'].sum()
             else:
-                dolares_disponibles = df_cierre[mask_dolar_base]['Monto'].sum()
+                mask_rend_dolar = (
+                    df_caja_base['Tipo'].isin(['CIERRE DE CAJA', 'RENDICION', 'RENDICIÓN']) &
+                    mask_forma(df_caja_base['Forma'], "DOLARES")
+                )
+                cierres_dolar_en_base = df_caja_base[mask_rend_dolar].index
+                if len(cierres_dolar_en_base) > 0:
+                    ultimo_idx_dol = cierres_dolar_en_base[-1]
+                    df_dolar_fallback = df_caja_base[df_caja_base.index > ultimo_idx_dol]
+                else:
+                    df_dolar_fallback = df_caja_base
+                mask_dolar_fb = mask_forma(df_dolar_fallback['Forma'], "DOLARES")
+                dolares_disponibles = df_dolar_fallback[mask_dolar_fb]['Monto'].sum()
 
             # ── Panel: saldo disponible ──
             st.markdown("##### 💰 Disponible en caja")
