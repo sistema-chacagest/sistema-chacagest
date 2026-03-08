@@ -1996,18 +1996,7 @@ elif sel == "TESORERIA":
         df_dolar_full_vis = st.session_state.tesoreria[
             st.session_state.tesoreria['Caja/Banco'].astype(str).str.startswith(caja_dolar_vis)
         ].copy()
-        # Calcular saldo de dólares: siempre usar corte independiente en AMBAS fuentes y sumar
-        # Fuente 1: caja DOLAR separada (DOLAR CAJA JUNIN)
-        cierres_dolar_sep = df_dolar_full_vis[
-            df_dolar_full_vis['Tipo'].isin(['CIERRE DE CAJA', 'RENDICION', 'RENDICIÓN'])
-        ].index if not df_dolar_full_vis.empty else []
-        if len(cierres_dolar_sep) > 0:
-            df_dolar_sep_activo = df_dolar_full_vis[df_dolar_full_vis.index > cierres_dolar_sep[-1]]
-        else:
-            df_dolar_sep_activo = df_dolar_full_vis
-        saldo_dolar_sep = df_dolar_sep_activo['Monto'].sum()
-
-        # Fuente 2: dólares mezclados en caja principal con Forma=DÓLARES, con su propio corte
+        # Dólares: corte independiente por Forma=DÓLARES dentro de la caja principal
         mask_rend_dolar_vis = (
             df_caja_full['Tipo'].isin(['CIERRE DE CAJA', 'RENDICION', 'RENDICIÓN']) &
             mask_forma(df_caja_full['Forma'], 'DOLARES')
@@ -2017,9 +2006,7 @@ elif sel == "TESORERIA":
             df_dolar_mix_activo = df_caja_full[df_caja_full.index > cierres_dolar_mix[-1]]
         else:
             df_dolar_mix_activo = df_caja_full
-        saldo_dolar_mix = df_dolar_mix_activo[mask_forma(df_dolar_mix_activo['Forma'], 'DOLARES')]['Monto'].sum()
-
-        saldo_dolares_vis = saldo_dolar_sep + saldo_dolar_mix
+        saldo_dolares_vis = df_dolar_mix_activo[mask_forma(df_dolar_mix_activo['Forma'], 'DOLARES')]['Monto'].sum()
 
         cols_formas = st.columns(len(FORMAS_RESUMEN))
 
@@ -2126,10 +2113,7 @@ elif sel == "TESORERIA":
             mask_efec_base  = mask_forma(df_cierre['Forma'], "EFECTIVO")
             efectivo_disponible = df_cierre[mask_efec_base]['Monto'].sum()
 
-            # Dólares: sumar AMBAS fuentes con corte independiente cada una.
-            # Fuente 1: caja DOLAR separada
-            saldo_dolar_sep = df_dolar_cierre['Monto'].sum() if not df_dolar_cierre.empty else 0.0
-            # Fuente 2: dólares con Forma=DÓLARES en la caja principal, con su propio corte
+            # Dólares: corte independiente por Forma=DÓLARES dentro de la caja principal
             mask_rend_dolar = (
                 df_caja_base['Tipo'].isin(['CIERRE DE CAJA', 'RENDICION', 'RENDICIÓN']) &
                 mask_forma(df_caja_base['Forma'], "DOLARES")
@@ -2139,8 +2123,7 @@ elif sel == "TESORERIA":
                 df_dolar_mix = df_caja_base[df_caja_base.index > cierres_dolar_en_base[-1]]
             else:
                 df_dolar_mix = df_caja_base
-            saldo_dolar_mix = df_dolar_mix[mask_forma(df_dolar_mix['Forma'], "DOLARES")]['Monto'].sum()
-            dolares_disponibles = saldo_dolar_sep + saldo_dolar_mix
+            dolares_disponibles = df_dolar_mix[mask_forma(df_dolar_mix['Forma'], "DOLARES")]['Monto'].sum()
 
             # ── Panel: saldo disponible ──
             st.markdown("##### 💰 Disponible en caja")
@@ -2236,18 +2219,18 @@ elif sel == "TESORERIA":
 
                 # ── Registrar la rendición como egreso en tesorería ──
                 if monto_rendicion > 0:
-                    # Si se rinde DÓLARES, el egreso va a la caja DOLAR correspondiente
-                    caja_rend = caja_dolar_nombre if tipo_rendicion == "DÓLARES" else caja_cierre
+                    # Siempre grabar en la caja principal (caja_cierre) con la Forma correspondiente.
+                    # Así el corte independiente por Forma funciona correctamente sin duplicar fuentes.
                     nuevos_movs = []
                     # Egreso: lo que se rinde (sale de caja)
                     nuevos_movs.append([
-                        date.today(), "RENDICIÓN", caja_rend, tipo_rendicion,
+                        date.today(), "RENDICIÓN", caja_cierre, tipo_rendicion,
                         f"Rendición — {responsable}", "INTERNO", -monto_rendicion, f"Rendición {hoy}"
                     ])
                     # Si queda remanente, grabarlo como ingreso en el nuevo período
                     if saldo_restante > 0:
                         nuevos_movs.append([
-                            date.today(), "SALDO REMANENTE", caja_rend, tipo_rendicion,
+                            date.today(), "SALDO REMANENTE", caja_cierre, tipo_rendicion,
                             f"Remanente tras rendición — {responsable}", "INTERNO", saldo_restante, f"Rendición {hoy}"
                         ])
                     df_nuevos = pd.DataFrame(nuevos_movs, columns=COL_TESORERIA)
