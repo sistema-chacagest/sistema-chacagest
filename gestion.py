@@ -1990,17 +1990,34 @@ elif sel == "TESORERIA":
         FORMAS_RESUMEN = ["EFECTIVO", "TRANSFERENCIA", "TARJETA DE CREDITO", "DÓLARES", "OTROS"]
         ICONOS_FORMA   = {"EFECTIVO": "💵", "TRANSFERENCIA": "🏦", "TARJETA DE CREDITO": "💳", "DÓLARES": "💲", "OTROS": "📋"}
 
-        # Calcular saldo de dólares con su propio corte independiente
-        mask_rend_dolar_vis = (
-            df_caja_full['Tipo'].isin(['CIERRE DE CAJA', 'RENDICION', 'RENDICIÓN']) &
-            mask_forma(df_caja_full['Forma'], 'DOLARES')
-        )
-        cierres_dolar_vis = df_caja_full[mask_rend_dolar_vis].index
-        if len(cierres_dolar_vis) > 0:
-            df_dolar_vis = df_caja_full[df_caja_full.index > cierres_dolar_vis[-1]]
+        # Calcular saldo de dólares con su propio corte independiente.
+        # Los dólares pueden estar en df_caja_full (Forma=DÓLARES) O en la caja DOLAR separada.
+        caja_dolar_vis = f"DOLAR {cj_v}"
+        df_dolar_full_vis = st.session_state.tesoreria[
+            st.session_state.tesoreria['Caja/Banco'].astype(str).str.startswith(caja_dolar_vis)
+        ].copy()
+        if not df_dolar_full_vis.empty:
+            # Dólares en caja separada: buscar su propio último cierre/rendición
+            cierres_dolar_vis = df_dolar_full_vis[
+                df_dolar_full_vis['Tipo'].isin(['CIERRE DE CAJA', 'RENDICION', 'RENDICIÓN'])
+            ].index
+            if len(cierres_dolar_vis) > 0:
+                df_dolar_vis = df_dolar_full_vis[df_dolar_full_vis.index > cierres_dolar_vis[-1]]
+            else:
+                df_dolar_vis = df_dolar_full_vis
+            saldo_dolares_vis = df_dolar_vis['Monto'].sum()
         else:
-            df_dolar_vis = df_caja_full
-        saldo_dolares_vis = df_dolar_vis[mask_forma(df_dolar_vis['Forma'], 'DOLARES')]['Monto'].sum()
+            # Dólares mezclados en la caja principal: corte independiente por Forma=DÓLARES
+            mask_rend_dolar_vis = (
+                df_caja_full['Tipo'].isin(['CIERRE DE CAJA', 'RENDICION', 'RENDICIÓN']) &
+                mask_forma(df_caja_full['Forma'], 'DOLARES')
+            )
+            cierres_dolar_vis = df_caja_full[mask_rend_dolar_vis].index
+            if len(cierres_dolar_vis) > 0:
+                df_dolar_vis = df_caja_full[df_caja_full.index > cierres_dolar_vis[-1]]
+            else:
+                df_dolar_vis = df_caja_full
+            saldo_dolares_vis = df_dolar_vis[mask_forma(df_dolar_vis['Forma'], 'DOLARES')]['Monto'].sum()
 
         cols_formas = st.columns(len(FORMAS_RESUMEN))
 
