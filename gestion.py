@@ -2174,10 +2174,12 @@ elif sel == "TESORERIA":
 
                 # ── Registrar la rendición como egreso en tesorería ──
                 if monto_rendicion > 0:
+                    # Si se rinde DÓLARES, el egreso va a la caja DOLAR correspondiente
+                    caja_rend = caja_dolar_nombre if tipo_rendicion == "DÓLARES" else caja_cierre
                     mov_rend = pd.DataFrame([[
                         date.today(),
                         "RENDICIÓN",
-                        caja_cierre,
+                        caja_rend,
                         tipo_rendicion,
                         f"Rendición — {responsable}",
                         "INTERNO",
