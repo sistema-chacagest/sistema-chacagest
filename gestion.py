@@ -2216,8 +2216,11 @@ elif sel == "TESORERIA":
             st.markdown(f"##### 📊 Saldo actual en caja — {caja_cierre}")
             cols_prev = st.columns(len(FORMAS_PREV))
             for idx_p, fr in enumerate(FORMAS_PREV):
-                mask_p = mask_forma(df_cierre['Forma'], fr.replace("DÓLARES","DOLARES").replace("TARJETA DE CREDITO","TARJETA"))
-                sub_p  = df_cierre[mask_p]['Monto'].sum()
+                if fr == "DÓLARES":
+                    sub_p = dolares_disponibles
+                else:
+                    mask_p = mask_forma(df_cierre['Forma'], fr.replace("TARJETA DE CREDITO","TARJETA"))
+                    sub_p  = df_cierre[mask_p]['Monto'].sum()
                 col_p  = "#2ecc71" if sub_p >= 0 else "#e74c3c"
                 cols_prev[idx_p].markdown(
                     f"<div style='background:#f8f9fa;border-radius:8px;padding:10px;text-align:center;border-left:3px solid {col_p};'>"
