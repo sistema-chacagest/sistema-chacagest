@@ -2219,17 +2219,20 @@ elif sel == "TESORERIA":
                 if monto_rendicion > 0:
                     # Si se rinde DÓLARES, el egreso va a la caja DOLAR correspondiente
                     caja_rend = caja_dolar_nombre if tipo_rendicion == "DÓLARES" else caja_cierre
-                    mov_rend = pd.DataFrame([[
-                        date.today(),
-                        "RENDICIÓN",
-                        caja_rend,
-                        tipo_rendicion,
-                        f"Rendición — {responsable}",
-                        "INTERNO",
-                        -monto_rendicion,
-                        f"Rendición {hoy}"
-                    ]], columns=COL_TESORERIA)
-                    st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, mov_rend], ignore_index=True)
+                    nuevos_movs = []
+                    # Egreso: lo que se rinde (sale de caja)
+                    nuevos_movs.append([
+                        date.today(), "RENDICIÓN", caja_rend, tipo_rendicion,
+                        f"Rendición — {responsable}", "INTERNO", -monto_rendicion, f"Rendición {hoy}"
+                    ])
+                    # Si queda remanente, grabarlo como ingreso en el nuevo período
+                    if saldo_restante > 0:
+                        nuevos_movs.append([
+                            date.today(), "SALDO REMANENTE", caja_rend, tipo_rendicion,
+                            f"Remanente tras rendición — {responsable}", "INTERNO", saldo_restante, f"Rendición {hoy}"
+                        ])
+                    df_nuevos = pd.DataFrame(nuevos_movs, columns=COL_TESORERIA)
+                    st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, df_nuevos], ignore_index=True)
                     guardar_datos("tesoreria", st.session_state.tesoreria)
 
                 html_cierre = generar_html_cierre_caja({
