@@ -4332,6 +4332,29 @@ elif sel == "CHEQUES":
             key="exp_tipo"
         )
 
+        # ── NUEVO: filtro por estado de conciliación ──
+        exf1, exf2 = st.columns([1, 3])
+        filtro_conciliacion = exf1.radio(
+            "🔎 Conciliación",
+            ["Todos", "No conciliados", "Conciliados"],
+            index=0,
+            horizontal=True,
+            key="exp_conciliacion"
+        )
+
+        def aplicar_filtro_conciliacion(df, col_fecha_conc):
+            """Filtra un DataFrame según estado de conciliación."""
+            if filtro_conciliacion == "Todos":
+                return df
+            col = col_fecha_conc
+            if col not in df.columns:
+                return df
+            no_conciliado = df[col].astype(str).str.strip().isin(['', '-', 'nan', 'None', 'NaT'])
+            if filtro_conciliacion == "No conciliados":
+                return df[no_conciliado]
+            else:  # Conciliados
+                return df[~no_conciliado]
+
         if st.button("📊 GENERAR EXCEL", key="btn_generar_excel", type="primary"):
             wb = Workbook()
             wb.remove(wb.active)  # quitar hoja vacía por defecto
@@ -4393,6 +4416,7 @@ elif sel == "CHEQUES":
                 df_e = st.session_state.cheques_emitidos.copy()
                 df_e['_fecha'] = pd.to_datetime(df_e['Fecha Emisión'], errors='coerce').dt.date
                 df_e = df_e[(df_e['_fecha'] >= fecha_desde) & (df_e['_fecha'] <= fecha_hasta)]
+                df_e = aplicar_filtro_conciliacion(df_e, 'Fecha Conciliación')
 
                 data_row = 3
                 for _, r in df_e.iterrows():
@@ -4458,6 +4482,7 @@ elif sel == "CHEQUES":
                 df_c = st.session_state.cheques_cartera.copy()
                 df_c['_fecha'] = pd.to_datetime(df_c['Fecha Recepción'], errors='coerce').dt.date
                 df_c = df_c[(df_c['_fecha'] >= fecha_desde) & (df_c['_fecha'] <= fecha_hasta)]
+                df_c = aplicar_filtro_conciliacion(df_c, 'Fecha Aplicación')
 
                 data_row_c = 3
                 for _, r in df_c.iterrows():
@@ -4550,8 +4575,9 @@ elif sel == "CHEQUES":
             buf = io.BytesIO()
             wb.save(buf)
             buf.seek(0)
-            nombre_archivo = f"Cheques_{fecha_desde.strftime('%d%m%Y')}_{fecha_hasta.strftime('%d%m%Y')}.xlsx"
-            st.success(f"✅ Excel generado con {len(tipo_export)} hoja(s) de datos + resumen.")
+            sufijo_conc = {"Todos": "todos", "No conciliados": "no_conciliados", "Conciliados": "conciliados"}[filtro_conciliacion]
+            nombre_archivo = f"Cheques_{sufijo_conc}_{fecha_desde.strftime('%d%m%Y')}_{fecha_hasta.strftime('%d%m%Y')}.xlsx"
+            st.success(f"✅ Excel generado con {len(tipo_export)} hoja(s) de datos + resumen — Filtro: {filtro_conciliacion}.")
             st.download_button(
                 label="⬇️ DESCARGAR EXCEL",
                 data=buf.getvalue(),
