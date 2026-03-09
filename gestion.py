@@ -1125,22 +1125,26 @@ if sel == "DASHBOARD":
     df_gas['Mes'] = df_gas['Fecha'].dt.month
 
     # Enriquecer gastos con Cuenta de Gastos
-    # Los gastos EXTERNOS ya traen la columna "Cuenta de Gastos" desde la hoja.
-    # Los gastos de CHACAGEST la obtienen cruzando con la tabla de proveedores.
+    # Los gastos EXTERNOS ya traen la columna desde la hoja "compras_externas".
+    # Los gastos normales la obtienen cruzando con la tabla de proveedores.
     if 'Cuenta de Gastos' not in df_gas.columns:
         df_gas['Cuenta de Gastos'] = None
 
-    # Solo buscamos en proveedores los que NO tienen categoría asignada
-    sin_cat = df_gas['Cuenta de Gastos'].isna() | (df_gas['Cuenta de Gastos'].astype(str).str.strip() == '')
-    if sin_cat.any() and not st.session_state.proveedores.empty:
-        df_prov_cat = st.session_state.proveedores[['Razón Social', 'Cuenta de Gastos']].copy()
-        df_prov_cat = df_prov_cat.rename(columns={'Cuenta de Gastos': '_cat_prov', 'Razón Social': '_rs'})
+    df_gas = df_gas.reset_index(drop=True)
+
+    if not st.session_state.proveedores.empty:
+        df_prov_cat = (st.session_state.proveedores[['Razón Social', 'Cuenta de Gastos']]
+                       .copy()
+                       .rename(columns={'Razón Social': '_rs', 'Cuenta de Gastos': '_cat_prov'}))
         df_gas = df_gas.merge(df_prov_cat, left_on='Proveedor', right_on='_rs', how='left')
+        df_gas = df_gas.reset_index(drop=True)
+        # Donde NO hay categoría propia, usamos la del proveedor
+        sin_cat = df_gas['Cuenta de Gastos'].isna() | (df_gas['Cuenta de Gastos'].astype(str).str.strip().isin(['', 'nan', 'None']))
         df_gas.loc[sin_cat, 'Cuenta de Gastos'] = df_gas.loc[sin_cat, '_cat_prov']
         df_gas = df_gas.drop(columns=['_rs', '_cat_prov'], errors='ignore')
 
     df_gas['Cuenta de Gastos'] = df_gas['Cuenta de Gastos'].fillna('SIN CATEGORÍA')
-    df_gas.loc[df_gas['Cuenta de Gastos'].astype(str).str.strip() == '', 'Cuenta de Gastos'] = 'SIN CATEGORÍA'
+    df_gas['Cuenta de Gastos'] = df_gas['Cuenta de Gastos'].astype(str).str.strip().replace({'': 'SIN CATEGORÍA', 'nan': 'SIN CATEGORÍA', 'None': 'SIN CATEGORÍA'})
 
     # ── Años disponibles ──
     años_ing  = set(df_ing['Año'].unique()) if not df_ing.empty else set()
