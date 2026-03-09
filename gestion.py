@@ -118,6 +118,28 @@ def cargar_datos():
         except:
             df_com = pd.DataFrame(columns=COL_COMPRAS)
 
+        # ── Gastos externos (hoja "compras_externas" en Google Sheets) ──
+        # Esa hoja debe tener las mismas columnas que "compras" + una columna "Cuenta de Gastos"
+        try:
+            ws_com_ext  = sh.worksheet("compras_externas")
+            datos_com_ext = ws_com_ext.get_all_records()
+            if datos_com_ext:
+                df_com_ext = pd.DataFrame(datos_com_ext)
+                for c in ["Neto 21", "Neto 10.5", "Ret IVA", "Ret Ganancia", "Ret IIBB", "No Gravados", "Total"]:
+                    if c in df_com_ext.columns:
+                        df_com_ext[c] = pd.to_numeric(df_com_ext[c], errors='coerce').fillna(0)
+                    else:
+                        df_com_ext[c] = 0
+                # Si la hoja externa NO tiene columna "Cuenta de Gastos", la marcamos
+                if 'Cuenta de Gastos' not in df_com_ext.columns:
+                    df_com_ext['Cuenta de Gastos'] = 'EXTERNO SIN CATEGORÍA'
+                # Marcar origen para distinguirlos si hace falta
+                df_com_ext['_origen'] = 'EXTERNO'
+                df_com['_origen'] = 'CHACAGEST'
+                df_com = pd.concat([df_com, df_com_ext], ignore_index=True)
+        except:
+            pass  # Si la hoja no existe simplemente se ignora
+
         try:
             ws_ce    = sh.worksheet("cheques_emitidos")
             datos_ce = ws_ce.get_all_records()
@@ -1102,15 +1124,23 @@ if sel == "DASHBOARD":
     df_gas['Año'] = df_gas['Fecha'].dt.year
     df_gas['Mes'] = df_gas['Fecha'].dt.month
 
-    # Enriquecer gastos con Cuenta de Gastos del proveedor
-    if not st.session_state.proveedores.empty:
-        df_gas = df_gas.merge(
-            st.session_state.proveedores[['Razón Social', 'Cuenta de Gastos']],
-            left_on='Proveedor', right_on='Razón Social', how='left'
-        )
-        df_gas['Cuenta de Gastos'] = df_gas['Cuenta de Gastos'].fillna('SIN CATEGORÍA')
-    else:
-        df_gas['Cuenta de Gastos'] = 'SIN CATEGORÍA'
+    # Enriquecer gastos con Cuenta de Gastos
+    # Los gastos EXTERNOS ya traen la columna "Cuenta de Gastos" desde la hoja.
+    # Los gastos de CHACAGEST la obtienen cruzando con la tabla de proveedores.
+    if 'Cuenta de Gastos' not in df_gas.columns:
+        df_gas['Cuenta de Gastos'] = None
+
+    # Solo buscamos en proveedores los que NO tienen categoría asignada
+    sin_cat = df_gas['Cuenta de Gastos'].isna() | (df_gas['Cuenta de Gastos'].astype(str).str.strip() == '')
+    if sin_cat.any() and not st.session_state.proveedores.empty:
+        df_prov_cat = st.session_state.proveedores[['Razón Social', 'Cuenta de Gastos']].copy()
+        df_prov_cat = df_prov_cat.rename(columns={'Cuenta de Gastos': '_cat_prov', 'Razón Social': '_rs'})
+        df_gas = df_gas.merge(df_prov_cat, left_on='Proveedor', right_on='_rs', how='left')
+        df_gas.loc[sin_cat, 'Cuenta de Gastos'] = df_gas.loc[sin_cat, '_cat_prov']
+        df_gas = df_gas.drop(columns=['_rs', '_cat_prov'], errors='ignore')
+
+    df_gas['Cuenta de Gastos'] = df_gas['Cuenta de Gastos'].fillna('SIN CATEGORÍA')
+    df_gas.loc[df_gas['Cuenta de Gastos'].astype(str).str.strip() == '', 'Cuenta de Gastos'] = 'SIN CATEGORÍA'
 
     # ── Años disponibles ──
     años_ing  = set(df_ing['Año'].unique()) if not df_ing.empty else set()
