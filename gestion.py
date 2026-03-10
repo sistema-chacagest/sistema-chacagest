@@ -1124,6 +1124,31 @@ if sel == "DASHBOARD":
     df_gas['Año'] = df_gas['Fecha'].dt.year
     df_gas['Mes'] = df_gas['Fecha'].dt.month
 
+    # ── Agregar EGRESOS VARIOS de Tesorería al cálculo de gastos ──
+    if 'tesoreria' in st.session_state and not st.session_state.tesoreria.empty:
+        df_egr = st.session_state.tesoreria.copy()
+        df_egr = df_egr[df_egr['Tipo'] == 'EGRESO VARIO'].copy()
+        if not df_egr.empty:
+            df_egr['Monto'] = pd.to_numeric(df_egr['Monto'], errors='coerce').fillna(0)
+            df_egr['Total'] = df_egr['Monto'].abs()
+            df_egr = df_egr[df_egr['Total'] > 0].copy()
+            df_egr['Fecha'] = pd.to_datetime(df_egr['Fecha'], errors='coerce')
+            df_egr = df_egr.dropna(subset=['Fecha'])
+            df_egr['Año'] = df_egr['Fecha'].dt.year
+            df_egr['Mes'] = df_egr['Fecha'].dt.month
+            # Extraer Cuenta de Gastos del concepto (formato "[CUENTA] descripción")
+            import re
+            def _extraer_cuenta(concepto):
+                m = re.match(r'^\[(.+?)\]', str(concepto))
+                return m.group(1).strip() if m else 'SIN CATEGORÍA'
+            df_egr['Cuenta de Gastos'] = df_egr['Concepto'].apply(_extraer_cuenta)
+            df_egr['Proveedor'] = df_egr.get('Cliente/Proveedor', 'Varios')
+            cols_necesarias = ['Fecha', 'Año', 'Mes', 'Total', 'Cuenta de Gastos', 'Proveedor']
+            for c in cols_necesarias:
+                if c not in df_egr.columns:
+                    df_egr[c] = '-'
+            df_gas = pd.concat([df_gas, df_egr[cols_necesarias]], ignore_index=True)
+
     # Enriquecer gastos con Cuenta de Gastos
     # Los gastos EXTERNOS ya traen la columna desde la hoja "compras_externas".
     # Los gastos normales la obtienen cruzando con la tabla de proveedores.
@@ -4593,4 +4618,3 @@ elif sel == "CHEQUES":
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 type="primary"
             )
-
