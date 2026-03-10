@@ -916,7 +916,7 @@ CUENTAS_GASTOS_DEFAULT = [
     "COMBUSTIBLE", "REPARACION", "REPUESTO", "SERVICIO LUZ, GAS",
     "ALQUILERES", "COMPRA ART. LIMPIEZA", "HONORARIOS",
     "PUBLICIDAD", "GASTOS OFICINA", "GASTOS EN LIBRERIA",
-    "CHOFERES EVENTUALES", "VARIOS"
+    "CHOFERES EVENTUALES", "VARIOS", "VIATICOS", "GASTOS CHOFERES"
 ]
 
 if 'cuentas_gastos' not in st.session_state:
@@ -4593,3 +4593,4 @@ elif sel == "CHEQUES":
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 type="primary"
             )
+
