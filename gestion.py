@@ -207,9 +207,48 @@ def guardar_tesoreria_y_compras():
     return ok_t and ok_c
 
 
-def guardar_tesoreria_rerun(msg_key=None, msg_texto=None):
-    """Guarda tesoreria. Si falla, muestra error y NO hace rerun. Si ok, guarda msg y hace rerun."""
-    ok = guardar_datos("tesoreria", st.session_state.tesoreria)
+def append_fila_tesoreria(nueva_fila_df, reintentos=3):
+    """
+    Agrega UNA fila nueva al final de la hoja 'tesoreria' en Google Sheets
+    usando append_row, sin tocar el resto de los datos.
+    Esto evita conflictos de concurrencia entre operadores.
+    Devuelve True si tuvo éxito, False si falló.
+    """
+    import time
+    ultimo_error = None
+    for intento in range(reintentos):
+        try:
+            sh = conectar_google()
+            if sh is None: return False
+            try:
+                ws = sh.worksheet("tesoreria")
+            except gspread.exceptions.WorksheetNotFound:
+                ws = sh.add_worksheet(title="tesoreria", rows=2000, cols=25)
+                # Si la hoja es nueva, escribir encabezados primero
+                ws.update([COL_TESORERIA])
+            # Preparar la fila como lista de strings
+            fila = nueva_fila_df.fillna("-").astype(str).values.tolist()[0]
+            ws.append_row(fila, value_input_option="USER_ENTERED")
+            return True
+        except Exception as e:
+            ultimo_error = e
+            st.session_state.gsheets_conn = None
+            if intento < reintentos - 1:
+                time.sleep(1.5)
+    st.error(f"❌ Error al guardar movimiento de tesorería tras {reintentos} intentos: {ultimo_error}")
+    return False
+
+
+def guardar_tesoreria_rerun(msg_key=None, msg_texto=None, nueva_fila_df=None):
+    """
+    Guarda tesoreria. Si se pasa nueva_fila_df, usa append_row (seguro para multiusuario).
+    Si no, hace rewrite completo (para ediciones/eliminaciones desde admin).
+    Si falla, muestra error y NO hace rerun. Si ok, guarda msg y hace rerun.
+    """
+    if nueva_fila_df is not None:
+        ok = append_fila_tesoreria(nueva_fila_df)
+    else:
+        ok = guardar_datos("tesoreria", st.session_state.tesoreria)
     if ok:
         if msg_key and msg_texto:
             st.session_state[msg_key] = msg_texto
@@ -1576,7 +1615,7 @@ elif sel == "TESORERIA":
                     concepto_completo = con if con else "-"
                     nt = pd.DataFrame([[f, "INGRESO VARIO", cj, forma, concepto_completo, "Varios", mon, "-"]], columns=COL_TESORERIA)
                     st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
-                    guardar_tesoreria_rerun("msg_ingreso", f"✅ Ingreso de $ {mon:,.2f} ({forma}) registrado en {cj}.")
+                    guardar_tesoreria_rerun("msg_ingreso", f"✅ Ingreso de $ {mon:,.2f} ({forma}) registrado en {cj}.", nueva_fila_df=nt)
                 else:
                     st.warning("Ingresá un monto mayor a cero.")
 
@@ -1602,7 +1641,7 @@ elif sel == "TESORERIA":
                     concepto_completo = f"[{cuenta_gasto}] {con}" if con else f"[{cuenta_gasto}]"
                     nt = pd.DataFrame([[f, "EGRESO VARIO", cj, forma, concepto_completo, "Varios", -mon, "-"]], columns=COL_TESORERIA)
                     st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
-                    guardar_tesoreria_rerun("msg_egreso", f"✅ Egreso de $ {mon:,.2f} ({forma}) — {cuenta_gasto} — registrado desde {cj}.")
+                    guardar_tesoreria_rerun("msg_egreso", f"✅ Egreso de $ {mon:,.2f} ({forma}) — {cuenta_gasto} — registrado desde {cj}.", nueva_fila_df=nt)
                 else:
                     st.warning("Ingresá un monto mayor a cero.")
 
@@ -1747,7 +1786,7 @@ elif sel == "TESORERIA":
                                     c_sel, mon, afip
                                 ]], columns=COL_TESORERIA)
                                 st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
-                                guardar_datos("tesoreria", st.session_state.tesoreria)
+                                append_fila_tesoreria(nt)
                                 # 3) Viajes (cta cte cliente)
                                 nv = pd.DataFrame([[
                                     date.today(), c_sel, date.today(), "PAGO", "TESORERIA",
@@ -1769,7 +1808,7 @@ elif sel == "TESORERIA":
                             nv = pd.DataFrame([[date.today(), c_sel, date.today(), "PAGO", "TESORERIA", "-", -mon, "RECIBO", afip]], columns=COL_VIAJES)
                             st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
                             st.session_state.viajes    = pd.concat([st.session_state.viajes, nv], ignore_index=True)
-                            guardar_datos("tesoreria", st.session_state.tesoreria)
+                            append_fila_tesoreria(nt)
                             guardar_datos("viajes", st.session_state.viajes)
                             st.session_state.html_recibo_ready = generar_html_recibo({
                                 "Fecha": date.today(), "Cliente/Proveedor": c_sel,
@@ -1967,22 +2006,24 @@ elif sel == "TESORERIA":
                             concepto_cob, cli_fac_sel, -monto_cobro, nro_recibo or "-"
                         ]], columns=COL_TESORERIA)
                         st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt_cob], ignore_index=True)
+                        append_fila_tesoreria(nt_cob)
 
                         # 2) Retenciones como egresos separados
                         if ret_iva > 0:
                             ret_row = pd.DataFrame([[str(date.today()), "RETENCION", cj_fac, "RETENCION IVA",
                                 f"Ret. IVA — {cli_fac_sel}", cli_fac_sel, -ret_iva, nro_recibo or "-"]], columns=COL_TESORERIA)
                             st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, ret_row], ignore_index=True)
+                            append_fila_tesoreria(ret_row)
                         if ret_ganancias > 0:
                             ret_row = pd.DataFrame([[str(date.today()), "RETENCION", cj_fac, "RETENCION GANANCIAS",
                                 f"Ret. Ganancias — {cli_fac_sel}", cli_fac_sel, -ret_ganancias, nro_recibo or "-"]], columns=COL_TESORERIA)
                             st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, ret_row], ignore_index=True)
+                            append_fila_tesoreria(ret_row)
                         if ret_suss > 0:
                             ret_row = pd.DataFrame([[str(date.today()), "RETENCION", cj_fac, "RETENCION SUSS",
                                 f"Ret. SUSS — {cli_fac_sel}", cli_fac_sel, -ret_suss, nro_recibo or "-"]], columns=COL_TESORERIA)
                             st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, ret_row], ignore_index=True)
-
-                        guardar_datos("tesoreria", st.session_state.tesoreria)
+                            append_fila_tesoreria(ret_row)
 
                         # 3) Marcar facturas como COBRADAS
                         for fidx in facturas_sel_indices:
@@ -2295,7 +2336,8 @@ elif sel == "TESORERIA":
                         ])
                     df_nuevos = pd.DataFrame(nuevos_movs, columns=COL_TESORERIA)
                     st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, df_nuevos], ignore_index=True)
-                    guardar_datos("tesoreria", st.session_state.tesoreria)
+                    for _, fila_rend in df_nuevos.iterrows():
+                        append_fila_tesoreria(pd.DataFrame([fila_rend], columns=COL_TESORERIA))
 
                 html_cierre = generar_html_cierre_caja({
                     "caja":                caja_cierre,
@@ -2340,7 +2382,8 @@ elif sel == "TESORERIA":
                     p1 = pd.DataFrame([[date.today(), "PASE EFECTIVO", origen_pase, forma_pase, desc,       "INTERNO", -monto_pase, "-"]], columns=COL_TESORERIA)
                     p2 = pd.DataFrame([[date.today(), "PASE EFECTIVO", destino_pase, forma_pase, desc_dest, "INTERNO",  monto_pase, "-"]], columns=COL_TESORERIA)
                     st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, p1, p2], ignore_index=True)
-                    guardar_datos("tesoreria", st.session_state.tesoreria)
+                    append_fila_tesoreria(p1)
+                    append_fila_tesoreria(p2)
                     st.session_state.msg_pase = f"✅ Pase de {forma_pase} por $ {monto_pase:,.2f} de {origen_pase} → {destino_pase} registrado."
                     st.rerun()
                 elif origen_pase == destino_pase:
@@ -2363,7 +2406,8 @@ elif sel == "TESORERIA":
                         tr1 = pd.DataFrame([[date.today(), "TRASPASO", o, "INTERNO", f"Hacia {d}", "INTERNO", -m, "-"]], columns=COL_TESORERIA)
                         tr2 = pd.DataFrame([[date.today(), "TRASPASO", d, "INTERNO", f"Desde {o}", "INTERNO",  m, "-"]], columns=COL_TESORERIA)
                         st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, tr1, tr2], ignore_index=True)
-                        guardar_datos("tesoreria", st.session_state.tesoreria)
+                        append_fila_tesoreria(tr1)
+                        append_fila_tesoreria(tr2)
                         st.session_state.msg_traspaso = f"✅ Traspaso de $ {m:,.2f} de {o} hacia {d} ejecutado."
                         st.rerun()
                     else:
@@ -3562,7 +3606,7 @@ elif sel == "FACTURACION":
                         f"{pv_final}-{nro_final}"
                     ]], columns=COL_TESORERIA)
                     st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, mov_cc], ignore_index=True)
-                    guardar_datos("tesoreria", st.session_state.tesoreria)
+                    append_fila_tesoreria(mov_cc)
 
                     # Generar HTML
                     html_fac = generar_html_factura({
@@ -3865,7 +3909,7 @@ elif sel == "CHEQUES":
                             f"Cheque #{nro_ch} a {benef}", benef, -imp_ch, nro_ch
                         ]], columns=COL_TESORERIA)
                         st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, mov], ignore_index=True)
-                        guardar_datos("tesoreria", st.session_state.tesoreria)
+                        append_fila_tesoreria(mov)
                         st.session_state.msg_cheq_emit = f"✅ Cheque #{nro_ch} emitido a {benef} por $ {imp_ch:,.2f} registrado."
                         st.rerun()
                     else:
@@ -4077,7 +4121,7 @@ elif sel == "CHEQUES":
                                         row['Librador'], float(row['Importe']), row['Nro Cheque']
                                     ]], columns=COL_TESORERIA)
                                     st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, mov_dep], ignore_index=True)
-                                    guardar_datos("tesoreria", st.session_state.tesoreria)
+                                    append_fila_tesoreria(mov_dep)
                                     st.session_state[f"accion_cart_{i}"] = None
                                     st.session_state.msg_cheq_cart = f"✅ Cheque #{row['Nro Cheque']} depositado en {banco_dep}."
                                     st.rerun()
@@ -4120,7 +4164,7 @@ elif sel == "CHEQUES":
                                         prov_pag, -float(row['Importe']), row['Nro Cheque']
                                     ]], columns=COL_TESORERIA)
                                     st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, mov_pag], ignore_index=True)
-                                    guardar_datos("tesoreria", st.session_state.tesoreria)
+                                    append_fila_tesoreria(mov_pag)
                                     st.session_state[f"accion_cart_{i}"] = None
                                     st.session_state.msg_cheq_cart = f"✅ Cheque #{row['Nro Cheque']} aplicado como pago a {prov_pag}."
                                     st.rerun()
