@@ -1538,7 +1538,7 @@ elif sel == "PRESUPUESTOS":
             p_f_emi  = c2.date_input("Fecha Emisión", date.today())
             c3, c4   = st.columns(2)
             p_f_venc = c3.date_input("Fecha Vencimiento", date.today() + timedelta(days=7))
-            p_movil  = c4.selectbox("Tipo de Móvil", ["Combi 19 asientos", "Minibus 24 asientos", "Micro 45 asientos", "Micro 60 asientos"])
+            p_movil  = c4.selectbox("Tipo de Móvil", ["Combi 19 asientos", "Minibus 24 asientos", "Micro 45 asientos", "Micro 60 asientos", "Remis"])
             p_det    = st.text_area("Detalle del Presupuesto (Servicio, Ruta, Horarios...)")
             p_imp    = st.number_input("Importe Total $", min_value=0.0)
             if st.form_submit_button("GENERAR PRESUPUESTO"):
@@ -4662,3 +4662,4 @@ elif sel == "CHEQUES":
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 type="primary"
             )
+
