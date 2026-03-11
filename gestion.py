@@ -2764,13 +2764,22 @@ elif sel == "CTA CTE GENERAL":
             saldos_dict[cli] = saldos_dict.get(cli, 0.0) + float(grp['Importe'].sum())
 
     # 2) Tesorería (facturas, NC, ND, cobros de factura)
-    TIPOS_CC_GRAL = ['FACTURA', 'NOTA DE CREDITO', 'NOTA DE DEBITO', 'COBRO', 'COBRANZA', 'COBRANZA FACTURA']
+    # NOTA: 'COBRANZA' de viajes NO se incluye: ya está en viajes con importe negativo.
+    TIPOS_FAC_GRAL = ['FACTURA', 'NOTA DE CREDITO', 'NOTA DE DEBITO']
+    TIPOS_COB_GRAL = ['COBRO', 'COBRANZA FACTURA']
     if not st.session_state.tesoreria.empty:
-        df_t_gral = st.session_state.tesoreria[
-            st.session_state.tesoreria['Tipo'].isin(TIPOS_CC_GRAL)
+        # Facturas/NC/ND: suman directamente (pueden ser positivas o negativas)
+        df_fac_gral = st.session_state.tesoreria[
+            st.session_state.tesoreria['Tipo'].isin(TIPOS_FAC_GRAL)
         ]
-        for cli, grp in df_t_gral.groupby('Cliente/Proveedor'):
+        for cli, grp in df_fac_gral.groupby('Cliente/Proveedor'):
             saldos_dict[cli] = saldos_dict.get(cli, 0.0) + float(grp['Monto'].sum())
+        # Cobros: siempre restan (reducen deuda del cliente)
+        df_cob_gral = st.session_state.tesoreria[
+            st.session_state.tesoreria['Tipo'].isin(TIPOS_COB_GRAL)
+        ]
+        for cli, grp in df_cob_gral.groupby('Cliente/Proveedor'):
+            saldos_dict[cli] = saldos_dict.get(cli, 0.0) - float(grp['Monto'].abs().sum())
 
     if saldos_dict:
         res = pd.DataFrame(list(saldos_dict.items()), columns=['Cliente', 'Saldo'])
