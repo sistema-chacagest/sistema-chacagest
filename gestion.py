@@ -2685,20 +2685,23 @@ elif sel == "CTA CTE INDIVIDUAL":
                 "Haber":       abs(monto) if monto < 0 else 0.0,
             })
 
-        # 3) COBRANZAS de facturas (desde tesorería: COBRO, COBRANZA, COBRANZA FACTURA)
-        TIPOS_COB = ['COBRO', 'COBRANZA', 'COBRANZA FACTURA']
+        # 3) COBRANZAS de facturas (desde tesorería: COBRO, COBRANZA FACTURA)
+        # NOTA: "COBRANZA" de viajes NO se incluye aquí porque ya está reflejada
+        # en la hoja "viajes" con importe negativo (evita duplicado).
+        TIPOS_COB = ['COBRO', 'COBRANZA FACTURA']
         df_cob_cli = st.session_state.tesoreria[
             (st.session_state.tesoreria['Cliente/Proveedor'] == cl) &
             (st.session_state.tesoreria['Tipo'].isin(TIPOS_COB))
         ].copy()
         for _, r in df_cob_cli.iterrows():
             monto = float(r['Monto'])
+            # Los cobros siempre van al Haber (reducen deuda del cliente)
             filas_unif.append({
                 "Fecha":       str(r['Fecha']),
                 "Tipo":        "COBRO",
                 "Comprobante": str(r['Concepto']),
-                "Debe":        monto if monto > 0 else 0.0,
-                "Haber":       abs(monto) if monto < 0 else 0.0,
+                "Debe":        0.0,
+                "Haber":       abs(monto),
             })
 
         if not filas_unif:
@@ -4662,4 +4665,3 @@ elif sel == "CHEQUES":
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 type="primary"
             )
-
