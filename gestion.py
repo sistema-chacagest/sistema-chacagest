@@ -239,6 +239,37 @@ def append_fila_tesoreria(nueva_fila_df, reintentos=3):
     return False
 
 
+def append_fila_viajes(nueva_fila_df, reintentos=3):
+    """
+    Agrega UNA fila nueva al final de la hoja 'viajes' en Google Sheets
+    usando append_row, sin tocar el resto de los datos.
+    Evita el rewrite completo que podía fallar silenciosamente y dejar
+    la cuenta corriente del cliente sin actualizar.
+    Devuelve True si tuvo éxito, False si falló.
+    """
+    import time
+    ultimo_error = None
+    for intento in range(reintentos):
+        try:
+            sh = conectar_google()
+            if sh is None: return False
+            try:
+                ws = sh.worksheet("viajes")
+            except gspread.exceptions.WorksheetNotFound:
+                ws = sh.add_worksheet(title="viajes", rows=2000, cols=len(COL_VIAJES))
+                ws.update([COL_VIAJES])
+            fila = nueva_fila_df.fillna("-").astype(str).values.tolist()[0]
+            ws.append_row(fila, value_input_option="USER_ENTERED")
+            return True
+        except Exception as e:
+            ultimo_error = e
+            st.session_state.gsheets_conn = None
+            if intento < reintentos - 1:
+                time.sleep(1.5)
+    st.error(f"❌ Error al guardar movimiento en viajes tras {reintentos} intentos: {ultimo_error}")
+    return False
+
+
 def guardar_tesoreria_rerun(msg_key=None, msg_texto=None, nueva_fila_df=None):
     """
     Guarda tesoreria. Si se pasa nueva_fila_df, usa append_row (seguro para multiusuario).
@@ -1789,34 +1820,40 @@ elif sel == "TESORERIA":
                                 append_fila_tesoreria(nt)
                                 # 3) Viajes (cta cte cliente)
                                 nv = pd.DataFrame([[
-                                    date.today(), c_sel, date.today(), "PAGO", "TESORERIA",
+                                    str(date.today()), c_sel, str(date.today()), "PAGO", "TESORERIA",
                                     "-", -mon, "RECIBO", afip
                                 ]], columns=COL_VIAJES)
                                 st.session_state.viajes = pd.concat([st.session_state.viajes, nv], ignore_index=True)
-                                guardar_datos("viajes", st.session_state.viajes)
-                                # 4) Recibo
+                                ok_vj = append_fila_viajes(nv)  # FIX: append seguro, evita rewrite que fallaba silenciosamente
+                                if not ok_vj:
+                                    st.error("⚠️ El cheque fue registrado en cartera y tesorería, pero NO se pudo actualizar la cuenta corriente del cliente. Sincronizá manualmente.")
+                                else:
+                                    # 4) Recibo
+                                    st.session_state.html_recibo_ready = generar_html_recibo({
+                                        "Fecha": date.today(), "Cliente/Proveedor": c_sel,
+                                        "Concepto": f"Cobro de Viaje — Cheque #{ch_nro} ({ch_tipo}) | Librador: {ch_librador} | Vence: {ch_fvenc}",
+                                        "Caja/Banco": f"{cj} - CHEQUE DE TERCEROS",
+                                        "Monto": mon, "Ref AFIP": afip
+                                    })
+                                    st.session_state.cli_ready = c_sel
+                                    st.rerun()
+                        else:
+                            nt = pd.DataFrame([[str(date.today()), "COBRANZA", cj, forma_cob, "Cobro Viaje", c_sel, mon, afip]], columns=COL_TESORERIA)
+                            nv = pd.DataFrame([[str(date.today()), c_sel, str(date.today()), "PAGO", "TESORERIA", "-", -mon, "RECIBO", afip]], columns=COL_VIAJES)
+                            st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
+                            st.session_state.viajes    = pd.concat([st.session_state.viajes, nv], ignore_index=True)
+                            append_fila_tesoreria(nt)
+                            ok_vj = append_fila_viajes(nv)  # FIX: append seguro, evita rewrite que fallaba silenciosamente
+                            if not ok_vj:
+                                st.error("⚠️ El cobro fue registrado en tesorería, pero NO se pudo actualizar la cuenta corriente del cliente. Sincronizá manualmente.")
+                            else:
                                 st.session_state.html_recibo_ready = generar_html_recibo({
                                     "Fecha": date.today(), "Cliente/Proveedor": c_sel,
-                                    "Concepto": f"Cobro de Viaje — Cheque #{ch_nro} ({ch_tipo}) | Librador: {ch_librador} | Vence: {ch_fvenc}",
-                                    "Caja/Banco": f"{cj} - CHEQUE DE TERCEROS",
+                                    "Concepto": "Cobro de Viaje", "Caja/Banco": f"{cj} - {forma_cob}",
                                     "Monto": mon, "Ref AFIP": afip
                                 })
                                 st.session_state.cli_ready = c_sel
                                 st.rerun()
-                        else:
-                            nt = pd.DataFrame([[date.today(), "COBRANZA", cj, forma_cob, "Cobro Viaje", c_sel, mon, afip]], columns=COL_TESORERIA)
-                            nv = pd.DataFrame([[date.today(), c_sel, date.today(), "PAGO", "TESORERIA", "-", -mon, "RECIBO", afip]], columns=COL_VIAJES)
-                            st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
-                            st.session_state.viajes    = pd.concat([st.session_state.viajes, nv], ignore_index=True)
-                            append_fila_tesoreria(nt)
-                            guardar_datos("viajes", st.session_state.viajes)
-                            st.session_state.html_recibo_ready = generar_html_recibo({
-                                "Fecha": date.today(), "Cliente/Proveedor": c_sel,
-                                "Concepto": "Cobro de Viaje", "Caja/Banco": f"{cj} - {forma_cob}",
-                                "Monto": mon, "Ref AFIP": afip
-                            })
-                            st.session_state.cli_ready = c_sel
-                            st.rerun()
                     else:
                         st.warning("Completá el cliente y el monto antes de continuar.")
 
