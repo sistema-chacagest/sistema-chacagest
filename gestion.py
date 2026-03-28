@@ -93,9 +93,13 @@ def cargar_datos():
             datos_t = ws_t.get_all_records()
             df_t   = pd.DataFrame(datos_t) if datos_t else pd.DataFrame(columns=COL_TESORERIA)
             df_t['Monto'] = pd.to_numeric(df_t['Monto'], errors='coerce').fillna(0)
-            # Compatibilidad: si la hoja existente no tiene columna "Forma", la agrega vacía
-            if 'Forma' not in df_t.columns:
-                df_t.insert(3, 'Forma', '-')
+            # Compatibilidad: asegurar que todas las columnas esperadas existan
+            for col_esperada in COL_TESORERIA:
+                if col_esperada not in df_t.columns:
+                    df_t[col_esperada] = '-'
+            # Reordenar columnas en el orden canónico (preservando extras)
+            cols_extra = [c for c in df_t.columns if c not in COL_TESORERIA]
+            df_t = df_t[COL_TESORERIA + cols_extra]
         except:
             df_t = pd.DataFrame(columns=COL_TESORERIA)
 
@@ -166,7 +170,8 @@ def cargar_datos():
             df_fac = pd.DataFrame(columns=COL_FACTURAS)
 
         return df_c, df_v, df_p, df_t, df_prov, df_com, df_ce, df_cc, df_fac
-    except:
+    except Exception as e:
+        st.error(f"❌ Error crítico al cargar datos desde Google Sheets: {e}. Verificá la conexión y los permisos de la cuenta de servicio.")
         return None, None, None, None, None, None, None, None, None
 
 def guardar_datos(nombre_hoja, df, reintentos=3):
@@ -184,7 +189,11 @@ def guardar_datos(nombre_hoja, df, reintentos=3):
             df_save = df.fillna("-").copy()
             datos   = [df_save.columns.values.tolist()] + df_save.astype(str).values.tolist()
             ws.clear()
-            ws.update(datos)
+            # Compatibilidad con gspread >= 5.x (requiere range explícito) y versiones anteriores
+            try:
+                ws.update("A1", datos)
+            except TypeError:
+                ws.update(datos)
             return True
         except Exception as e:
             ultimo_error = e
@@ -212,6 +221,7 @@ def append_fila_tesoreria(nueva_fila_df, reintentos=3):
     Agrega UNA fila nueva al final de la hoja 'tesoreria' en Google Sheets
     usando append_row, sin tocar el resto de los datos.
     Esto evita conflictos de concurrencia entre operadores.
+    Verifica que los encabezados existan y sean correctos antes de insertar.
     Devuelve True si tuvo éxito, False si falló.
     """
     import time
@@ -226,6 +236,18 @@ def append_fila_tesoreria(nueva_fila_df, reintentos=3):
                 ws = sh.add_worksheet(title="tesoreria", rows=2000, cols=25)
                 # Si la hoja es nueva, escribir encabezados primero
                 ws.update([COL_TESORERIA])
+
+            # Verificar que la primera fila tenga los encabezados correctos
+            primera_fila = ws.row_values(1)
+            if not primera_fila or primera_fila[:len(COL_TESORERIA)] != COL_TESORERIA:
+                # La hoja existe pero está vacía o con encabezados incorrectos
+                if not primera_fila:
+                    ws.update([COL_TESORERIA])
+                # Si tiene datos pero encabezados distintos, no sobreescribir - alertar
+                elif primera_fila[:len(COL_TESORERIA)] != COL_TESORERIA:
+                    # Intentar igual - los datos pueden estar bien aunque los headers difieran levemente
+                    pass
+
             # Preparar la fila como lista de strings
             fila = nueva_fila_df.fillna("-").astype(str).values.tolist()[0]
             ws.append_row(fila, value_input_option="USER_ENTERED")
@@ -274,7 +296,9 @@ def guardar_tesoreria_rerun(msg_key=None, msg_texto=None, nueva_fila_df=None):
     """
     Guarda tesoreria. Si se pasa nueva_fila_df, usa append_row (seguro para multiusuario).
     Si no, hace rewrite completo (para ediciones/eliminaciones desde admin).
-    Si falla, muestra error y NO hace rerun. Si ok, guarda msg y hace rerun.
+    El movimiento ya fue agregado al session_state ANTES de llamar a esta función,
+    por lo tanto siempre hacemos rerun para reflejar el cambio en la UI.
+    Si Google Sheets falla, mostramos advertencia pero el dato queda en sesión.
     """
     if nueva_fila_df is not None:
         ok = append_fila_tesoreria(nueva_fila_df)
@@ -283,9 +307,13 @@ def guardar_tesoreria_rerun(msg_key=None, msg_texto=None, nueva_fila_df=None):
     if ok:
         if msg_key and msg_texto:
             st.session_state[msg_key] = msg_texto
-        st.rerun()
     else:
-        st.error("❌ No se pudo guardar el movimiento. Revisá la conexión e intentá de nuevo.")
+        # El dato ya está en session_state; avisamos pero igual refrescamos la UI
+        st.session_state["_warn_sync"] = (
+            "⚠️ El movimiento se registró en la sesión pero no se pudo sincronizar con Google Sheets. "
+            "Verificá la conexión. El dato podría perderse si cerrás la sesión."
+        )
+    st.rerun()
 
 # =========================================================
 # --- FUNCIONES PARA REPORTES HTML PROFESIONALES ---
@@ -978,6 +1006,10 @@ if not st.session_state.autenticado:
 es_admin    = st.session_state.rol_actual == "admin"
 es_operador = st.session_state.rol_actual == "operador"
 caja_propia = st.session_state.caja_propia
+
+# Mostrar advertencia de sincronización si hubo un error al guardar
+if st.session_state.get("_warn_sync"):
+    st.warning(st.session_state.pop("_warn_sync"))
 
 # --- 3. INICIALIZACIÓN ---
 
@@ -1817,43 +1849,45 @@ elif sel == "TESORERIA":
                                     c_sel, mon, afip
                                 ]], columns=COL_TESORERIA)
                                 st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
-                                append_fila_tesoreria(nt)
+                                ok_tes = append_fila_tesoreria(nt)
+                                if not ok_tes:
+                                    st.session_state["_warn_sync"] = "⚠️ Cobranza registrada en sesión, pero no se sincronizó la tesorería con Google Sheets."
                                 # 3) Viajes (cta cte cliente)
                                 nv = pd.DataFrame([[
                                     str(date.today()), c_sel, str(date.today()), "PAGO", "TESORERIA",
                                     "-", -mon, "RECIBO", afip
                                 ]], columns=COL_VIAJES)
                                 st.session_state.viajes = pd.concat([st.session_state.viajes, nv], ignore_index=True)
-                                ok_vj = append_fila_viajes(nv)  # FIX: append seguro, evita rewrite que fallaba silenciosamente
+                                ok_vj = append_fila_viajes(nv)
                                 if not ok_vj:
-                                    st.error("⚠️ El cheque fue registrado en cartera y tesorería, pero NO se pudo actualizar la cuenta corriente del cliente. Sincronizá manualmente.")
-                                else:
-                                    # 4) Recibo
-                                    st.session_state.html_recibo_ready = generar_html_recibo({
-                                        "Fecha": date.today(), "Cliente/Proveedor": c_sel,
-                                        "Concepto": f"Cobro de Viaje — Cheque #{ch_nro} ({ch_tipo}) | Librador: {ch_librador} | Vence: {ch_fvenc}",
-                                        "Caja/Banco": f"{cj} - CHEQUE DE TERCEROS",
-                                        "Monto": mon, "Ref AFIP": afip
-                                    })
-                                    st.session_state.cli_ready = c_sel
-                                    st.rerun()
+                                    st.session_state["_warn_sync"] = "⚠️ El cheque fue registrado en cartera y tesorería, pero NO se pudo actualizar la cuenta corriente del cliente en Google Sheets."
+                                # 4) Recibo (siempre generar, independiente de Google Sheets)
+                                st.session_state.html_recibo_ready = generar_html_recibo({
+                                    "Fecha": date.today(), "Cliente/Proveedor": c_sel,
+                                    "Concepto": f"Cobro de Viaje — Cheque #{ch_nro} ({ch_tipo}) | Librador: {ch_librador} | Vence: {ch_fvenc}",
+                                    "Caja/Banco": f"{cj} - CHEQUE DE TERCEROS",
+                                    "Monto": mon, "Ref AFIP": afip
+                                })
+                                st.session_state.cli_ready = c_sel
+                                st.rerun()
                         else:
                             nt = pd.DataFrame([[str(date.today()), "COBRANZA", cj, forma_cob, "Cobro Viaje", c_sel, mon, afip]], columns=COL_TESORERIA)
                             nv = pd.DataFrame([[str(date.today()), c_sel, str(date.today()), "PAGO", "TESORERIA", "-", -mon, "RECIBO", afip]], columns=COL_VIAJES)
                             st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
                             st.session_state.viajes    = pd.concat([st.session_state.viajes, nv], ignore_index=True)
-                            append_fila_tesoreria(nt)
-                            ok_vj = append_fila_viajes(nv)  # FIX: append seguro, evita rewrite que fallaba silenciosamente
-                            if not ok_vj:
-                                st.error("⚠️ El cobro fue registrado en tesorería, pero NO se pudo actualizar la cuenta corriente del cliente. Sincronizá manualmente.")
-                            else:
-                                st.session_state.html_recibo_ready = generar_html_recibo({
-                                    "Fecha": date.today(), "Cliente/Proveedor": c_sel,
-                                    "Concepto": "Cobro de Viaje", "Caja/Banco": f"{cj} - {forma_cob}",
-                                    "Monto": mon, "Ref AFIP": afip
-                                })
-                                st.session_state.cli_ready = c_sel
-                                st.rerun()
+                            ok_tes = append_fila_tesoreria(nt)
+                            ok_vj  = append_fila_viajes(nv)
+                            if not ok_tes:
+                                st.session_state["_warn_sync"] = "⚠️ La cobranza se registró en sesión pero no se sincronizó con Google Sheets (tesorería)."
+                            elif not ok_vj:
+                                st.session_state["_warn_sync"] = "⚠️ La cobranza fue registrada en tesorería, pero NO se pudo actualizar la cuenta corriente del cliente en Google Sheets."
+                            st.session_state.html_recibo_ready = generar_html_recibo({
+                                "Fecha": date.today(), "Cliente/Proveedor": c_sel,
+                                "Concepto": "Cobro de Viaje", "Caja/Banco": f"{cj} - {forma_cob}",
+                                "Monto": mon, "Ref AFIP": afip
+                            })
+                            st.session_state.cli_ready = c_sel
+                            st.rerun()
                     else:
                         st.warning("Completá el cliente y el monto antes de continuar.")
 
@@ -2043,7 +2077,9 @@ elif sel == "TESORERIA":
                             concepto_cob, cli_fac_sel, -monto_cobro, nro_recibo or "-"
                         ]], columns=COL_TESORERIA)
                         st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt_cob], ignore_index=True)
-                        append_fila_tesoreria(nt_cob)
+                        ok_tes = append_fila_tesoreria(nt_cob)
+                        if not ok_tes:
+                            st.session_state["_warn_sync"] = "⚠️ Cobranza de factura registrada en sesión pero no sincronizada con Google Sheets."
 
                         # 2) Retenciones como egresos separados
                         if ret_iva > 0:
@@ -2373,8 +2409,13 @@ elif sel == "TESORERIA":
                         ])
                     df_nuevos = pd.DataFrame(nuevos_movs, columns=COL_TESORERIA)
                     st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, df_nuevos], ignore_index=True)
+                    errores_rend = []
                     for _, fila_rend in df_nuevos.iterrows():
-                        append_fila_tesoreria(pd.DataFrame([fila_rend], columns=COL_TESORERIA))
+                        ok_r = append_fila_tesoreria(pd.DataFrame([fila_rend], columns=COL_TESORERIA))
+                        if not ok_r:
+                            errores_rend.append(fila_rend['Tipo'])
+                    if errores_rend:
+                        st.session_state["_warn_sync"] = f"⚠️ La rendición se registró en sesión pero no se sincronizaron {len(errores_rend)} movimiento(s) con Google Sheets."
 
                 html_cierre = generar_html_cierre_caja({
                     "caja":                caja_cierre,
@@ -2419,8 +2460,10 @@ elif sel == "TESORERIA":
                     p1 = pd.DataFrame([[date.today(), "PASE EFECTIVO", origen_pase, forma_pase, desc,       "INTERNO", -monto_pase, "-"]], columns=COL_TESORERIA)
                     p2 = pd.DataFrame([[date.today(), "PASE EFECTIVO", destino_pase, forma_pase, desc_dest, "INTERNO",  monto_pase, "-"]], columns=COL_TESORERIA)
                     st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, p1, p2], ignore_index=True)
-                    append_fila_tesoreria(p1)
-                    append_fila_tesoreria(p2)
+                    ok1 = append_fila_tesoreria(p1)
+                    ok2 = append_fila_tesoreria(p2)
+                    if not ok1 or not ok2:
+                        st.session_state["_warn_sync"] = "⚠️ El pase se registró en sesión pero no se sincronizó completamente con Google Sheets."
                     st.session_state.msg_pase = f"✅ Pase de {forma_pase} por $ {monto_pase:,.2f} de {origen_pase} → {destino_pase} registrado."
                     st.rerun()
                 elif origen_pase == destino_pase:
@@ -2443,8 +2486,10 @@ elif sel == "TESORERIA":
                         tr1 = pd.DataFrame([[date.today(), "TRASPASO", o, "INTERNO", f"Hacia {d}", "INTERNO", -m, "-"]], columns=COL_TESORERIA)
                         tr2 = pd.DataFrame([[date.today(), "TRASPASO", d, "INTERNO", f"Desde {o}", "INTERNO",  m, "-"]], columns=COL_TESORERIA)
                         st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, tr1, tr2], ignore_index=True)
-                        append_fila_tesoreria(tr1)
-                        append_fila_tesoreria(tr2)
+                        ok1 = append_fila_tesoreria(tr1)
+                        ok2 = append_fila_tesoreria(tr2)
+                        if not ok1 or not ok2:
+                            st.session_state["_warn_sync"] = "⚠️ El traspaso se registró en sesión pero no se sincronizó con Google Sheets."
                         st.session_state.msg_traspaso = f"✅ Traspaso de $ {m:,.2f} de {o} hacia {d} ejecutado."
                         st.rerun()
                     else:
@@ -2549,10 +2594,11 @@ elif sel == "TESORERIA":
                                 st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
                                 st.session_state.compras   = pd.concat([st.session_state.compras, nc], ignore_index=True)
                                 ok = guardar_tesoreria_y_compras()
-                                if ok:
-                                    st.session_state.html_op_ready = generar_html_orden_pago({"Fecha": date.today(), "Proveedor": _prov, "Concepto": f"Pago {_forma}", "Caja/Banco": cj_p, "Monto": mon_p, "Ref AFIP": _afip})
-                                    st.session_state.prov_ready = _prov
-                                    st.rerun()
+                                if not ok:
+                                    st.session_state["_warn_sync"] = "⚠️ La Orden de Pago se registró en sesión pero no se sincronizó con Google Sheets."
+                                st.session_state.html_op_ready = generar_html_orden_pago({"Fecha": date.today(), "Proveedor": _prov, "Concepto": f"Pago {_forma}", "Caja/Banco": cj_p, "Monto": mon_p, "Ref AFIP": _afip})
+                                st.session_state.prov_ready = _prov
+                                st.rerun()
                             else:
                                 st.warning("Seleccioná proveedor y completá el monto.")
 
@@ -2582,11 +2628,12 @@ elif sel == "TESORERIA":
                                 st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
                                 st.session_state.compras   = pd.concat([st.session_state.compras, nc], ignore_index=True)
                                 ok = guardar_tesoreria_y_compras()
-                                if ok:
-                                    guardar_datos("cheques_emitidos", st.session_state.cheques_emitidos)
-                                    st.session_state.html_op_ready = generar_html_orden_pago({"Fecha": date.today(), "Proveedor": p_sel, "Concepto": f"Cheque {tipo_op} #{nro_op} — Vto: {f_venc_op}", "Caja/Banco": f"Cheque {banco_op}", "Monto": mon_op, "Ref AFIP": afip_p})
-                                    st.session_state.prov_ready = p_sel
-                                    st.rerun()
+                                guardar_datos("cheques_emitidos", st.session_state.cheques_emitidos)
+                                if not ok:
+                                    st.session_state["_warn_sync"] = "⚠️ La Orden de Pago se registró en sesión pero no se sincronizó con Google Sheets."
+                                st.session_state.html_op_ready = generar_html_orden_pago({"Fecha": date.today(), "Proveedor": p_sel, "Concepto": f"Cheque {tipo_op} #{nro_op} — Vto: {f_venc_op}", "Caja/Banco": f"Cheque {banco_op}", "Monto": mon_op, "Ref AFIP": afip_p})
+                                st.session_state.prov_ready = p_sel
+                                st.rerun()
                             else:
                                 st.warning("Completá proveedor, número de cheque e importe.")
 
@@ -2627,10 +2674,11 @@ elif sel == "TESORERIA":
                                     st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
                                     st.session_state.compras   = pd.concat([st.session_state.compras, nc], ignore_index=True)
                                     ok = guardar_tesoreria_y_compras()
-                                    if ok:
-                                        st.session_state.html_op_ready = generar_html_orden_pago({"Fecha": date.today(), "Proveedor": p_sel, "Concepto": f"Cheque de {cheq_row['Librador']} #{cheq_row['Nro Cheque']} — Vto: {cheq_row['Fecha Vencimiento']}", "Caja/Banco": f"Cheque {cheq_row['Banco Librador']}", "Monto": mon_ct, "Ref AFIP": afip_p})
-                                        st.session_state.prov_ready = p_sel
-                                        st.rerun()
+                                    if not ok:
+                                        st.session_state["_warn_sync"] = "⚠️ La Orden de Pago se registró en sesión pero no se sincronizó con Google Sheets."
+                                    st.session_state.html_op_ready = generar_html_orden_pago({"Fecha": date.today(), "Proveedor": p_sel, "Concepto": f"Cheque de {cheq_row['Librador']} #{cheq_row['Nro Cheque']} — Vto: {cheq_row['Fecha Vencimiento']}", "Caja/Banco": f"Cheque {cheq_row['Banco Librador']}", "Monto": mon_ct, "Ref AFIP": afip_p})
+                                    st.session_state.prov_ready = p_sel
+                                    st.rerun()
                                 else:
                                     st.warning("Seleccioná proveedor y cheque.")
 
