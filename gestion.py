@@ -229,27 +229,37 @@ def append_fila_tesoreria(nueva_fila_df, reintentos=3):
     for intento in range(reintentos):
         try:
             sh = conectar_google()
-            if sh is None: return False
+            if sh is None:
+                st.error("❌ TESORERÍA: No hay conexión a Google Sheets. Verificá las credenciales.")
+                return False
             try:
                 ws = sh.worksheet("tesoreria")
             except gspread.exceptions.WorksheetNotFound:
                 ws = sh.add_worksheet(title="tesoreria", rows=2000, cols=25)
                 # Si la hoja es nueva, escribir encabezados primero
-                ws.update([COL_TESORERIA])
+                try:
+                    ws.update("A1", [COL_TESORERIA])
+                except TypeError:
+                    ws.update([COL_TESORERIA])
 
             # Verificar que la primera fila tenga los encabezados correctos
             primera_fila = ws.row_values(1)
-            if not primera_fila or primera_fila[:len(COL_TESORERIA)] != COL_TESORERIA:
-                # La hoja existe pero está vacía o con encabezados incorrectos
-                if not primera_fila:
+            if not primera_fila:
+                try:
+                    ws.update("A1", [COL_TESORERIA])
+                except TypeError:
                     ws.update([COL_TESORERIA])
-                # Si tiene datos pero encabezados distintos, no sobreescribir - alertar
-                elif primera_fila[:len(COL_TESORERIA)] != COL_TESORERIA:
-                    # Intentar igual - los datos pueden estar bien aunque los headers difieran levemente
-                    pass
 
-            # Preparar la fila como lista de strings
-            fila = nueva_fila_df.fillna("-").astype(str).values.tolist()[0]
+            # Preparar la fila como lista de strings puros (sin objetos date/datetime)
+            fila_dict = nueva_fila_df.fillna("-").iloc[0].to_dict()
+            fila = []
+            for col in COL_TESORERIA:
+                val = fila_dict.get(col, "-")
+                # Convertir fechas y otros tipos no serializables
+                if hasattr(val, 'strftime'):
+                    val = val.strftime('%Y-%m-%d')
+                fila.append(str(val) if val != "-" else "-")
+
             ws.append_row(fila, value_input_option="USER_ENTERED")
             return True
         except Exception as e:
@@ -257,7 +267,7 @@ def append_fila_tesoreria(nueva_fila_df, reintentos=3):
             st.session_state.gsheets_conn = None
             if intento < reintentos - 1:
                 time.sleep(1.5)
-    st.error(f"❌ Error al guardar movimiento de tesorería tras {reintentos} intentos: {ultimo_error}")
+    st.error(f"❌ TESORERÍA no guardada en Google Sheets (intento {reintentos}/{reintentos}): {ultimo_error}")
     return False
 
 
@@ -279,8 +289,18 @@ def append_fila_viajes(nueva_fila_df, reintentos=3):
                 ws = sh.worksheet("viajes")
             except gspread.exceptions.WorksheetNotFound:
                 ws = sh.add_worksheet(title="viajes", rows=2000, cols=len(COL_VIAJES))
-                ws.update([COL_VIAJES])
-            fila = nueva_fila_df.fillna("-").astype(str).values.tolist()[0]
+                try:
+                    ws.update("A1", [COL_VIAJES])
+                except TypeError:
+                    ws.update([COL_VIAJES])
+            # Serializar fechas correctamente
+            fila_dict = nueva_fila_df.fillna("-").iloc[0].to_dict()
+            fila = []
+            for col in COL_VIAJES:
+                val = fila_dict.get(col, "-")
+                if hasattr(val, 'strftime'):
+                    val = val.strftime('%Y-%m-%d')
+                fila.append(str(val) if val != "-" else "-")
             ws.append_row(fila, value_input_option="USER_ENTERED")
             return True
         except Exception as e:
@@ -288,7 +308,7 @@ def append_fila_viajes(nueva_fila_df, reintentos=3):
             st.session_state.gsheets_conn = None
             if intento < reintentos - 1:
                 time.sleep(1.5)
-    st.error(f"❌ Error al guardar movimiento en viajes tras {reintentos} intentos: {ultimo_error}")
+    st.error(f"❌ VIAJES/CTA CTE no guardado en Google Sheets tras {reintentos} intentos: {ultimo_error}")
     return False
 
 
@@ -1024,17 +1044,28 @@ CUENTAS_GASTOS_DEFAULT = [
 if 'cuentas_gastos' not in st.session_state:
     st.session_state.cuentas_gastos = list(CUENTAS_GASTOS_DEFAULT)
 
-if 'clientes' not in st.session_state or 'viajes' not in st.session_state:
+if 'clientes' not in st.session_state or 'viajes' not in st.session_state or 'tesoreria' not in st.session_state:
     c, v, p, t, prov, com, ce, cc, fac = cargar_datos()
-    st.session_state.clientes          = c    if c    is not None else pd.DataFrame(columns=COL_CLIENTES)
-    st.session_state.viajes            = v    if v    is not None else pd.DataFrame(columns=COL_VIAJES)
-    st.session_state.presupuestos      = p    if p    is not None else pd.DataFrame(columns=COL_PRESUPUESTOS)
-    st.session_state.tesoreria         = t    if t    is not None else pd.DataFrame(columns=COL_TESORERIA)
-    st.session_state.proveedores       = prov if prov is not None else pd.DataFrame(columns=COL_PROVEEDORES)
-    st.session_state.compras           = com  if com  is not None else pd.DataFrame(columns=COL_COMPRAS)
-    st.session_state.cheques_emitidos  = ce   if ce   is not None else pd.DataFrame(columns=COL_CHEQ_EMITIDOS)
-    st.session_state.cheques_cartera   = cc   if cc   is not None else pd.DataFrame(columns=COL_CHEQ_CARTERA)
-    st.session_state.facturas          = fac  if fac  is not None else pd.DataFrame(columns=COL_FACTURAS)
+    # Solo sobreescribir si la carga fue exitosa (no None).
+    # Si falla, dejar el estado anterior intacto para no perder datos en sesión.
+    if c    is not None: st.session_state.clientes         = c
+    elif 'clientes'        not in st.session_state: st.session_state.clientes         = pd.DataFrame(columns=COL_CLIENTES)
+    if v    is not None: st.session_state.viajes           = v
+    elif 'viajes'          not in st.session_state: st.session_state.viajes           = pd.DataFrame(columns=COL_VIAJES)
+    if p    is not None: st.session_state.presupuestos     = p
+    elif 'presupuestos'    not in st.session_state: st.session_state.presupuestos     = pd.DataFrame(columns=COL_PRESUPUESTOS)
+    if t    is not None: st.session_state.tesoreria        = t
+    elif 'tesoreria'       not in st.session_state: st.session_state.tesoreria        = pd.DataFrame(columns=COL_TESORERIA)
+    if prov is not None: st.session_state.proveedores      = prov
+    elif 'proveedores'     not in st.session_state: st.session_state.proveedores      = pd.DataFrame(columns=COL_PROVEEDORES)
+    if com  is not None: st.session_state.compras          = com
+    elif 'compras'         not in st.session_state: st.session_state.compras          = pd.DataFrame(columns=COL_COMPRAS)
+    if ce   is not None: st.session_state.cheques_emitidos = ce
+    elif 'cheques_emitidos' not in st.session_state: st.session_state.cheques_emitidos = pd.DataFrame(columns=COL_CHEQ_EMITIDOS)
+    if cc   is not None: st.session_state.cheques_cartera  = cc
+    elif 'cheques_cartera' not in st.session_state: st.session_state.cheques_cartera  = pd.DataFrame(columns=COL_CHEQ_CARTERA)
+    if fac  is not None: st.session_state.facturas         = fac
+    elif 'facturas'        not in st.session_state: st.session_state.facturas         = pd.DataFrame(columns=COL_FACTURAS)
 
 # --- 4. DISEÑO ---
 st.markdown("""
@@ -1634,7 +1665,29 @@ elif sel == "PRESUPUESTOS":
 elif sel == "TESORERIA":
     st.header("💰 Tesorería")
 
-    # ── Cajas disponibles según rol ──
+    # ── Panel de diagnóstico de conexión (visible siempre para detectar problemas) ──
+    with st.expander("🔌 Estado de conexión a Google Sheets", expanded=False):
+        if st.button("🔍 Probar conexión ahora"):
+            st.session_state.gsheets_conn = None  # forzar reconexión
+            try:
+                sh_test = conectar_google()
+                if sh_test:
+                    hojas = [ws.title for ws in sh_test.worksheets()]
+                    tiene_tes = "tesoreria" in hojas
+                    st.success(f"✅ Conexión OK. Hojas encontradas: {', '.join(hojas)}")
+                    if not tiene_tes:
+                        st.warning("⚠️ La hoja 'tesoreria' NO existe en la planilla. Se creará automáticamente al primer guardado.")
+                    else:
+                        ws_tes = sh_test.worksheet("tesoreria")
+                        n_filas = len(ws_tes.get_all_values())
+                        st.info(f"📊 Hoja 'tesoreria': {n_filas} filas (incluyendo encabezado).")
+                else:
+                    st.error("❌ No se pudo conectar. Revisá las credenciales en st.secrets o llave_google.json.")
+            except Exception as e:
+                st.error(f"❌ Error de conexión: {e}")
+        st.caption("Si hay error de conexión, todos los movimientos se guardarán solo en sesión y se perderán al recargar.")
+
+
     # Admin ve todas. Operador solo ve su caja asignada.
     TODAS_CAJAS = ["CAJA COTI", "CAJA TATO", "CAJA JUNIN", "BANCO GALICIA", "BANCO PROVINCIA", "TARJETA DE CREDITO", "BANCO SUPERVIELLE", "DOLAR CAJA COTI", "DOLAR CAJA TATO"]
 
