@@ -1001,155 +1001,25 @@ if "autenticado" not in st.session_state:
     st.session_state.nombre_usuario = None
 
 if not st.session_state.autenticado:
-    st.markdown("""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
-    html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
-    .stApp { background: linear-gradient(135deg, #1a0530 0%, #2d0a4e 40%, #4a1070 70%, #6b2d8b 100%) !important; }
-    [data-testid="stSidebarNav"] { display: none !important; }
-    header { visibility: hidden !important; }
-    footer { visibility: hidden !important; }
-
-    .login-card {
-        background: rgba(255,255,255,0.97);
-        border-radius: 24px;
-        padding: 48px 44px 44px 44px;
-        box-shadow: 0 32px 80px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.15);
-        max-width: 420px;
-        margin: 0 auto;
-        backdrop-filter: blur(20px);
-    }
-    .login-logo-area {
-        text-align: center;
-        margin-bottom: 32px;
-    }
-    .login-brand {
-        font-size: 13px;
-        font-weight: 600;
-        color: #5e2d61;
-        letter-spacing: 3px;
-        text-transform: uppercase;
-        margin-top: 14px;
-    }
-    .login-title {
-        font-size: 26px;
-        font-weight: 800;
-        color: #1a0530;
-        margin: 0 0 4px 0;
-        letter-spacing: -0.5px;
-    }
-    .login-subtitle {
-        font-size: 13px;
-        color: #888;
-        margin-bottom: 32px;
-        text-align: center;
-    }
-    .login-divider {
-        height: 1px;
-        background: linear-gradient(to right, transparent, #e0d0e8, transparent);
-        margin: 24px 0;
-    }
-    div[data-testid="stTextInput"] > div > div > input {
-        border: 2px solid #e8ddf0 !important;
-        border-radius: 12px !important;
-        padding: 12px 16px !important;
-        font-size: 15px !important;
-        background: #faf8fc !important;
-        transition: all 0.2s ease !important;
-        color: #1a0530 !important;
-    }
-    div[data-testid="stTextInput"] > div > div > input:focus {
-        border-color: #5e2d61 !important;
-        background: white !important;
-        box-shadow: 0 0 0 4px rgba(94,45,97,0.12) !important;
-    }
-    div[data-testid="stTextInput"] label {
-        font-weight: 600 !important;
-        font-size: 13px !important;
-        color: #4a2060 !important;
-        letter-spacing: 0.5px !important;
-        text-transform: uppercase !important;
-    }
-    div.stButton > button {
-        background: linear-gradient(135deg, #5e2d61 0%, #8b3d8e 100%) !important;
-        color: white !important;
-        border-radius: 12px !important;
-        border: none !important;
-        font-weight: 700 !important;
-        font-size: 15px !important;
-        padding: 14px !important;
-        width: 100% !important;
-        letter-spacing: 1px !important;
-        text-transform: uppercase !important;
-        transition: all 0.25s ease !important;
-        box-shadow: 0 4px 20px rgba(94,45,97,0.4) !important;
-        margin-top: 8px !important;
-    }
-    div.stButton > button:hover {
-        transform: translateY(-2px) !important;
-        box-shadow: 0 8px 28px rgba(94,45,97,0.55) !important;
-    }
-    div[data-testid="stAlert"] {
-        border-radius: 12px !important;
-        border: none !important;
-        font-weight: 500 !important;
-    }
-    .login-footer {
-        text-align: center;
-        margin-top: 28px;
-        font-size: 11px;
-        color: #bbb;
-        letter-spacing: 0.5px;
-    }
-    .login-version {
-        display: inline-block;
-        background: linear-gradient(135deg, #5e2d61, #f39c12);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        font-weight: 700;
-        font-size: 12px;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-    _, col2, _ = st.columns([1, 1.2, 1])
+    col1, col2, col3 = st.columns([1, 1, 1])
     with col2:
         st.markdown("<br><br>", unsafe_allow_html=True)
-        st.markdown("""
-        <div class="login-card">
-            <div class="login-logo-area">
-                <div style="font-size:52px; line-height:1;">🚛</div>
-                <div class="login-brand">Sistema de Gestión</div>
-                <div class="login-title">CHACAGEST</div>
-            </div>
-            <p class="login-subtitle">Ingresá tus credenciales para continuar</p>
-            <div class="login-divider"></div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        with st.container():
-            st.markdown('<div style="background:rgba(255,255,255,0.97);border-radius:0 0 24px 24px;padding:0 44px 44px 44px;max-width:420px;margin:-8px auto 0 auto;box-shadow:0 32px 80px rgba(0,0,0,0.45);">', unsafe_allow_html=True)
-            u = st.text_input("Usuario", placeholder="Ingresá tu usuario")
-            p = st.text_input("Contraseña", type="password", placeholder="••••••••")
-            if st.button("→ INGRESAR AL SISTEMA"):
-                u_lower = u.strip().lower()
-                if u_lower in USUARIOS and USUARIOS[u_lower]["password"] == p.strip():
-                    datos_usuario = USUARIOS[u_lower]
-                    st.session_state.autenticado    = True
-                    st.session_state.usuario_actual = u_lower
-                    st.session_state.rol_actual     = datos_usuario["rol"]
-                    st.session_state.caja_propia    = datos_usuario["caja"]
-                    st.session_state.nombre_usuario = datos_usuario["nombre"]
-                    st.rerun()
-                else:
-                    st.error("❌ Usuario o contraseña incorrectos")
-            st.markdown("""
-            <div class="login-footer">
-                <span class="login-version">CHACAGEST</span> &nbsp;·&nbsp; Chacabuco Noroeste Tour S.R.L.<br>
-                Desde 1996 viajando con vos
-            </div>
-            """, unsafe_allow_html=True)
-            st.markdown('</div>', unsafe_allow_html=True)
+        try: st.image("logo_path.png", width=250)
+        except: st.title("🚛 CHACAGEST")
+        u = st.text_input("Usuario")
+        p = st.text_input("Contraseña", type="password")
+        if st.button("INGRESAR"):
+            u_lower = u.strip().lower()
+            if u_lower in USUARIOS and USUARIOS[u_lower]["password"] == p.strip():
+                datos_usuario = USUARIOS[u_lower]
+                st.session_state.autenticado    = True
+                st.session_state.usuario_actual = u_lower
+                st.session_state.rol_actual     = datos_usuario["rol"]
+                st.session_state.caja_propia    = datos_usuario["caja"]
+                st.session_state.nombre_usuario = datos_usuario["nombre"]
+                st.rerun()
+            else:
+                st.error("Usuario o contraseña incorrectos")
     st.stop()
 
 # Helpers de rol
@@ -1200,372 +1070,30 @@ if 'clientes' not in st.session_state or 'viajes' not in st.session_state or 'te
 # --- 4. DISEÑO ---
 st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
-
-    /* ── RESET & BASE ── */
-    html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
-    [data-testid="stSidebarNav"] { display: none !important; }
-    header { visibility: hidden !important; }
-    footer { visibility: hidden !important; }
-
-    /* ── APP BACKGROUND ── */
-    .stApp { background: #f4f0f8 !important; }
-
-    /* ── SIDEBAR ── */
-    [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #1a0530 0%, #2d0a4e 50%, #3d1060 100%) !important;
-        border-right: none !important;
-        box-shadow: 4px 0 24px rgba(0,0,0,0.3) !important;
-    }
-    [data-testid="stSidebar"] * { color: #e8d8f0 !important; }
-    [data-testid="stSidebar"] hr {
-        border-color: rgba(255,255,255,0.12) !important;
-        margin: 10px 0 !important;
-    }
-
-    /* Sidebar buttons */
-    [data-testid="stSidebar"] div.stButton > button {
-        background: rgba(255,255,255,0.1) !important;
-        color: #e8d8f0 !important;
-        border: 1px solid rgba(255,255,255,0.2) !important;
-        border-radius: 10px !important;
-        font-weight: 600 !important;
-        font-size: 13px !important;
-        width: 100% !important;
-        padding: 9px !important;
-        margin: 3px 0 !important;
-        transition: all 0.2s ease !important;
-        text-transform: none !important;
-        letter-spacing: 0 !important;
-    }
-    [data-testid="stSidebar"] div.stButton > button:hover {
-        background: rgba(255,255,255,0.2) !important;
-        border-color: rgba(255,255,255,0.4) !important;
-        transform: translateX(3px) !important;
-    }
-
-    /* ── HEADINGS ── */
-    h1 {
-        color: #1a0530 !important;
-        font-size: 28px !important;
-        font-weight: 800 !important;
-        letter-spacing: -0.5px !important;
-        padding-bottom: 16px !important;
-        border-bottom: 3px solid #5e2d61 !important;
-        margin-bottom: 24px !important;
-    }
-    h2 {
-        color: #2d0a4e !important;
-        font-size: 20px !important;
-        font-weight: 700 !important;
-        letter-spacing: -0.3px !important;
-    }
-    h3 {
-        color: #5e2d61 !important;
-        font-size: 16px !important;
-        font-weight: 700 !important;
-    }
-
-    /* ── MAIN CONTENT AREA ── */
-    .main .block-container {
-        padding: 28px 36px !important;
-        max-width: 1400px !important;
-    }
-
-    /* ── BUTTONS (main area) ── */
+    [data-testid="stSidebarNav"] { display: none; }
+    header { visibility: hidden; }
+    h1, h2, h3 { color: #5e2d61 !important; }
     div.stButton > button {
-        background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%) !important;
+        background: linear-gradient(to right, #f39c12, #d35400) !important;
         color: white !important;
-        border-radius: 10px !important;
-        border: none !important;
-        font-weight: 700 !important;
-        font-size: 13px !important;
-        padding: 10px 20px !important;
-        transition: all 0.2s ease !important;
-        box-shadow: 0 2px 10px rgba(243,156,18,0.35) !important;
-        letter-spacing: 0.3px !important;
-    }
-    div.stButton > button:hover {
-        transform: translateY(-2px) !important;
-        box-shadow: 0 6px 18px rgba(243,156,18,0.5) !important;
-    }
-    div.stButton > button[kind="primary"] {
-        background: linear-gradient(135deg, #5e2d61 0%, #8b3d8e 100%) !important;
-        box-shadow: 0 2px 10px rgba(94,45,97,0.35) !important;
-    }
-    div.stButton > button[kind="primary"]:hover {
-        box-shadow: 0 6px 18px rgba(94,45,97,0.5) !important;
-    }
-    div.stButton > button[kind="secondary"] {
-        background: rgba(94,45,97,0.1) !important;
-        color: #5e2d61 !important;
-        border: 2px solid #5e2d61 !important;
-        box-shadow: none !important;
-    }
-    div.stButton > button[kind="secondary"]:hover {
-        background: #5e2d61 !important;
-        color: white !important;
-    }
-
-    /* ── INPUTS ── */
-    div[data-testid="stTextInput"] > div > div > input,
-    div[data-testid="stNumberInput"] > div > div > input,
-    div[data-testid="stDateInput"] > div > div > input,
-    textarea {
-        border: 2px solid #e8ddf0 !important;
-        border-radius: 10px !important;
-        padding: 10px 14px !important;
-        font-size: 14px !important;
-        background: white !important;
-        color: #1a0530 !important;
-        transition: all 0.2s !important;
-    }
-    div[data-testid="stTextInput"] > div > div > input:focus,
-    div[data-testid="stNumberInput"] > div > div > input:focus,
-    textarea:focus {
-        border-color: #5e2d61 !important;
-        box-shadow: 0 0 0 3px rgba(94,45,97,0.12) !important;
-    }
-    div[data-testid="stSelectbox"] > div > div,
-    div[data-testid="stMultiSelect"] > div > div {
-        border: 2px solid #e8ddf0 !important;
-        border-radius: 10px !important;
-        background: white !important;
-        transition: all 0.2s !important;
-    }
-    div[data-testid="stSelectbox"] > div > div:focus-within,
-    div[data-testid="stMultiSelect"] > div > div:focus-within {
-        border-color: #5e2d61 !important;
-        box-shadow: 0 0 0 3px rgba(94,45,97,0.12) !important;
-    }
-    label, .stLabel { font-weight: 600 !important; font-size: 13px !important; color: #4a2060 !important; }
-
-    /* ── DATAFRAME ── */
-    .stDataFrame {
-        border: 2px solid #e8ddf0 !important;
-        border-radius: 14px !important;
-        overflow: hidden !important;
-        box-shadow: 0 4px 16px rgba(94,45,97,0.08) !important;
-    }
-    .stDataFrame table { font-size: 13px !important; }
-    .stDataFrame thead th {
-        background: linear-gradient(135deg, #5e2d61, #8b3d8e) !important;
-        color: white !important;
-        font-weight: 700 !important;
-        padding: 12px 14px !important;
-        border: none !important;
-    }
-    .stDataFrame tbody tr:hover td { background: #f0e8f5 !important; }
-    .stDataFrame tbody tr:nth-child(even) td { background: #faf5fc !important; }
-    .stDataFrame tbody td { padding: 10px 14px !important; border-color: #f0e8f5 !important; }
-
-    /* ── METRICS ── */
-    div[data-testid="stMetric"] {
-        background: white !important;
-        border-radius: 16px !important;
-        padding: 20px 24px !important;
-        border: 2px solid #f0e8f5 !important;
-        box-shadow: 0 4px 16px rgba(94,45,97,0.07) !important;
-        transition: all 0.2s !important;
-    }
-    div[data-testid="stMetric"]:hover {
-        border-color: #c080c8 !important;
-        box-shadow: 0 8px 24px rgba(94,45,97,0.14) !important;
-        transform: translateY(-2px) !important;
-    }
-    div[data-testid="stMetric"] label {
-        font-size: 12px !important;
-        font-weight: 700 !important;
-        text-transform: uppercase !important;
-        letter-spacing: 1px !important;
-        color: #8b6098 !important;
-    }
-    div[data-testid="stMetricValue"] {
-        font-size: 28px !important;
-        font-weight: 800 !important;
-        color: #1a0530 !important;
-        letter-spacing: -0.5px !important;
-    }
-    div[data-testid="stMetricDelta"] { font-size: 13px !important; font-weight: 600 !important; }
-
-    /* ── TABS ── */
-    div[data-testid="stTabs"] > div > div > button {
-        font-weight: 600 !important;
-        font-size: 13px !important;
-        border-radius: 10px 10px 0 0 !important;
-        padding: 10px 20px !important;
-        color: #8b6098 !important;
-        transition: all 0.2s !important;
-    }
-    div[data-testid="stTabs"] > div > div > button[aria-selected="true"] {
-        color: #5e2d61 !important;
-        border-bottom: 3px solid #5e2d61 !important;
-        font-weight: 700 !important;
-    }
-
-    /* ── EXPANDER ── */
-    div[data-testid="stExpander"] {
-        border: 2px solid #e8ddf0 !important;
-        border-radius: 14px !important;
-        overflow: hidden !important;
-        background: white !important;
-        margin-bottom: 12px !important;
-    }
-    div[data-testid="stExpander"] summary {
-        font-weight: 700 !important;
-        font-size: 14px !important;
-        color: #2d0a4e !important;
-        padding: 14px 18px !important;
-        background: #faf5fc !important;
-    }
-    div[data-testid="stExpander"] summary:hover { background: #f0e8f5 !important; }
-
-    /* ── ALERTS ── */
-    div[data-testid="stAlert"] {
-        border-radius: 12px !important;
-        border: none !important;
-        font-weight: 500 !important;
-        font-size: 14px !important;
-        padding: 14px 18px !important;
-    }
-
-    /* ── CHECKBOX / RADIO ── */
-    div[data-testid="stCheckbox"] label,
-    div[data-testid="stRadio"] label {
-        font-weight: 500 !important;
-        font-size: 14px !important;
-        color: #2d0a4e !important;
-    }
-
-    /* ── SEPARATORS ── */
-    hr { border: none !important; border-top: 2px solid #e8ddf0 !important; margin: 20px 0 !important; }
-
-    /* ── SPINNER ── */
-    div[data-testid="stSpinner"] > div { border-top-color: #5e2d61 !important; }
-
-    /* ── DOWNLOAD BUTTON ── */
-    div.stDownloadButton > button {
-        background: linear-gradient(135deg, #27ae60, #1e8449) !important;
-        color: white !important;
-        border-radius: 10px !important;
-        border: none !important;
-        font-weight: 700 !important;
-        box-shadow: 0 2px 10px rgba(39,174,96,0.35) !important;
-    }
-    div.stDownloadButton > button:hover {
-        box-shadow: 0 6px 18px rgba(39,174,96,0.5) !important;
-        transform: translateY(-2px) !important;
-    }
-
-    /* ── SIDEBAR OPTION MENU ── */
-    [data-testid="stSidebar"] .nav-link {
-        border-radius: 10px !important;
-        margin: 2px 8px !important;
-        transition: all 0.2s !important;
-    }
-    [data-testid="stSidebar"] .nav-link-selected {
-        background: linear-gradient(135deg, #5e2d61, #8b3d8e) !important;
-        box-shadow: 0 4px 14px rgba(94,45,97,0.5) !important;
-    }
-
-    /* ── PAGE SECTION CARDS ── */
-    .section-card {
-        background: white;
-        border-radius: 18px;
-        padding: 28px 32px;
-        border: 2px solid #f0e8f5;
-        box-shadow: 0 4px 20px rgba(94,45,97,0.07);
-        margin-bottom: 20px;
-    }
-    .kpi-card {
-        background: linear-gradient(135deg, #5e2d61 0%, #8b3d8e 100%);
-        border-radius: 18px;
-        padding: 24px;
-        color: white;
-        text-align: center;
-        box-shadow: 0 8px 24px rgba(94,45,97,0.35);
-    }
-
-    /* ── PLOTLY CHARTS ── */
-    .js-plotly-plot { border-radius: 14px !important; }
-
-    /* ── CALENDAR ── */
-    div[data-testid="stCustomComponent"] { border-radius: 14px !important; overflow: hidden !important; }
-
-    /* ── NUMBER INPUT arrows ── */
-    div[data-testid="stNumberInput"] button {
-        background: #f0e8f5 !important;
-        border-color: #e8ddf0 !important;
         border-radius: 8px !important;
-        color: #5e2d61 !important;
+        border: none !important;
+        font-weight: bold !important;
     }
-    div[data-testid="stNumberInput"] button:hover {
-        background: #5e2d61 !important;
-        color: white !important;
-    }
-
-    /* ── MULTISELECT TAGS ── */
-    span[data-baseweb="tag"] {
-        background: linear-gradient(135deg, #5e2d61, #8b3d8e) !important;
-        border-radius: 8px !important;
-        color: white !important;
-        font-weight: 600 !important;
-        font-size: 12px !important;
-    }
-
-    /* ── POPOVER / TOOLTIP ── */
-    div[data-testid="stTooltipIcon"] { color: #8b6098 !important; }
-
-    /* ── PROGRESS BAR ── */
-    div[data-testid="stProgress"] > div {
-        background: linear-gradient(90deg, #5e2d61, #f39c12) !important;
-        border-radius: 99px !important;
-    }
-    div[data-testid="stProgress"] > div > div {
-        background: linear-gradient(90deg, #5e2d61, #f39c12) !important;
-        border-radius: 99px !important;
-    }
-
-    /* ── SCROLLBAR ── */
-    ::-webkit-scrollbar { width: 6px; height: 6px; }
-    ::-webkit-scrollbar-track { background: #f0e8f5; border-radius: 99px; }
-    ::-webkit-scrollbar-thumb { background: #c080c8; border-radius: 99px; }
-    ::-webkit-scrollbar-thumb:hover { background: #5e2d61; }
-
+    .stDataFrame { border: 1px solid #5e2d61; border-radius: 5px; }
     </style>
     """, unsafe_allow_html=True)
 
 # --- 5. SIDEBAR ---
 with st.sidebar:
-    # Logo / brand area
-    try:
-        st.image("logo_path.png", use_container_width=True)
-    except:
-        st.markdown("""
-        <div style="padding:16px 12px 8px 12px; text-align:center;">
-            <div style="font-size:18px; font-weight:800; color:#f0e0ff; letter-spacing:-0.5px;">CHACAGEST</div>
-            <div style="font-size:10px; color:rgba(255,255,255,0.45); letter-spacing:2px; text-transform:uppercase; margin-top:3px;">Sistema de Gestión</div>
-        </div>
-        """, unsafe_allow_html=True)
+    try: st.image("logo_path.png", use_container_width=True)
+    except: pass
     st.markdown("---")
 
     # ── Badge de usuario logueado ──
-    rol_icon = "🔑" if es_admin else "👤"
-    rol_label = "Administrador" if es_admin else st.session_state.nombre_usuario
-    caja_info = "" if es_admin else f'<div style="font-size:11px;opacity:0.75;margin-top:3px;">🏦 {caja_propia}</div>'
-    st.markdown(f"""
-    <div style="background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.2);
-                padding:12px 14px;border-radius:12px;margin-bottom:12px;
-                backdrop-filter:blur(8px);">
-        <div style="display:flex;align-items:center;gap:8px;">
-            <span style="font-size:22px;">{rol_icon}</span>
-            <div>
-                <div style="font-size:14px;font-weight:700;color:#f0e0ff;">{rol_label}</div>
-                {caja_info}
-            </div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    rol_badge = "🔑 Admin" if es_admin else f"👤 {st.session_state.nombre_usuario}"
+    caja_badge = "" if es_admin else f" | 🏦 {caja_propia}"
+    st.markdown(f"<div style='background:#5e2d61;color:white;padding:8px 12px;border-radius:8px;font-size:13px;font-weight:bold;margin-bottom:8px;'>{rol_badge}{caja_badge}</div>", unsafe_allow_html=True)
     st.markdown("---")
 
     # ── Menú principal: Admin ve todo, Operador no ve Dashboard ──
@@ -1583,24 +1111,15 @@ with st.sidebar:
         default_index=0,
         key="menu_p",
         styles={
-            "container": {"padding": "4px 0px", "background-color": "transparent"},
-            "icon": {"color": "#d4a8e0", "font-size": "15px"},
-            "nav-link": {
-                "font-size": "13px", "font-weight": "600", "color": "#d4a8e0",
-                "border-radius": "10px", "margin": "2px 8px",
-                "padding": "10px 14px", "transition": "all 0.2s"
-            },
-            "nav-link-selected": {
-                "background": "linear-gradient(135deg, #5e2d61, #8b3d8e)",
-                "color": "white", "font-weight": "700",
-                "box-shadow": "0 4px 14px rgba(94,45,97,0.5)"
-            },
+            "container": {"padding": "0px", "background-color": "#f0f2f6"},
+            "nav-link": {"font-size": "15px", "font-weight": "bold"},
+            "nav-link-selected": {"background-color": "#5e2d61"},
         }
     )
 
     sel_sub = None
     if menu_principal == "VENTAS":
-        st.markdown('<div style="margin:4px 0 4px 8px;padding-left:12px;border-left:2px solid rgba(243,156,18,0.5);">', unsafe_allow_html=True)
+        st.markdown("<div style='margin-left: 20px; border-left: 2px solid #f39c12; padding-left: 10px;'>", unsafe_allow_html=True)
         opciones_ventas = ["CLIENTES", "CARGA VIAJE", "PRESUPUESTOS", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"]
         iconos_ventas   = ["people", "truck", "file-earmark-spreadsheet", "person-vcard", "globe", "file-text"]
         sel_sub = option_menu(
@@ -1611,22 +1130,14 @@ with st.sidebar:
             key="menu_s",
             styles={
                 "container": {"background-color": "transparent", "padding": "0px"},
-                "icon": {"color": "#f39c12", "font-size": "13px"},
-                "nav-link": {
-                    "font-size": "12px", "font-weight": "600", "text-align": "left",
-                    "color": "#c8a0d8", "border-radius": "8px", "margin": "1px 4px",
-                    "padding": "8px 10px"
-                },
-                "nav-link-selected": {
-                    "background": "rgba(243,156,18,0.25)", "color": "#f39c12",
-                    "font-weight": "700", "border-left": "3px solid #f39c12"
-                },
+                "nav-link": {"font-size": "13px", "text-align": "left", "margin": "2px"},
+                "nav-link-selected": {"background-color": "#f39c12", "color": "white"},
             }
         )
         st.markdown("</div>", unsafe_allow_html=True)
 
     elif menu_principal == "COMPRAS":
-        st.markdown('<div style="margin:4px 0 4px 8px;padding-left:12px;border-left:2px solid rgba(243,156,18,0.5);">', unsafe_allow_html=True)
+        st.markdown("<div style='margin-left: 20px; border-left: 2px solid #f39c12; padding-left: 10px;'>", unsafe_allow_html=True)
         opciones_compras = ["CARGA PROVEEDOR", "CARGA GASTOS", "CTA CTE PROVEEDOR", "CTA CTE GENERAL PROV", "HISTORICO COMPRAS", "MAYOR DE CUENTAS"]
         iconos_compras   = ["person-plus", "receipt", "person-lines-fill", "globe", "clock-history", "journal-text"]
         sel_sub = option_menu(
@@ -1637,16 +1148,8 @@ with st.sidebar:
             key="menu_c",
             styles={
                 "container": {"background-color": "transparent", "padding": "0px"},
-                "icon": {"color": "#f39c12", "font-size": "13px"},
-                "nav-link": {
-                    "font-size": "12px", "font-weight": "600", "text-align": "left",
-                    "color": "#c8a0d8", "border-radius": "8px", "margin": "1px 4px",
-                    "padding": "8px 10px"
-                },
-                "nav-link-selected": {
-                    "background": "rgba(243,156,18,0.25)", "color": "#f39c12",
-                    "font-weight": "700", "border-left": "3px solid #f39c12"
-                },
+                "nav-link": {"font-size": "13px", "text-align": "left", "margin": "2px"},
+                "nav-link-selected": {"background-color": "#f39c12", "color": "white"},
             }
         )
         st.markdown("</div>", unsafe_allow_html=True)
@@ -1714,18 +1217,7 @@ if sel == "DASHBOARD" and es_operador:
 # DASHBOARD
 # =============================================================
 if sel == "DASHBOARD":
-    st.markdown("""
-    <div style="display:flex;align-items:center;gap:14px;margin-bottom:28px;
-                padding-bottom:20px;border-bottom:3px solid #5e2d61;">
-        <div style="background:linear-gradient(135deg,#5e2d61,#8b3d8e);width:48px;height:48px;
-                    border-radius:14px;display:flex;align-items:center;justify-content:center;
-                    font-size:24px;box-shadow:0 6px 18px rgba(94,45,97,0.4);">📊</div>
-        <div>
-            <h1 style="margin:0;padding:0;border:none;font-size:26px;">Dashboard de Control Financiero</h1>
-            <p style="margin:0;color:#8b6098;font-size:13px;font-weight:500;">Resumen ejecutivo del período</p>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.header("📊 Dashboard de Control Financiero")
 
     MESES_NOMBRES = {
         1:"Enero", 2:"Febrero", 3:"Marzo",    4:"Abril",
@@ -2017,18 +1509,7 @@ if sel == "DASHBOARD":
 # CALENDARIO
 # =============================================================
 elif sel == "CALENDARIO":
-    st.markdown(f"""
-    <div style="display:flex;align-items:center;gap:14px;margin-bottom:28px;
-                padding-bottom:20px;border-bottom:3px solid #5e2d61;">
-        <div style="background:linear-gradient(135deg,#5e2d61,#8b3d8e);width:48px;height:48px;
-                    border-radius:14px;display:flex;align-items:center;justify-content:center;
-                    font-size:24px;box-shadow:0 6px 18px rgba(94,45,97,0.4);">📅</div>
-        <div>
-            <h1 style="margin:0;padding:0;border:none;font-size:26px;">Agenda de Viajes</h1>
-            <p style="margin:0;color:#8b6098;font-size:13px;font-weight:500;">Calendario y programación de viajes</p>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.header("📅 Agenda de Viajes")
     if "viaje_ver" not in st.session_state:
         st.session_state.viaje_ver = None
     eventos = []
@@ -2039,107 +1520,23 @@ elif sel == "CALENDARIO":
                 "id": str(i), "title": f"🚛 {row['Cliente']}", "start": str(row['Fecha Viaje']),
                 "allDay": True, "backgroundColor": "#f39c12", "borderColor": "#d35400"
             })
-    cal_options = {
-        "headerToolbar": {"left": "prev,next today", "center": "title", "right": "dayGridMonth,timeGridWeek,listMonth"},
-        "locale": "es",
-        "height": 640,
-        "dayMaxEvents": 3,
-        "eventDisplay": "block",
-        "nowIndicator": True,
-    }
-    custom_css = """
-        .fc { font-family: 'Inter', system-ui, sans-serif !important; }
-        .fc-toolbar-title { color: #1a0530 !important; font-size: 20px !important; font-weight: 800 !important; letter-spacing: -0.3px !important; }
-        .fc-button-primary {
-            background: linear-gradient(135deg, #5e2d61, #8b3d8e) !important;
-            border-color: transparent !important;
-            border-radius: 8px !important;
-            font-weight: 600 !important;
-            font-size: 12px !important;
-            padding: 6px 14px !important;
-            box-shadow: 0 2px 8px rgba(94,45,97,0.35) !important;
-            transition: all 0.2s !important;
-        }
-        .fc-button-primary:hover { opacity: 0.88 !important; transform: translateY(-1px) !important; }
-        .fc-button-primary:not(.fc-button-active):not(:hover) { opacity: 0.85 !important; }
-        .fc-button-active { background: linear-gradient(135deg, #f39c12, #e67e22) !important; box-shadow: 0 2px 8px rgba(243,156,18,0.4) !important; }
-        .fc-today-button { background: rgba(94,45,97,0.15) !important; color: #5e2d61 !important; border: 2px solid #5e2d61 !important; box-shadow: none !important; }
-        .fc-daygrid-day.fc-day-today { background: rgba(243,156,18,0.08) !important; border-radius: 8px; }
-        .fc-daygrid-day-number { color: #4a2060 !important; font-weight: 600 !important; font-size: 13px !important; }
-        .fc-col-header-cell-cushion { color: #8b6098 !important; font-weight: 700 !important; font-size: 12px !important; text-transform: uppercase !important; letter-spacing: 1px !important; }
-        .fc-event {
-            background: linear-gradient(135deg, #f39c12, #e67e22) !important;
-            border: none !important;
-            border-radius: 6px !important;
-            font-size: 11px !important;
-            font-weight: 600 !important;
-            padding: 2px 6px !important;
-            box-shadow: 0 2px 6px rgba(243,156,18,0.4) !important;
-        }
-        .fc-event:hover { opacity: 0.85 !important; transform: scale(1.02) !important; }
-        .fc-daygrid-body { background: white !important; border-radius: 12px !important; }
-        .fc-scrollgrid { border-radius: 14px !important; overflow: hidden !important; border: 2px solid #f0e8f5 !important; }
-        .fc-scrollgrid td, .fc-scrollgrid th { border-color: #f0e8f5 !important; }
-        .fc-list-event:hover td { background: #faf5fc !important; }
-        .fc-list-day-cushion { background: linear-gradient(135deg, #5e2d61, #8b3d8e) !important; color: white !important; }
-        .fc-now-indicator-line { border-color: #e74c3c !important; border-width: 2px !important; }
-    """
-    res_cal = calendar(events=eventos, options=cal_options, custom_css=custom_css, key="cal_final")
+    cal_options  = {"headerToolbar": {"left": "prev,next today", "center": "title", "right": "dayGridMonth"}, "locale": "es", "height": 600}
+    custom_css   = ".fc-button-primary { background-color: #5e2d61 !important; border-color: #5e2d61 !important; } .fc-event { background-color: #f39c12 !important; } .fc-toolbar-title { color: #5e2d61 !important; }"
+    res_cal      = calendar(events=eventos, options=cal_options, custom_css=custom_css, key="cal_final")
     if res_cal.get("eventClick"):
         st.session_state.viaje_ver = int(res_cal["eventClick"]["event"]["id"])
     if st.session_state.viaje_ver is not None:
         idx = st.session_state.viaje_ver
         if idx in st.session_state.viajes.index:
             v_det = st.session_state.viajes.loc[idx]
-            col_det, col_close = st.columns([6, 1])
-            with col_close:
-                if st.button("✕ Cerrar", key="close_viaje_det"):
-                    st.session_state.viaje_ver = None
-                    st.rerun()
-            st.markdown(f"""
-            <div style="background:white;border-radius:16px;border:2px solid #f0e8f5;
-                        padding:24px 28px;margin-top:16px;
-                        box-shadow:0 4px 20px rgba(94,45,97,0.08);">
-                <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;
-                            padding-bottom:16px;border-bottom:2px solid #f0e8f5;">
-                    <div style="width:42px;height:42px;border-radius:12px;
-                                background:linear-gradient(135deg,#f39c12,#e67e22);
-                                display:flex;align-items:center;justify-content:center;
-                                font-size:20px;box-shadow:0 4px 12px rgba(243,156,18,0.4);">🚛</div>
-                    <div>
-                        <div style="font-size:17px;font-weight:800;color:#1a0530;">{v_det['Cliente']}</div>
-                        <div style="font-size:12px;color:#8b6098;font-weight:500;">Detalle del viaje</div>
-                    </div>
-                </div>
-                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
-                    <div style="background:#faf5fc;border-radius:10px;padding:14px;">
-                        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#8b6098;margin-bottom:5px;">Ruta</div>
-                        <div style="font-size:15px;font-weight:700;color:#2d0a4e;">{v_det['Origen']} → {v_det['Destino']}</div>
-                    </div>
-                    <div style="background:#faf5fc;border-radius:10px;padding:14px;">
-                        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#8b6098;margin-bottom:5px;">Importe</div>
-                        <div style="font-size:15px;font-weight:700;color:#27ae60;">$ {float(v_det['Importe']):,.2f}</div>
-                    </div>
-                    <div style="background:#faf5fc;border-radius:10px;padding:14px;">
-                        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#8b6098;margin-bottom:5px;">Fecha</div>
-                        <div style="font-size:15px;font-weight:700;color:#2d0a4e;">{v_det['Fecha Viaje']}</div>
-                    </div>
-                </div>
-            </div>""", unsafe_allow_html=True)
+            if st.button("❌ Cerrar"): st.session_state.viaje_ver = None; st.rerun()
+            st.markdown(f"""<div style="background-color: #f0f2f6; padding: 15px; border-left: 5px solid #f39c12; border-radius: 5px; margin-top: 20px;">
+                <h4 style="color: #5e2d61; margin: 0;">Detalles</h4><p><b>Cliente:</b> {v_det['Cliente']}</p>
+                <p><b>Ruta:</b> {v_det['Origen']} ➔ {v_det['Destino']}</p>
+                <p><b>Importe:</b> $ {v_det['Importe']}</p></div>""", unsafe_allow_html=True)
 
 elif sel == "CLIENTES":
-    st.markdown(f"""
-    <div style="display:flex;align-items:center;gap:14px;margin-bottom:28px;
-                padding-bottom:20px;border-bottom:3px solid #5e2d61;">
-        <div style="background:linear-gradient(135deg,#5e2d61,#8b3d8e);width:48px;height:48px;
-                    border-radius:14px;display:flex;align-items:center;justify-content:center;
-                    font-size:24px;box-shadow:0 6px 18px rgba(94,45,97,0.4);">👤</div>
-        <div>
-            <h1 style="margin:0;padding:0;border:none;font-size:26px;">Gestión de Clientes</h1>
-            <p style="margin:0;color:#8b6098;font-size:13px;font-weight:500;">Alta, modificación y consulta de clientes</p>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.header("👤 Gestión de Clientes")
     if st.session_state.get("msg_cliente"):
         st.success(st.session_state.msg_cliente)
         st.session_state.msg_cliente = None
@@ -2199,18 +1596,7 @@ elif sel == "CLIENTES":
     else: st.info("No hay clientes registrados.")
 
 elif sel == "CARGA VIAJE":
-    st.markdown(f"""
-    <div style="display:flex;align-items:center;gap:14px;margin-bottom:28px;
-                padding-bottom:20px;border-bottom:3px solid #5e2d61;">
-        <div style="background:linear-gradient(135deg,#5e2d61,#8b3d8e);width:48px;height:48px;
-                    border-radius:14px;display:flex;align-items:center;justify-content:center;
-                    font-size:24px;box-shadow:0 6px 18px rgba(94,45,97,0.4);">🚛</div>
-        <div>
-            <h1 style="margin:0;padding:0;border:none;font-size:26px;">Registro de Viaje</h1>
-            <p style="margin:0;color:#8b6098;font-size:13px;font-weight:500;">Cargar nuevos servicios de transporte</p>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.header("🚛 Registro de Viaje")
     if st.session_state.get("msg_viaje"):
         st.success(st.session_state.msg_viaje)
         st.session_state.msg_viaje = None
@@ -2234,18 +1620,7 @@ elif sel == "CARGA VIAJE":
                 st.warning("Seleccioná un cliente y completá el importe.")
 
 elif sel == "PRESUPUESTOS":
-    st.markdown(f"""
-    <div style="display:flex;align-items:center;gap:14px;margin-bottom:28px;
-                padding-bottom:20px;border-bottom:3px solid #5e2d61;">
-        <div style="background:linear-gradient(135deg,#5e2d61,#8b3d8e);width:48px;height:48px;
-                    border-radius:14px;display:flex;align-items:center;justify-content:center;
-                    font-size:24px;box-shadow:0 6px 18px rgba(94,45,97,0.4);">📝</div>
-        <div>
-            <h1 style="margin:0;padding:0;border:none;font-size:26px;">Gestión de Presupuestos</h1>
-            <p style="margin:0;color:#8b6098;font-size:13px;font-weight:500;">Cotizaciones y propuestas comerciales</p>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.header("📝 Gestión de Presupuestos")
     tab_crear, tab_historial = st.tabs(["🆕 Crear Presupuesto", "📂 Historial y Descargas"])
     with tab_crear:
         if st.session_state.get("msg_presupuesto"):
@@ -2288,18 +1663,7 @@ elif sel == "PRESUPUESTOS":
         else: st.info("No hay presupuestos registrados.")
 
 elif sel == "TESORERIA":
-    st.markdown(f"""
-    <div style="display:flex;align-items:center;gap:14px;margin-bottom:28px;
-                padding-bottom:20px;border-bottom:3px solid #5e2d61;">
-        <div style="background:linear-gradient(135deg,#5e2d61,#8b3d8e);width:48px;height:48px;
-                    border-radius:14px;display:flex;align-items:center;justify-content:center;
-                    font-size:24px;box-shadow:0 6px 18px rgba(94,45,97,0.4);">💰</div>
-        <div>
-            <h1 style="margin:0;padding:0;border:none;font-size:26px;">Tesorería</h1>
-            <p style="margin:0;color:#8b6098;font-size:13px;font-weight:500;">Control de ingresos y egresos</p>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.header("💰 Tesorería")
 
     # ── Panel de diagnóstico de conexión (visible siempre para detectar problemas) ──
     with st.expander("🔌 Estado de conexión a Google Sheets", expanded=False):
@@ -3372,18 +2736,7 @@ elif sel == "TESORERIA":
                                     st.warning("Seleccioná proveedor y cheque.")
 
 elif sel == "CTA CTE INDIVIDUAL":
-    st.markdown(f"""
-    <div style="display:flex;align-items:center;gap:14px;margin-bottom:28px;
-                padding-bottom:20px;border-bottom:3px solid #5e2d61;">
-        <div style="background:linear-gradient(135deg,#5e2d61,#8b3d8e);width:48px;height:48px;
-                    border-radius:14px;display:flex;align-items:center;justify-content:center;
-                    font-size:24px;box-shadow:0 6px 18px rgba(94,45,97,0.4);">📑</div>
-        <div>
-            <h1 style="margin:0;padding:0;border:none;font-size:26px;">Cuenta Corriente por Cliente</h1>
-            <p style="margin:0;color:#8b6098;font-size:13px;font-weight:500;">Estado de deuda y movimientos individuales</p>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.header("📑 Cuenta Corriente por Cliente")
     if not st.session_state.clientes.empty:
         cl = st.selectbox("Seleccionar Cliente", sorted(st.session_state.clientes['Razón Social'].unique()))
 
@@ -3538,18 +2891,7 @@ elif sel == "CTA CTE INDIVIDUAL":
         st.info("No hay clientes registrados.")
 
 elif sel == "CTA CTE GENERAL":
-    st.markdown(f"""
-    <div style="display:flex;align-items:center;gap:14px;margin-bottom:28px;
-                padding-bottom:20px;border-bottom:3px solid #5e2d61;">
-        <div style="background:linear-gradient(135deg,#5e2d61,#8b3d8e);width:48px;height:48px;
-                    border-radius:14px;display:flex;align-items:center;justify-content:center;
-                    font-size:24px;box-shadow:0 6px 18px rgba(94,45,97,0.4);">🌎</div>
-        <div>
-            <h1 style="margin:0;padding:0;border:none;font-size:26px;">Estado Global de Deudores</h1>
-            <p style="margin:0;color:#8b6098;font-size:13px;font-weight:500;">Resumen general de cuentas a cobrar</p>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.header("🌎 Estado Global de Deudores")
 
     # Unificar saldos: viajes + facturas/cobros de tesorería
     saldos_dict = {}
@@ -3605,18 +2947,7 @@ elif sel == "CTA CTE GENERAL":
         st.info("No hay movimientos registrados.")
 
 elif sel == "CARGA PROVEEDOR":
-    st.markdown(f"""
-    <div style="display:flex;align-items:center;gap:14px;margin-bottom:28px;
-                padding-bottom:20px;border-bottom:3px solid #5e2d61;">
-        <div style="background:linear-gradient(135deg,#5e2d61,#8b3d8e);width:48px;height:48px;
-                    border-radius:14px;display:flex;align-items:center;justify-content:center;
-                    font-size:24px;box-shadow:0 6px 18px rgba(94,45,97,0.4);">👤</div>
-        <div>
-            <h1 style="margin:0;padding:0;border:none;font-size:26px;">Gestión de Proveedores</h1>
-            <p style="margin:0;color:#8b6098;font-size:13px;font-weight:500;">Alta y administración de proveedores</p>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.header("👤 Gestión de Proveedores")
     if st.session_state.get("msg_proveedor"):
         st.success(st.session_state.msg_proveedor)
         st.session_state.msg_proveedor = None
@@ -3669,18 +3000,7 @@ elif sel == "CARGA PROVEEDOR":
             st.divider()
 
 elif sel == "CARGA GASTOS":
-    st.markdown(f"""
-    <div style="display:flex;align-items:center;gap:14px;margin-bottom:28px;
-                padding-bottom:20px;border-bottom:3px solid #5e2d61;">
-        <div style="background:linear-gradient(135deg,#5e2d61,#8b3d8e);width:48px;height:48px;
-                    border-radius:14px;display:flex;align-items:center;justify-content:center;
-                    font-size:24px;box-shadow:0 6px 18px rgba(94,45,97,0.4);">💸</div>
-        <div>
-            <h1 style="margin:0;padding:0;border:none;font-size:26px;">Carga de Gastos</h1>
-            <p style="margin:0;color:#8b6098;font-size:13px;font-weight:500;">Registro de compras y gastos operativos</p>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.header("💸 Carga de Gastos")
     if st.session_state.get("msg_gasto"):
         st.success(st.session_state.msg_gasto)
         st.session_state.msg_gasto = None
@@ -3732,18 +3052,7 @@ elif sel == "CARGA GASTOS":
             st.warning("Ingresá al menos un importe para registrar el comprobante.")
 
 elif sel == "COMPROBANTES":
-    st.markdown(f"""
-    <div style="display:flex;align-items:center;gap:14px;margin-bottom:28px;
-                padding-bottom:20px;border-bottom:3px solid #5e2d61;">
-        <div style="background:linear-gradient(135deg,#5e2d61,#8b3d8e);width:48px;height:48px;
-                    border-radius:14px;display:flex;align-items:center;justify-content:center;
-                    font-size:24px;box-shadow:0 6px 18px rgba(94,45,97,0.4);">📜</div>
-        <div>
-            <h1 style="margin:0;padding:0;border:none;font-size:26px;">Historial de Viajes</h1>
-            <p style="margin:0;color:#8b6098;font-size:13px;font-weight:500;">Comprobantes y registros anteriores</p>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.header("📜 Historial de Viajes")
 
     tab_ver_comp, tab_editar = st.tabs(["📋 VER Y ELIMINAR", "✏️ EDITAR VIAJE"])
 
@@ -3834,18 +3143,7 @@ elif sel == "COMPROBANTES":
                                     st.rerun()
                     st.divider()
 elif sel == "CTA CTE PROVEEDOR":
-    st.markdown(f"""
-    <div style="display:flex;align-items:center;gap:14px;margin-bottom:28px;
-                padding-bottom:20px;border-bottom:3px solid #5e2d61;">
-        <div style="background:linear-gradient(135deg,#5e2d61,#8b3d8e);width:48px;height:48px;
-                    border-radius:14px;display:flex;align-items:center;justify-content:center;
-                    font-size:24px;box-shadow:0 6px 18px rgba(94,45,97,0.4);">📊</div>
-        <div>
-            <h1 style="margin:0;padding:0;border:none;font-size:26px;">Cuenta Corriente por Proveedor</h1>
-            <p style="margin:0;color:#8b6098;font-size:13px;font-weight:500;">Saldos y movimientos por proveedor</p>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.header("📊 Cuenta Corriente por Proveedor")
     if not st.session_state.proveedores.empty:
         p_sel = st.selectbox("Seleccionar Proveedor", st.session_state.proveedores['Razón Social'].unique())
 
@@ -3928,18 +3226,7 @@ elif sel == "CTA CTE PROVEEDOR":
         st.info("No hay proveedores registrados.")
 
 elif sel == "CTA CTE GENERAL PROV":
-    st.markdown(f"""
-    <div style="display:flex;align-items:center;gap:14px;margin-bottom:28px;
-                padding-bottom:20px;border-bottom:3px solid #5e2d61;">
-        <div style="background:linear-gradient(135deg,#5e2d61,#8b3d8e);width:48px;height:48px;
-                    border-radius:14px;display:flex;align-items:center;justify-content:center;
-                    font-size:24px;box-shadow:0 6px 18px rgba(94,45,97,0.4);">🌎</div>
-        <div>
-            <h1 style="margin:0;padding:0;border:none;font-size:26px;">Estado General de Proveedores</h1>
-            <p style="margin:0;color:#8b6098;font-size:13px;font-weight:500;">Resumen global de cuentas a pagar</p>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.header("🌎 Estado General de Proveedores")
     if not st.session_state.compras.empty:
         res_p = st.session_state.compras.groupby('Proveedor')['Total'].sum().reset_index()
         res_p = res_p.merge(
@@ -3974,18 +3261,7 @@ elif sel == "CTA CTE GENERAL PROV":
         st.info("No hay comprobantes registrados.")
 
 elif sel == "HISTORICO COMPRAS":
-    st.markdown(f"""
-    <div style="display:flex;align-items:center;gap:14px;margin-bottom:28px;
-                padding-bottom:20px;border-bottom:3px solid #5e2d61;">
-        <div style="background:linear-gradient(135deg,#5e2d61,#8b3d8e);width:48px;height:48px;
-                    border-radius:14px;display:flex;align-items:center;justify-content:center;
-                    font-size:24px;box-shadow:0 6px 18px rgba(94,45,97,0.4);">📜</div>
-        <div>
-            <h1 style="margin:0;padding:0;border:none;font-size:26px;">Comprobantes Cargados</h1>
-            <p style="margin:0;color:#8b6098;font-size:13px;font-weight:500;">Historial de gastos registrados</p>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.header("📜 Comprobantes Cargados")
     if not st.session_state.compras.empty:
         for i in reversed(st.session_state.compras.index):
             row = st.session_state.compras.loc[i]
@@ -3998,18 +3274,7 @@ elif sel == "HISTORICO COMPRAS":
             st.divider()
 
 elif sel == "MAYOR DE CUENTAS":
-    st.markdown(f"""
-    <div style="display:flex;align-items:center;gap:14px;margin-bottom:28px;
-                padding-bottom:20px;border-bottom:3px solid #5e2d61;">
-        <div style="background:linear-gradient(135deg,#5e2d61,#8b3d8e);width:48px;height:48px;
-                    border-radius:14px;display:flex;align-items:center;justify-content:center;
-                    font-size:24px;box-shadow:0 6px 18px rgba(94,45,97,0.4);">📒</div>
-        <div>
-            <h1 style="margin:0;padding:0;border:none;font-size:26px;">Mayor de Cuentas</h1>
-            <p style="margin:0;color:#8b6098;font-size:13px;font-weight:500;">Análisis por cuenta de gastos</p>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.header("📒 Mayor de Cuentas")
     st.caption("Resumen contable por cuenta: Ingresos, IVA Ventas, Gastos, IVA Compras y retenciones.")
 
     # ── Filtros de período ──
@@ -4305,18 +3570,7 @@ elif sel == "MAYOR DE CUENTAS":
 # FACTURACIÓN
 # =============================================================
 elif sel == "FACTURACION":
-    st.markdown(f"""
-    <div style="display:flex;align-items:center;gap:14px;margin-bottom:28px;
-                padding-bottom:20px;border-bottom:3px solid #5e2d61;">
-        <div style="background:linear-gradient(135deg,#5e2d61,#8b3d8e);width:48px;height:48px;
-                    border-radius:14px;display:flex;align-items:center;justify-content:center;
-                    font-size:24px;box-shadow:0 6px 18px rgba(94,45,97,0.4);">🧾</div>
-        <div>
-            <h1 style="margin:0;padding:0;border:none;font-size:26px;">Facturación</h1>
-            <p style="margin:0;color:#8b6098;font-size:13px;font-weight:500;">Emisión y gestión de comprobantes fiscales</p>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.header("🧾 Facturación")
     if "facturas" not in st.session_state:
         st.session_state.facturas = pd.DataFrame(columns=COL_FACTURAS)
 
@@ -4693,18 +3947,7 @@ elif sel == "FACTURACION":
 # CHEQUES
 # =============================================================
 elif sel == "CHEQUES":
-    st.markdown(f"""
-    <div style="display:flex;align-items:center;gap:14px;margin-bottom:28px;
-                padding-bottom:20px;border-bottom:3px solid #5e2d61;">
-        <div style="background:linear-gradient(135deg,#5e2d61,#8b3d8e);width:48px;height:48px;
-                    border-radius:14px;display:flex;align-items:center;justify-content:center;
-                    font-size:24px;box-shadow:0 6px 18px rgba(94,45,97,0.4);">🏦</div>
-        <div>
-            <h1 style="margin:0;padding:0;border:none;font-size:26px;">Gestión de Cheques</h1>
-            <p style="margin:0;color:#8b6098;font-size:13px;font-weight:500;">Cheques emitidos y cartera de terceros</p>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.header("🏦 Gestión de Cheques")
 
     hoy = date.today()
 
