@@ -346,13 +346,13 @@ def generar_html_resumen(cliente, df, saldo):
     <head>
         <style>
             body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #333; padding: 20px; }}
-            .header-table {{ width: 100%; border-bottom: 4px solid #C8102E; margin-bottom: 20px; }}
-            .empresa-name {{ color: #C8102E; font-size: 26px; font-weight: bold; margin: 0; }}
+            .header-table {{ width: 100%; border-bottom: 4px solid #5e2d61; margin-bottom: 20px; }}
+            .empresa-name {{ color: #5e2d61; font-size: 26px; font-weight: bold; margin: 0; }}
             .sub-title {{ color: #666; font-size: 14px; margin-top: 5px; }}
             .tabla {{ width: 100%; border-collapse: collapse; margin-top: 20px; background-color: white; }}
-            .tabla th {{ background-color: #f8f9fa; color: #C8102E; border-bottom: 2px solid #C8102E; padding: 12px; text-align: left; font-size: 13px; }}
+            .tabla th {{ background-color: #f8f9fa; color: #5e2d61; border-bottom: 2px solid #5e2d61; padding: 12px; text-align: left; font-size: 13px; }}
             .tabla td {{ border-bottom: 1px solid #eee; padding: 10px; font-size: 12px; }}
-            .footer-resumen {{ margin-top: 30px; padding: 15px; background: #C8102E; color: white; border-radius: 8px; text-align: right; }}
+            .footer-resumen {{ margin-top: 30px; padding: 15px; background: #5e2d61; color: white; border-radius: 8px; text-align: right; }}
             .total-label {{ font-size: 14px; opacity: 0.9; }}
             .total-monto {{ font-size: 22px; font-weight: bold; display: block; }}
         </style>
@@ -403,15 +403,15 @@ def generar_html_cta_cte_general(tipo, df_resumen, fecha_emision):
     color_total = "#e74c3c" if total_general < 0 else "#2ecc71"
     return f"""<html><head><style>
         body {{ font-family: 'Segoe UI', Arial, sans-serif; color: #333; padding: 24px; font-size: 13px; }}
-        .logo-header {{ width:100%; border-bottom:4px solid #C8102E; margin-bottom:20px; padding-bottom:10px; }}
-        .empresa {{ color:#C8102E; font-size:22px; font-weight:bold; }}
+        .logo-header {{ width:100%; border-bottom:4px solid #5e2d61; margin-bottom:20px; padding-bottom:10px; }}
+        .empresa {{ color:#5e2d61; font-size:22px; font-weight:bold; }}
         .sub {{ color:#888; font-size:12px; }}
-        h2 {{ color:#C8102E; margin-top:0; }}
+        h2 {{ color:#5e2d61; margin-top:0; }}
         table {{ width:100%; border-collapse:collapse; margin-top:16px; }}
-        th {{ background:#C8102E; color:white; padding:10px; text-align:left; font-size:12px; }}
+        th {{ background:#5e2d61; color:white; padding:10px; text-align:left; font-size:12px; }}
         td {{ border-bottom:1px solid #eee; padding:9px 10px; }}
         tr:nth-child(even) td {{ background:#fafafa; }}
-        .total-box {{ margin-top:20px; background:#C8102E; color:white; border-radius:8px;
+        .total-box {{ margin-top:20px; background:#5e2d61; color:white; border-radius:8px;
                       padding:14px 20px; display:flex; justify-content:space-between; align-items:center; }}
         .total-num {{ font-size:22px; font-weight:bold; color:{color_total}; }}
         .fecha {{ color:#888; font-size:12px; text-align:right; }}
@@ -445,9 +445,9 @@ def generar_html_cta_cte_general(tipo, df_resumen, fecha_emision):
     <head>
         <style>
             body {{ font-family: Arial, sans-serif; padding: 20px; }}
-            .recibo-box {{ border: 3px double #C8102E; padding: 30px; position: relative; }}
+            .recibo-box {{ border: 3px double #5e2d61; padding: 30px; position: relative; }}
             .header-recibo {{ display: flex; justify-content: space-between; border-bottom: 1px solid #ccc; padding-bottom: 15px; }}
-            .monto-destacado {{ font-size: 28px; color: #C8102E; font-weight: bold; background: #f0f2f6; padding: 10px 20px; border-radius: 5px; }}
+            .monto-destacado {{ font-size: 28px; color: #5e2d61; font-weight: bold; background: #f0f2f6; padding: 10px 20px; border-radius: 5px; }}
             .cuerpo {{ margin-top: 30px; line-height: 2.0; font-size: 16px; }}
             .firma-box {{ margin-top: 60px; border-top: 1px solid #333; width: 200px; text-align: center; float: right; font-size: 12px; }}
             .afip-ref {{ color: #777; font-size: 12px; font-style: italic; }}
@@ -488,10 +488,10 @@ def generar_html_orden_pago(data):
     <head>
         <style>
             body {{ font-family: 'Segoe UI', Arial, sans-serif; padding: 20px; color: #333; }}
-            .op-container {{ border: 2px solid #1a1a1a; border-radius: 10px; padding: 30px; background-color: #fff; }}
-            .header-op {{ border-bottom: 2px solid #1a1a1a; padding-bottom: 15px; margin-bottom: 25px; }}
+            .op-container {{ border: 2px solid #d35400; border-radius: 10px; padding: 30px; background-color: #fff; }}
+            .header-op {{ border-bottom: 2px solid #d35400; padding-bottom: 15px; margin-bottom: 25px; }}
             .titulo-doc {{ font-size: 24px; font-weight: bold; text-align: center; margin: 20px 0; color: #444; }}
-            .monto-op {{ background: #fff4e6; border: 1px dashed #1a1a1a; padding: 15px; font-size: 22px; font-weight: bold; text-align: center; color: #1a1a1a; margin: 20px 0; }}
+            .monto-op {{ background: #fff4e6; border: 1px dashed #d35400; padding: 15px; font-size: 22px; font-weight: bold; text-align: center; color: #d35400; margin: 20px 0; }}
             .detalle-table {{ width: 100%; margin-top: 20px; line-height: 1.8; }}
         </style>
     </head>
@@ -500,7 +500,7 @@ def generar_html_orden_pago(data):
             <div class="header-op" style="display:flex;align-items:center;gap:14px;">
                 <img src="data:image/jpeg;base64,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" style="height:65px;vertical-align:middle;margin-right:12px;">
                 <div>
-                    <h2 style="margin:0; color: #1a1a1a;">CHACABUCO NOROESTE TOUR S.R.L.</h2>
+                    <h2 style="margin:0; color: #d35400;">CHACABUCO NOROESTE TOUR S.R.L.</h2>
                     <small>Desde 1996, viajando con vos | CHACAGEST Software System</small>
                 </div>
             </div>
@@ -525,10 +525,10 @@ def generar_html_recibo(data):
     <head>
         <style>
             body {{ font-family: 'Segoe UI', Arial, sans-serif; padding: 20px; color: #333; }}
-            .rec-container {{ border: 2px solid #C8102E; border-radius: 10px; padding: 30px; background-color: #fff; }}
-            .header-rec {{ border-bottom: 2px solid #C8102E; padding-bottom: 15px; margin-bottom: 25px; display:flex; align-items:center; gap:14px; }}
-            .titulo-doc {{ font-size: 24px; font-weight: bold; text-align: center; margin: 20px 0; color: #C8102E; letter-spacing: 2px; }}
-            .monto-rec {{ background: #f3eaf4; border: 1px dashed #C8102E; padding: 15px; font-size: 26px; font-weight: bold; text-align: center; color: #C8102E; margin: 20px 0; border-radius: 8px; }}
+            .rec-container {{ border: 2px solid #5e2d61; border-radius: 10px; padding: 30px; background-color: #fff; }}
+            .header-rec {{ border-bottom: 2px solid #5e2d61; padding-bottom: 15px; margin-bottom: 25px; display:flex; align-items:center; gap:14px; }}
+            .titulo-doc {{ font-size: 24px; font-weight: bold; text-align: center; margin: 20px 0; color: #5e2d61; letter-spacing: 2px; }}
+            .monto-rec {{ background: #f3eaf4; border: 1px dashed #5e2d61; padding: 15px; font-size: 26px; font-weight: bold; text-align: center; color: #5e2d61; margin: 20px 0; border-radius: 8px; }}
             .detalle-table {{ width: 100%; margin-top: 20px; line-height: 2.0; border-collapse: collapse; }}
             .detalle-table td {{ padding: 4px 8px; }}
             .detalle-table td:first-child {{ font-weight: bold; width: 180px; color: #555; }}
@@ -542,7 +542,7 @@ def generar_html_recibo(data):
             <div class="header-rec">
                 <img src="data:image/jpeg;base64,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" style="height:65px;vertical-align:middle;">
                 <div>
-                    <h2 style="margin:0; color:#C8102E;">CHACABUCO NOROESTE TOUR S.R.L.</h2>
+                    <h2 style="margin:0; color:#5e2d61;">CHACABUCO NOROESTE TOUR S.R.L.</h2>
                     <small>Desde 1996, viajando con vos | CHACAGEST Software System</small>
                 </div>
             </div>
@@ -573,12 +573,12 @@ def generar_html_presupuesto(p_data):
     <head>
         <style>
             body {{ font-family: 'Trebuchet MS', sans-serif; padding: 30px; }}
-            .main-border {{ border: 1px solid #ddd; border-top: 10px solid #333333; padding: 40px; box-shadow: 0 0 10px #eee; }}
+            .main-border {{ border: 1px solid #ddd; border-top: 10px solid #f39c12; padding: 40px; box-shadow: 0 0 10px #eee; }}
             .header-p {{ display: flex; justify-content: space-between; margin-bottom: 40px; border-bottom: 1px solid #eee; padding-bottom: 20px; }}
-            .label-presu {{ background: #333333; color: white; padding: 5px 15px; font-weight: bold; border-radius: 3px; }}
+            .label-presu {{ background: #f39c12; color: white; padding: 5px 15px; font-weight: bold; border-radius: 3px; }}
             .box-detalle {{ background: #fafafa; border: 1px solid #eee; padding: 20px; margin: 20px 0; min-height: 120px; }}
             .total-p {{ font-size: 24px; text-align: right; color: #333; border-top: 2px solid #333; padding-top: 10px; margin-top: 20px; }}
-            .leyenda-box {{ margin-top: 30px; padding: 15px; border: 1px solid #333333; border-radius: 5px; background-color: #fffaf0; font-size: 13px; color: #555; }}
+            .leyenda-box {{ margin-top: 30px; padding: 15px; border: 1px solid #f39c12; border-radius: 5px; background-color: #fffaf0; font-size: 13px; color: #555; }}
             .footer-p {{ margin-top: 40px; font-size: 11px; color: #888; text-align: center; border-top: 1px solid #eee; padding-top: 15px; }}
         </style>
     </head>
@@ -604,7 +604,7 @@ def generar_html_presupuesto(p_data):
                 {str(p_data['Detalle']).replace(chr(10), '<br>')}
             </div>
             <div class="total-p">
-                TOTAL: <span style="color: #1a1a1a;">$ {p_data['Importe']:,.2f}</span>
+                TOTAL: <span style="color: #d35400;">$ {p_data['Importe']:,.2f}</span>
             </div>
             <div class="leyenda-box">
                 • La seña para la reserva es del 30%.<br>
@@ -640,7 +640,7 @@ def generar_html_factura(data):
     logo_b64  = data.get("logo_b64", "")
     responsable = data.get("responsable", "")
 
-    color_tipo = {"FACTURA": "#C8102E", "NOTA DE CREDITO": "#27ae60", "NOTA DE DEBITO": "#c0392b"}.get(tipo, "#C8102E")
+    color_tipo = {"FACTURA": "#5e2d61", "NOTA DE CREDITO": "#27ae60", "NOTA DE DEBITO": "#c0392b"}.get(tipo, "#5e2d61")
     label_tipo = {"FACTURA": "FACTURA", "NOTA DE CREDITO": "NOTA DE CRÉDITO", "NOTA DE DEBITO": "NOTA DE DÉBITO"}.get(tipo, tipo)
 
     filas_items = ""
@@ -820,17 +820,17 @@ def generar_html_cierre_caja(data):
         * {{ box-sizing: border-box; }}
         body {{ font-family: 'Segoe UI', Arial, sans-serif; color: #333; padding: 30px; background: #fff; }}
         .header-cierre {{ display: flex; justify-content: space-between; align-items: flex-start;
-                          border-bottom: 4px solid #C8102E; padding-bottom: 20px; margin-bottom: 25px; }}
-        .empresa-nombre {{ font-size: 22px; font-weight: bold; color: #C8102E; margin: 0; }}
+                          border-bottom: 4px solid #5e2d61; padding-bottom: 20px; margin-bottom: 25px; }}
+        .empresa-nombre {{ font-size: 22px; font-weight: bold; color: #5e2d61; margin: 0; }}
         .empresa-sub {{ font-size: 12px; color: #888; margin-top: 4px; }}
-        .badge-cierre {{ background: #C8102E; color: white; padding: 8px 20px; border-radius: 6px;
+        .badge-cierre {{ background: #5e2d61; color: white; padding: 8px 20px; border-radius: 6px;
                          font-size: 16px; font-weight: bold; text-align: center; }}
         .info-grid {{ display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 25px; }}
-        .info-box {{ background: #f8f9fa; border-radius: 8px; padding: 14px; border-left: 4px solid #333333; }}
+        .info-box {{ background: #f8f9fa; border-radius: 8px; padding: 14px; border-left: 4px solid #f39c12; }}
         .info-label {{ font-size: 11px; color: #888; font-weight: bold; text-transform: uppercase; }}
         .info-value {{ font-size: 16px; font-weight: bold; color: #333; margin-top: 4px; }}
         table.mov {{ width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 25px; }}
-        table.mov th {{ background: #C8102E; color: white; padding: 9px 10px; text-align: left; }}
+        table.mov th {{ background: #5e2d61; color: white; padding: 9px 10px; text-align: left; }}
         table.mov td {{ padding: 7px 10px; border-bottom: 1px solid #eee; }}
         .subtotales-tabla {{ width: 100%; border-collapse: collapse; max-width: 380px; margin-left: auto; }}
         .subtotales-tabla td {{ border: 1px solid #ddd; }}
@@ -843,10 +843,10 @@ def generar_html_cierre_caja(data):
         .firma-box {{ border-top: 2px solid #333; padding-top: 10px; text-align: center; font-size: 12px; color: #555; }}
         .footer-cierre {{ margin-top: 40px; text-align: center; font-size: 10px; color: #bbb;
                            border-top: 1px solid #eee; padding-top: 12px; }}
-        .btn-imprimir {{ background: #C8102E; color: white; border: none; padding: 12px 28px;
+        .btn-imprimir {{ background: #5e2d61; color: white; border: none; padding: 12px 28px;
                           font-size: 15px; font-weight: bold; border-radius: 8px; cursor: pointer;
                           display: block; margin: 0 auto 24px auto; }}
-        .btn-imprimir:hover {{ background: #9B0A1E; }}
+        .btn-imprimir:hover {{ background: #4a2350; }}
     </style>
 </head>
 <body>
@@ -878,7 +878,7 @@ def generar_html_cierre_caja(data):
         </div>
     </div>
 
-    <h3 style="color:#C8102E;border-bottom:2px solid #333333;padding-bottom:6px;">📋 Movimientos del Período</h3>
+    <h3 style="color:#5e2d61;border-bottom:2px solid #f39c12;padding-bottom:6px;">📋 Movimientos del Período</h3>
     <table class="mov">
         <thead>
             <tr>
@@ -895,8 +895,8 @@ def generar_html_cierre_caja(data):
         {subtotales_html if subtotales_html else '<tr><td colspan="2" style="padding:8px 12px;color:#aaa;">Sin movimientos</td></tr>'}
     </table>
 
-    <div style="margin-top:20px;border-radius:10px;overflow:hidden;border:2px solid #C8102E;">
-        <div style="background:#C8102E;color:white;padding:10px 16px;font-weight:bold;font-size:13px;letter-spacing:1px;">
+    <div style="margin-top:20px;border-radius:10px;overflow:hidden;border:2px solid #5e2d61;">
+        <div style="background:#5e2d61;color:white;padding:10px 16px;font-weight:bold;font-size:13px;letter-spacing:1px;">
             💰 RESUMEN DE RENDICIÓN
         </div>
         <div style="display:flex;gap:0;">
@@ -909,17 +909,17 @@ def generar_html_cierre_caja(data):
                 <div style="font-size:26px;font-weight:bold;color:#d4a017;margin-top:6px;">USD {data.get('dolares_disponibles', 0):,.2f}</div>
             </div>
         </div>
-        <div style="background:#fdf2f8;border-top:2px solid #C8102E;padding:18px 20px;">
+        <div style="background:#fdf2f8;border-top:2px solid #5e2d61;padding:18px 20px;">
             <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;">
                 <div>
-                    <div style="font-size:11px;color:#C8102E;font-weight:bold;text-transform:uppercase;">📤 Monto Rendido ({data.get('tipo_rendicion','EFECTIVO')})</div>
+                    <div style="font-size:11px;color:#5e2d61;font-weight:bold;text-transform:uppercase;">📤 Monto Rendido ({data.get('tipo_rendicion','EFECTIVO')})</div>
                     <div style="font-size:30px;font-weight:bold;color:#c0392b;margin-top:6px;">
                         {'$' if data.get('tipo_rendicion','EFECTIVO') == 'EFECTIVO' else 'USD'} {data.get('monto_rendicion', 0):,.2f}
                     </div>
                 </div>
                 <div style="font-size:32px;color:#ccc;">→</div>
                 <div style="text-align:right;">
-                    <div style="font-size:11px;color:#C8102E;font-weight:bold;text-transform:uppercase;">
+                    <div style="font-size:11px;color:#5e2d61;font-weight:bold;text-transform:uppercase;">
                         {'✅ Queda en Caja' if data.get('saldo_restante', 0) >= 0 else '⚠️ Queda en Caja (excede disponible)'}
                     </div>
                     <div style="font-size:30px;font-weight:bold;margin-top:6px;color:{'#27ae60' if data.get('saldo_restante', 0) >= 0 else '#e74c3c'};">
@@ -930,7 +930,7 @@ def generar_html_cierre_caja(data):
         </div>
     </div>
 
-    {"<div style='background:#fff8e1;border:1px solid #333333;border-radius:8px;padding:14px;margin-top:20px;font-size:13px;'><b>📝 Observaciones:</b><br><br>" + data['observaciones'] + "</div>" if data.get('observaciones') else ""}
+    {"<div style='background:#fff8e1;border:1px solid #f39c12;border-radius:8px;padding:14px;margin-top:20px;font-size:13px;'><b>📝 Observaciones:</b><br><br>" + data['observaciones'] + "</div>" if data.get('observaciones') else ""}
 
     <div class="firmas">
         <div class="firma-box">
@@ -1072,15 +1072,15 @@ st.markdown("""
     <style>
     [data-testid="stSidebarNav"] { display: none; }
     header { visibility: hidden; }
-    h1, h2, h3 { color: #C8102E !important; }
+    h1, h2, h3 { color: #5e2d61 !important; }
     div.stButton > button {
-        background: linear-gradient(to right, #C8102E, #9B0A1E) !important;
+        background: linear-gradient(to right, #f39c12, #d35400) !important;
         color: white !important;
         border-radius: 8px !important;
         border: none !important;
         font-weight: bold !important;
     }
-    .stDataFrame { border: 1px solid #C8102E; border-radius: 5px; }
+    .stDataFrame { border: 1px solid #5e2d61; border-radius: 5px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -1093,7 +1093,7 @@ with st.sidebar:
     # ── Badge de usuario logueado ──
     rol_badge = "🔑 Admin" if es_admin else f"👤 {st.session_state.nombre_usuario}"
     caja_badge = "" if es_admin else f" | 🏦 {caja_propia}"
-    st.markdown(f"<div style='background:#C8102E;color:white;padding:8px 12px;border-radius:8px;font-size:13px;font-weight:bold;margin-bottom:8px;'>{rol_badge}{caja_badge}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='background:#5e2d61;color:white;padding:8px 12px;border-radius:8px;font-size:13px;font-weight:bold;margin-bottom:8px;'>{rol_badge}{caja_badge}</div>", unsafe_allow_html=True)
     st.markdown("---")
 
     # ── Menú principal: Admin ve todo, Operador no ve Dashboard ──
@@ -1113,13 +1113,13 @@ with st.sidebar:
         styles={
             "container": {"padding": "0px", "background-color": "#f0f2f6"},
             "nav-link": {"font-size": "15px", "font-weight": "bold"},
-            "nav-link-selected": {"background-color": "#C8102E"},
+            "nav-link-selected": {"background-color": "#5e2d61"},
         }
     )
 
     sel_sub = None
     if menu_principal == "VENTAS":
-        st.markdown("<div style='margin-left: 20px; border-left: 2px solid #333333; padding-left: 10px;'>", unsafe_allow_html=True)
+        st.markdown("<div style='margin-left: 20px; border-left: 2px solid #f39c12; padding-left: 10px;'>", unsafe_allow_html=True)
         opciones_ventas = ["CLIENTES", "CARGA VIAJE", "PRESUPUESTOS", "CTA CTE INDIVIDUAL", "CTA CTE GENERAL", "COMPROBANTES"]
         iconos_ventas   = ["people", "truck", "file-earmark-spreadsheet", "person-vcard", "globe", "file-text"]
         sel_sub = option_menu(
@@ -1131,13 +1131,13 @@ with st.sidebar:
             styles={
                 "container": {"background-color": "transparent", "padding": "0px"},
                 "nav-link": {"font-size": "13px", "text-align": "left", "margin": "2px"},
-                "nav-link-selected": {"background-color": "#333333", "color": "white"},
+                "nav-link-selected": {"background-color": "#f39c12", "color": "white"},
             }
         )
         st.markdown("</div>", unsafe_allow_html=True)
 
     elif menu_principal == "COMPRAS":
-        st.markdown("<div style='margin-left: 20px; border-left: 2px solid #333333; padding-left: 10px;'>", unsafe_allow_html=True)
+        st.markdown("<div style='margin-left: 20px; border-left: 2px solid #f39c12; padding-left: 10px;'>", unsafe_allow_html=True)
         opciones_compras = ["CARGA PROVEEDOR", "CARGA GASTOS", "CTA CTE PROVEEDOR", "CTA CTE GENERAL PROV", "HISTORICO COMPRAS", "MAYOR DE CUENTAS"]
         iconos_compras   = ["person-plus", "receipt", "person-lines-fill", "globe", "clock-history", "journal-text"]
         sel_sub = option_menu(
@@ -1149,7 +1149,7 @@ with st.sidebar:
             styles={
                 "container": {"background-color": "transparent", "padding": "0px"},
                 "nav-link": {"font-size": "13px", "text-align": "left", "margin": "2px"},
-                "nav-link-selected": {"background-color": "#333333", "color": "white"},
+                "nav-link-selected": {"background-color": "#f39c12", "color": "white"},
             }
         )
         st.markdown("</div>", unsafe_allow_html=True)
@@ -1357,8 +1357,8 @@ if sel == "DASHBOARD":
 
     st.markdown("---")
 
-    COLORES = ["#C8102E", "#333333", "#1a1a1a", "#2ecc71",
-               "#3498db", "#e74c3c", "#C8102E", "#1abc9c"]
+    COLORES = ["#5e2d61", "#f39c12", "#d35400", "#2ecc71",
+               "#3498db", "#e74c3c", "#9b59b6", "#1abc9c"]
 
     col_g1, col_g2 = st.columns(2)
 
@@ -1368,8 +1368,8 @@ if sel == "DASHBOARD":
             ing_mes = df_ing_f.groupby('Mes')['Importe'].sum().reindex(MESES_ORDEN, fill_value=0)
             gas_mes = df_gas_f.groupby('Mes')['Total'].sum().reindex(MESES_ORDEN, fill_value=0)
             fig1 = go.Figure()
-            fig1.add_trace(go.Bar(name="Ingresos", x=MESES_LABEL, y=ing_mes.values,  marker_color="#C8102E"))
-            fig1.add_trace(go.Bar(name="Gastos",   x=MESES_LABEL, y=gas_mes.values,  marker_color="#333333"))
+            fig1.add_trace(go.Bar(name="Ingresos", x=MESES_LABEL, y=ing_mes.values,  marker_color="#5e2d61"))
+            fig1.add_trace(go.Bar(name="Gastos",   x=MESES_LABEL, y=gas_mes.values,  marker_color="#f39c12"))
             fig1.update_layout(
                 title=f"Ingresos vs Gastos — {año_sel}",
                 barmode='group', plot_bgcolor='white',
@@ -1384,8 +1384,8 @@ if sel == "DASHBOARD":
             ing_dia   = df_ing_d.groupby('Dia')['Importe'].sum().reindex(todos_dias, fill_value=0)
             gas_dia   = df_gas_d.groupby('Dia')['Total'].sum().reindex(todos_dias, fill_value=0)
             fig1 = go.Figure()
-            fig1.add_trace(go.Bar(name="Ingresos", x=todos_dias, y=ing_dia.values, marker_color="#C8102E"))
-            fig1.add_trace(go.Bar(name="Gastos",   x=todos_dias, y=gas_dia.values, marker_color="#333333"))
+            fig1.add_trace(go.Bar(name="Ingresos", x=todos_dias, y=ing_dia.values, marker_color="#5e2d61"))
+            fig1.add_trace(go.Bar(name="Gastos",   x=todos_dias, y=gas_dia.values, marker_color="#f39c12"))
             fig1.update_layout(
                 title=f"Ingresos vs Gastos por Día — {MESES_NOMBRES[mes_sel]} {año_sel}",
                 barmode='group', plot_bgcolor='white',
@@ -1424,8 +1424,8 @@ if sel == "DASHBOARD":
                 mode='lines+markers+text',
                 text=[f"${v:,.0f}" for v in res_mes.values],
                 textposition="top center",
-                line=dict(color="#C8102E", width=3),
-                marker=dict(size=8, color="#333333"),
+                line=dict(color="#5e2d61", width=3),
+                marker=dict(size=8, color="#f39c12"),
                 fill='tozeroy', fillcolor='rgba(94,45,97,0.1)',
                 name="Resultado Neto"
             ))
@@ -1442,7 +1442,7 @@ if sel == "DASHBOARD":
                            .reset_index().sort_values('Importe').tail(5))
                 fig3 = go.Figure(go.Bar(
                     x=top_cli['Importe'], y=top_cli['Cliente'],
-                    orientation='h', marker_color="#C8102E",
+                    orientation='h', marker_color="#5e2d61",
                     text=[f"$ {v:,.0f}" for v in top_cli['Importe']],
                     textposition='outside'
                 ))
@@ -1466,7 +1466,7 @@ if sel == "DASHBOARD":
                 pivot.columns = [cal_module.month_abbr[m] for m in pivot.columns]
                 fig4 = px.imshow(
                     pivot,
-                    color_continuous_scale=[[0,"#fff4e6"],[0.5,"#333333"],[1,"#1a1a1a"]],
+                    color_continuous_scale=[[0,"#fff4e6"],[0.5,"#f39c12"],[1,"#d35400"]],
                     title="Mapa de Gastos por Categoría y Mes",
                     text_auto=True, aspect="auto"
                 )
@@ -1476,7 +1476,7 @@ if sel == "DASHBOARD":
                          .reset_index().sort_values('Total'))
                 fig4 = go.Figure(go.Bar(
                     x=gas_c['Total'], y=gas_c['Cuenta de Gastos'],
-                    orientation='h', marker_color="#333333",
+                    orientation='h', marker_color="#f39c12",
                     text=[f"$ {v:,.0f}" for v in gas_c['Total']],
                     textposition='outside'
                 ))
@@ -1518,10 +1518,10 @@ elif sel == "CALENDARIO":
         if str(row['Fecha Viaje']) != "-" and row['Origen'] != "AJUSTE":
             eventos.append({
                 "id": str(i), "title": f"🚛 {row['Cliente']}", "start": str(row['Fecha Viaje']),
-                "allDay": True, "backgroundColor": "#333333", "borderColor": "#1a1a1a"
+                "allDay": True, "backgroundColor": "#f39c12", "borderColor": "#d35400"
             })
     cal_options  = {"headerToolbar": {"left": "prev,next today", "center": "title", "right": "dayGridMonth"}, "locale": "es", "height": 600}
-    custom_css   = ".fc-button-primary { background-color: #C8102E !important; border-color: #C8102E !important; } .fc-event { background-color: #333333 !important; } .fc-toolbar-title { color: #C8102E !important; }"
+    custom_css   = ".fc-button-primary { background-color: #5e2d61 !important; border-color: #5e2d61 !important; } .fc-event { background-color: #f39c12 !important; } .fc-toolbar-title { color: #5e2d61 !important; }"
     res_cal      = calendar(events=eventos, options=cal_options, custom_css=custom_css, key="cal_final")
     if res_cal.get("eventClick"):
         st.session_state.viaje_ver = int(res_cal["eventClick"]["event"]["id"])
@@ -1530,8 +1530,8 @@ elif sel == "CALENDARIO":
         if idx in st.session_state.viajes.index:
             v_det = st.session_state.viajes.loc[idx]
             if st.button("❌ Cerrar"): st.session_state.viaje_ver = None; st.rerun()
-            st.markdown(f"""<div style="background-color: #f0f2f6; padding: 15px; border-left: 5px solid #333333; border-radius: 5px; margin-top: 20px;">
-                <h4 style="color: #C8102E; margin: 0;">Detalles</h4><p><b>Cliente:</b> {v_det['Cliente']}</p>
+            st.markdown(f"""<div style="background-color: #f0f2f6; padding: 15px; border-left: 5px solid #f39c12; border-radius: 5px; margin-top: 20px;">
+                <h4 style="color: #5e2d61; margin: 0;">Detalles</h4><p><b>Cliente:</b> {v_det['Cliente']}</p>
                 <p><b>Ruta:</b> {v_det['Origen']} ➔ {v_det['Destino']}</p>
                 <p><b>Importe:</b> $ {v_det['Importe']}</p></div>""", unsafe_allow_html=True)
 
@@ -2743,7 +2743,7 @@ elif sel == "CTA CTE INDIVIDUAL":
         # ── SALDO INICIAL (MIGRACIÓN) ──
         with st.expander("⚙️ Cargar Saldo Inicial (migración desde otro sistema)", expanded=False):
             st.markdown(
-                "<div style='background:#fff8e1;border-left:4px solid #333333;border-radius:6px;"
+                "<div style='background:#fff8e1;border-left:4px solid #f39c12;border-radius:6px;"
                 "padding:10px 16px;font-size:13px;margin-bottom:12px;'>"
                 "⚠️ <b>Usá esta opción solo para cargar el saldo que traía el cliente de un sistema anterior.</b><br>"
                 "Se registrará como <i>SALDO INICIAL</i> con la fecha que indiques. No afecta facturas ni viajes."
@@ -3150,7 +3150,7 @@ elif sel == "CTA CTE PROVEEDOR":
         # ── SALDO INICIAL (MIGRACIÓN) ──
         with st.expander("⚙️ Cargar Saldo Inicial (migración desde otro sistema)", expanded=False):
             st.markdown(
-                "<div style='background:#fff8e1;border-left:4px solid #333333;border-radius:6px;"
+                "<div style='background:#fff8e1;border-left:4px solid #f39c12;border-radius:6px;"
                 "padding:10px 16px;font-size:13px;margin-bottom:12px;'>"
                 "⚠️ <b>Usá esta opción solo para cargar el saldo que le debías al proveedor en el sistema anterior.</b><br>"
                 "Se registrará como <i>SALDO INICIAL</i> con la fecha que indiques. No genera comprobante fiscal."
@@ -3394,7 +3394,7 @@ elif sel == "MAYOR DE CUENTAS":
                 use_container_width=True
             )
             st.markdown(
-                f"<div style='background:#C8102E;color:white;border-radius:8px;padding:12px 20px;"
+                f"<div style='background:#5e2d61;color:white;border-radius:8px;padding:12px 20px;"
                 f"display:flex;justify-content:space-between;align-items:center;margin-top:8px;'>"
                 f"<span style='font-size:14px;font-weight:bold;'>TOTAL INGRESOS DEL PERÍODO</span>"
                 f"<span style='font-size:22px;font-weight:bold;'>$ {total_ingresos:,.2f}</span>"
@@ -3405,7 +3405,7 @@ elif sel == "MAYOR DE CUENTAS":
         st.markdown("#### Gastos por Cuenta Contable")
         if not gastos_por_cuenta.empty:
             fig_gc = px.bar(gastos_por_cuenta, x='Cuenta de Gastos', y='Total',
-                           color_discrete_sequence=['#C8102E'],
+                           color_discrete_sequence=['#5e2d61'],
                            labels={'Total': 'Total $', 'Cuenta de Gastos': 'Cuenta'})
             fig_gc.update_layout(showlegend=False, plot_bgcolor='white', height=320)
             st.plotly_chart(fig_gc, use_container_width=True)
@@ -3521,14 +3521,14 @@ elif sel == "MAYOR DE CUENTAS":
 
     html_mayor = f"""<html><head><style>
         body{{font-family:'Segoe UI',Arial,sans-serif;color:#333;padding:24px;font-size:13px;}}
-        .tit{{color:#C8102E;font-size:20px;font-weight:bold;}}
-        h3{{color:#C8102E;border-bottom:2px solid #C8102E;padding-bottom:4px;}}
+        .tit{{color:#5e2d61;font-size:20px;font-weight:bold;}}
+        h3{{color:#5e2d61;border-bottom:2px solid #5e2d61;padding-bottom:4px;}}
         table{{width:100%;border-collapse:collapse;margin-bottom:20px;}}
-        th{{background:#C8102E;color:white;padding:9px;text-align:left;font-size:12px;}}
+        th{{background:#5e2d61;color:white;padding:9px;text-align:left;font-size:12px;}}
         td{{border-bottom:1px solid #eee;padding:8px 10px;}}
         .box{{background:#f0f2f6;border-radius:8px;padding:12px 20px;margin:10px 0;
-              border-left:4px solid #C8102E;display:flex;justify-content:space-between;}}
-        .num{{font-size:18px;font-weight:bold;color:#C8102E;}}
+              border-left:4px solid #5e2d61;display:flex;justify-content:space-between;}}
+        .num{{font-size:18px;font-weight:bold;color:#5e2d61;}}
     </style></head><body>
     <div class="tit">CHACABUCO NOROESTE TOUR S.R.L. — Mayor de Cuentas</div>
     <p style="color:#888;">Período: <b>{mc_desde}</b> al <b>{mc_hasta}</b> | Emitido: {date.today()}</p>
@@ -3959,7 +3959,7 @@ elif sel == "CHEQUES":
             "RECHAZADO":    ("#f8d7da", "#842029", "❌"),
             "EN CARTERA":   ("#cff4fc", "#055160", "📂"),
             "DEPOSITADO":   ("#d1e7dd", "#0f5132", "🏦"),
-            "APLICADO PAGO":("#fde8ec", "#9B0A1E", "💸"),
+            "APLICADO PAGO":("#e2d9f3", "#4a235a", "💸"),
             "VENCIDO":      ("#f8d7da", "#842029", "⚠️"),
         }
         bg, fg, ico = colores.get(estado, ("#f0f2f6","#333","•"))
@@ -4088,16 +4088,16 @@ elif sel == "CHEQUES":
                 alerta_color = ""
                 if est_e == "vencido":    alerta_color = "border-left:4px solid #e74c3c;"
                 elif est_e == "listo":    alerta_color = "border-left:4px solid #27ae60;"
-                elif est_e == "pendiente" and d_venc is not None and d_venc <= 7: alerta_color = "border-left:4px solid #333333;"
+                elif est_e == "pendiente" and d_venc is not None and d_venc <= 7: alerta_color = "border-left:4px solid #f39c12;"
                 elif est_e == "pendiente": alerta_color = "border-left:4px solid #2ecc71;"
 
                 if est_e == "vencido":
                     badge_venc = "&nbsp;·&nbsp; <b style=color:#e74c3c>⛔ VENCIDO (pasaron 30 días)</b>"
                 elif est_e == "listo":
                     dias_rest = 30 + d_venc
-                    badge_venc = f"&nbsp;·&nbsp; <b style=color:#333333>⚠️ PENDIENTE DE COBRO — {dias_rest}d restantes</b>"
+                    badge_venc = f"&nbsp;·&nbsp; <b style=color:#f39c12>⚠️ PENDIENTE DE COBRO — {dias_rest}d restantes</b>"
                 elif est_e == "pendiente" and d_venc is not None and d_venc <= 7:
-                    badge_venc = f"&nbsp;·&nbsp; <b style=color:#333333>Vence en {d_venc}d</b>"
+                    badge_venc = f"&nbsp;·&nbsp; <b style=color:#f39c12>Vence en {d_venc}d</b>"
                 else:
                     badge_venc = ""
 
@@ -4110,7 +4110,7 @@ elif sel == "CHEQUES":
                         f"Emisión: {row['Fecha Emisión']} &nbsp;·&nbsp; Vencimiento: <b>{row['Fecha Vencimiento']}</b>"
                         f"{badge_venc}"
                         f"&nbsp;&nbsp; {badge_estado(row['Estado'])}<br>"
-                        f"<b style='font-size:17px;color:#C8102E;'>$ {float(row['Importe']):,.2f}</b>"
+                        f"<b style='font-size:17px;color:#5e2d61;'>$ {float(row['Importe']):,.2f}</b>"
                         f"{'&nbsp;&nbsp;<small>' + str(row['Observaciones']) + '</small>' if str(row['Observaciones']) not in ['-',''] else ''}"
                         f"</div>", unsafe_allow_html=True
                     )
@@ -4228,7 +4228,7 @@ elif sel == "CHEQUES":
                 alerta_c = ""
                 if estado_c == "vencido":   alerta_c = "border-left:4px solid #e74c3c;"
                 elif estado_c == "listo":   alerta_c = "border-left:4px solid #2ecc71;"
-                elif estado_c == "pendiente" and d_venc_c is not None and d_venc_c <= 7: alerta_c = "border-left:4px solid #333333;"
+                elif estado_c == "pendiente" and d_venc_c is not None and d_venc_c <= 7: alerta_c = "border-left:4px solid #f39c12;"
                 else:                       alerta_c = "border-left:4px solid #aaa;"
 
                 with st.container():
@@ -4238,9 +4238,9 @@ elif sel == "CHEQUES":
                         f"<b>#{row['Nro Cheque']}</b> — {row['Tipo']} — {row['Banco Librador']} &nbsp;|&nbsp; "
                         f"Librador: <b>{row['Librador']}</b><br>"
                         f"Recibido: {row['Fecha Recepción']} &nbsp;·&nbsp; Vencimiento: <b>{row['Fecha Vencimiento']}</b>"
-                        f"{'&nbsp;·&nbsp; <b style=color:#e74c3c>⛔ VENCIDO</b>' if estado_c == 'vencido' else ('&nbsp;·&nbsp; <b style=color:#27ae60>✅ LISTO PARA COBRAR</b>' if estado_c == 'listo' else (f'&nbsp;·&nbsp; <b style=color:#333333>⚠️ Cobra en {d_venc_c}d</b>' if estado_c == 'pendiente' and d_venc_c is not None and d_venc_c <= 7 else ''))}"
+                        f"{'&nbsp;·&nbsp; <b style=color:#e74c3c>⛔ VENCIDO</b>' if estado_c == 'vencido' else ('&nbsp;·&nbsp; <b style=color:#27ae60>✅ LISTO PARA COBRAR</b>' if estado_c == 'listo' else (f'&nbsp;·&nbsp; <b style=color:#f39c12>⚠️ Cobra en {d_venc_c}d</b>' if estado_c == 'pendiente' and d_venc_c is not None and d_venc_c <= 7 else ''))}"
                         f"&nbsp;&nbsp; {badge_estado(row['Estado'])}<br>"
-                        f"<b style='font-size:17px;color:#C8102E;'>$ {float(row['Importe']):,.2f}</b>"
+                        f"<b style='font-size:17px;color:#5e2d61;'>$ {float(row['Importe']):,.2f}</b>"
                         f"{'&nbsp;&nbsp; → ' + str(row['Destino']) if str(row['Destino']) not in ['-',''] else ''}"
                         f"</div>", unsafe_allow_html=True
                     )
@@ -4387,9 +4387,9 @@ elif sel == "CHEQUES":
                         dias_rest = 30 + d_val
                         color_d = "#27ae60"; label_d = f"✅ LISTO PARA COBRAR — {dias_rest}d restantes"
                     elif d_val == 0:
-                        color_d = "#333333"; label_d = "⚠️ Fecha de cobro: HOY"
+                        color_d = "#f39c12"; label_d = "⚠️ Fecha de cobro: HOY"
                     elif d_val <= 3:
-                        color_d = "#333333"; label_d = f"⚠️ Cobra en {d_val}d — tener fondos"
+                        color_d = "#f39c12"; label_d = f"⚠️ Cobra en {d_val}d — tener fondos"
                     else:
                         color_d = "#3498db"; label_d = f"Cobra en {d_val}d"
                 else:
@@ -4401,7 +4401,7 @@ elif sel == "CHEQUES":
                     elif d_val <= 3:
                         color_d = "#e74c3c"; label_d = f"Vence en {d_val}d"
                     elif d_val <= 7:
-                        color_d = "#333333"; label_d = f"Vence en {d_val}d"
+                        color_d = "#f39c12"; label_d = f"Vence en {d_val}d"
                     else:
                         color_d = "#2ecc71"; label_d = f"Vence en {d_val}d"
 
@@ -4411,7 +4411,7 @@ elif sel == "CHEQUES":
                     f"<div>{r['Tipo']} &nbsp; <b>#{r['Nro Cheque']}</b> &nbsp;·&nbsp; {r['Modalidad']} &nbsp;·&nbsp; {r['Banco']}<br>"
                     f"Contraparte: <b>{r['Contraparte']}</b> &nbsp;·&nbsp; Vence: <b>{r['Vencimiento']}</b></div>"
                     f"<div style='text-align:right;'>"
-                    f"<div style='font-size:18px;font-weight:bold;color:#C8102E;'>$ {r['Importe']:,.2f}</div>"
+                    f"<div style='font-size:18px;font-weight:bold;color:#5e2d61;'>$ {r['Importe']:,.2f}</div>"
                     f"<div style='font-size:13px;font-weight:bold;color:{color_d};'>{label_d}</div>"
                     f"</div></div>",
                     unsafe_allow_html=True
@@ -4465,7 +4465,7 @@ elif sel == "CHEQUES":
                         elif est_r == "vencido":
                             color_b = "#e74c3c"; badge_txt = "⛔ VENCIDO"
                         elif est_r == "listo":
-                            color_b = "#333333"; badge_txt = f"⚠️ LISTO PARA COBRAR"
+                            color_b = "#f39c12"; badge_txt = f"⚠️ LISTO PARA COBRAR"
                         else:
                             color_b = "#3498db"; badge_txt = f"🕐 PENDIENTE"
 
@@ -4474,7 +4474,7 @@ elif sel == "CHEQUES":
                             f"border-left:6px solid {color_b};margin-bottom:12px;'>"
                             f"<div style='display:flex;justify-content:space-between;align-items:flex-start;'>"
                             f"<div>"
-                            f"<span style='font-size:18px;font-weight:bold;color:#C8102E;'>Cheque #{r['Nro Cheque']}</span>"
+                            f"<span style='font-size:18px;font-weight:bold;color:#5e2d61;'>Cheque #{r['Nro Cheque']}</span>"
                             f"&nbsp;&nbsp;<span style='background:{color_b};color:white;padding:3px 10px;"
                             f"border-radius:12px;font-size:12px;font-weight:bold;'>{badge_txt}</span><br><br>"
                             f"<table style='font-size:13px;border-collapse:collapse;'>"
@@ -4492,7 +4492,7 @@ elif sel == "CHEQUES":
                             f"{'<tr><td style=color:#888;padding:3px 16px 3px 0;>📝 Observaciones</td><td>' + str(r.get('Observaciones','-')) + '</td></tr>' if str(r.get('Observaciones','-')) not in ['-','','nan'] else ''}"
                             f"</table></div>"
                             f"<div style='text-align:right;'>"
-                            f"<div style='font-size:28px;font-weight:bold;color:#C8102E;'>$ {float(r['Importe']):,.2f}</div>"
+                            f"<div style='font-size:28px;font-weight:bold;color:#5e2d61;'>$ {float(r['Importe']):,.2f}</div>"
                             f"<div style='font-size:11px;color:#888;margin-top:4px;'>IMPORTE</div>"
                             f"</div></div></div>",
                             unsafe_allow_html=True
@@ -4506,7 +4506,7 @@ elif sel == "CHEQUES":
                         if r['Estado'] == 'DEPOSITADO':
                             color_b = "#2ecc71"; badge_txt = "✅ DEPOSITADO"
                         elif r['Estado'] == 'APLICADO PAGO':
-                            color_b = "#C8102E"; badge_txt = "💸 APLICADO A PAGO"
+                            color_b = "#9b59b6"; badge_txt = "💸 APLICADO A PAGO"
                         elif est_r == "vencido":
                             color_b = "#e74c3c"; badge_txt = "⛔ VENCIDO"
                         elif est_r == "listo":
@@ -4526,7 +4526,7 @@ elif sel == "CHEQUES":
                             f"border-left:6px solid {color_b};margin-bottom:12px;'>"
                             f"<div style='display:flex;justify-content:space-between;align-items:flex-start;'>"
                             f"<div>"
-                            f"<span style='font-size:18px;font-weight:bold;color:#C8102E;'>Cheque #{r['Nro Cheque']}</span>"
+                            f"<span style='font-size:18px;font-weight:bold;color:#5e2d61;'>Cheque #{r['Nro Cheque']}</span>"
                             f"&nbsp;&nbsp;<span style='background:{color_b};color:white;padding:3px 10px;"
                             f"border-radius:12px;font-size:12px;font-weight:bold;'>{badge_txt}</span><br><br>"
                             f"<table style='font-size:13px;border-collapse:collapse;'>"
@@ -4545,7 +4545,7 @@ elif sel == "CHEQUES":
                             f"{destino_txt}{fecha_aplic_txt}"
                             f"</table></div>"
                             f"<div style='text-align:right;'>"
-                            f"<div style='font-size:28px;font-weight:bold;color:#C8102E;'>$ {float(r['Importe']):,.2f}</div>"
+                            f"<div style='font-size:28px;font-weight:bold;color:#5e2d61;'>$ {float(r['Importe']):,.2f}</div>"
                             f"<div style='font-size:11px;color:#888;margin-top:4px;'>IMPORTE</div>"
                             f"</div></div></div>",
                             unsafe_allow_html=True
@@ -4590,8 +4590,8 @@ elif sel == "CHEQUES":
             wb.remove(wb.active)  # quitar hoja vacía por defecto
 
             # Estilos
-            color_header  = "C8102E"   # violeta empresa
-            color_total   = "333333"   # naranja total
+            color_header  = "4B1A6B"   # violeta empresa
+            color_total   = "F39C12"   # naranja total
             color_emitido = "EAF4FB"   # celeste suave
             color_cartera = "F0FFF4"   # verde suave
             color_vencido = "FDEDEC"   # rojo suave
@@ -4793,7 +4793,7 @@ elif sel == "CHEQUES":
                 ws_r[f"A{idx}"] = label
                 ws_r[f"B{idx}"] = formula
                 ws_r[f"A{idx}"].font = Font(bold=True, name="Arial", size=10)
-                ws_r[f"B{idx}"].font = Font(bold=True, name="Arial", size=11, color="C8102E")
+                ws_r[f"B{idx}"].font = Font(bold=True, name="Arial", size=11, color="4B1A6B")
                 ws_r[f"B{idx}"].number_format = '$#,##0.00' if '$' in label else '#,##0'
                 ws_r[f"A{idx}"].border = border_all
                 ws_r[f"B{idx}"].border = border_all
