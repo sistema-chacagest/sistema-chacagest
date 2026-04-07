@@ -66,65 +66,70 @@ def conectar_google():
         st.error(f"Error de conexión: {e}")
         return None
 
-def cargar_datos():
+def _leer_hoja(sh, nombre, columnas, cols_numericas=None, pausa=2):
+    """Lee una hoja de Google Sheets con pausa para evitar error 429 de cuota."""
+    import time
+    time.sleep(pausa)  # pausa entre lecturas para no exceder 60 reads/min
+    try:
+        ws = sh.worksheet(nombre)
+        datos = ws.get_all_records()
+        df = pd.DataFrame(datos) if datos else pd.DataFrame(columns=columnas)
+        if cols_numericas:
+            for c in cols_numericas:
+                if c in df.columns:
+                    df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
+        # Asegurar que todas las columnas esperadas existan
+        for col_esperada in columnas:
+            if col_esperada not in df.columns:
+                df[col_esperada] = '-'
+        return df
+    except gspread.exceptions.WorksheetNotFound:
+        return pd.DataFrame(columns=columnas)
+    except Exception:
+        return pd.DataFrame(columns=columnas)
+
+
+def cargar_datos(forzar=False):
+    """Carga datos desde Google Sheets. Usa caché en session_state para evitar
+    exceder la cuota de lecturas (60 reads/min). Pasa forzar=True para recargar."""
+    import time as _time
+
+    CACHE_KEY = "_datos_cache"
+    CACHE_TS  = "_datos_cache_ts"
+    CACHE_TTL = 120  # segundos – no releer antes de 2 min
+
+    # Devolver caché si es reciente y no se fuerza recarga
+    if not forzar and CACHE_KEY in st.session_state and CACHE_TS in st.session_state:
+        edad = _time.time() - st.session_state[CACHE_TS]
+        if edad < CACHE_TTL:
+            return st.session_state[CACHE_KEY]
+
     try:
         sh = conectar_google()
-        if sh is None: return None, None, None, None, None, None
+        if sh is None:
+            return None, None, None, None, None, None, None, None, None
 
-        ws_c   = sh.worksheet("clientes")
-        datos_c = ws_c.get_all_records()
-        df_c   = pd.DataFrame(datos_c) if datos_c else pd.DataFrame(columns=COL_CLIENTES)
+        # Leer cada hoja con pausa de 2 s entre llamadas para respetar cuota
+        df_c   = _leer_hoja(sh, "clientes",    COL_CLIENTES, pausa=0)  # primera sin pausa
+        df_v   = _leer_hoja(sh, "viajes",      COL_VIAJES,   cols_numericas=["Importe"], pausa=2)
+        df_p   = _leer_hoja(sh, "presupuestos",COL_PRESUPUESTOS, cols_numericas=["Importe"], pausa=2)
+        df_t   = _leer_hoja(sh, "tesoreria",   COL_TESORERIA,    cols_numericas=["Monto"], pausa=2)
+        # Reordenar columnas de tesorería
+        cols_extra = [c for c in df_t.columns if c not in COL_TESORERIA]
+        df_t = df_t[COL_TESORERIA + cols_extra]
 
-        ws_v   = sh.worksheet("viajes")
-        datos_v = ws_v.get_all_records()
-        df_v   = pd.DataFrame(datos_v) if datos_v else pd.DataFrame(columns=COL_VIAJES)
-        df_v['Importe'] = pd.to_numeric(df_v['Importe'], errors='coerce').fillna(0)
+        df_prov = _leer_hoja(sh, "proveedores", COL_PROVEEDORES, pausa=2)
+        for col in ["CBU", "Alias"]:
+            if col not in df_prov.columns:
+                df_prov[col] = "-"
 
+        df_com  = _leer_hoja(sh, "compras", COL_COMPRAS,
+                             cols_numericas=["Neto 21", "Neto 10.5", "Ret IVA", "Ret Ganancia", "Ret IIBB", "No Gravados", "Total"],
+                             pausa=2)
+
+        # Gastos externos
         try:
-            ws_p   = sh.worksheet("presupuestos")
-            datos_p = ws_p.get_all_records()
-            df_p   = pd.DataFrame(datos_p) if datos_p else pd.DataFrame(columns=COL_PRESUPUESTOS)
-            df_p['Importe'] = pd.to_numeric(df_p['Importe'], errors='coerce').fillna(0)
-        except:
-            df_p = pd.DataFrame(columns=COL_PRESUPUESTOS)
-
-        try:
-            ws_t   = sh.worksheet("tesoreria")
-            datos_t = ws_t.get_all_records()
-            df_t   = pd.DataFrame(datos_t) if datos_t else pd.DataFrame(columns=COL_TESORERIA)
-            df_t['Monto'] = pd.to_numeric(df_t['Monto'], errors='coerce').fillna(0)
-            # Compatibilidad: asegurar que todas las columnas esperadas existan
-            for col_esperada in COL_TESORERIA:
-                if col_esperada not in df_t.columns:
-                    df_t[col_esperada] = '-'
-            # Reordenar columnas en el orden canónico (preservando extras)
-            cols_extra = [c for c in df_t.columns if c not in COL_TESORERIA]
-            df_t = df_t[COL_TESORERIA + cols_extra]
-        except:
-            df_t = pd.DataFrame(columns=COL_TESORERIA)
-
-        try:
-            ws_prov   = sh.worksheet("proveedores")
-            datos_prov = ws_prov.get_all_records()
-            df_prov   = pd.DataFrame(datos_prov) if datos_prov else pd.DataFrame(columns=COL_PROVEEDORES)
-            for col in ["CBU", "Alias"]:
-                if col not in df_prov.columns:
-                    df_prov[col] = "-"
-        except:
-            df_prov = pd.DataFrame(columns=COL_PROVEEDORES)
-
-        try:
-            ws_com   = sh.worksheet("compras")
-            datos_com = ws_com.get_all_records()
-            df_com   = pd.DataFrame(datos_com) if datos_com else pd.DataFrame(columns=COL_COMPRAS)
-            for c in ["Neto 21", "Neto 10.5", "Ret IVA", "Ret Ganancia", "Ret IIBB", "No Gravados", "Total"]:
-                df_com[c] = pd.to_numeric(df_com[c], errors='coerce').fillna(0)
-        except:
-            df_com = pd.DataFrame(columns=COL_COMPRAS)
-
-        # ── Gastos externos (hoja "compras_externas" en Google Sheets) ──
-        # Esa hoja debe tener las mismas columnas que "compras" + una columna "Cuenta de Gastos"
-        try:
+            _time.sleep(2)
             ws_com_ext  = sh.worksheet("compras_externas")
             datos_com_ext = ws_com_ext.get_all_records()
             if datos_com_ext:
@@ -134,42 +139,26 @@ def cargar_datos():
                         df_com_ext[c] = pd.to_numeric(df_com_ext[c], errors='coerce').fillna(0)
                     else:
                         df_com_ext[c] = 0
-                # Si la hoja externa NO tiene columna "Cuenta de Gastos", la marcamos
                 if 'Cuenta de Gastos' not in df_com_ext.columns:
                     df_com_ext['Cuenta de Gastos'] = 'EXTERNO SIN CATEGORÍA'
-                # Marcar origen para distinguirlos si hace falta
                 df_com_ext['_origen'] = 'EXTERNO'
                 df_com['_origen'] = 'CHACAGEST'
                 df_com = pd.concat([df_com, df_com_ext], ignore_index=True)
-        except:
-            pass  # Si la hoja no existe simplemente se ignora
+        except Exception:
+            pass
 
-        try:
-            ws_ce    = sh.worksheet("cheques_emitidos")
-            datos_ce = ws_ce.get_all_records()
-            df_ce    = pd.DataFrame(datos_ce) if datos_ce else pd.DataFrame(columns=COL_CHEQ_EMITIDOS)
-            df_ce['Importe'] = pd.to_numeric(df_ce['Importe'], errors='coerce').fillna(0)
-        except:
-            df_ce = pd.DataFrame(columns=COL_CHEQ_EMITIDOS)
+        df_ce  = _leer_hoja(sh, "cheques_emitidos", COL_CHEQ_EMITIDOS, cols_numericas=["Importe"], pausa=2)
+        df_cc  = _leer_hoja(sh, "cheques_cartera",  COL_CHEQ_CARTERA,  cols_numericas=["Importe"], pausa=2)
+        df_fac = _leer_hoja(sh, "facturas", COL_FACTURAS,
+                            cols_numericas=["Neto", "IVA", "No Gravado", "Total"], pausa=2)
 
-        try:
-            ws_cc    = sh.worksheet("cheques_cartera")
-            datos_cc = ws_cc.get_all_records()
-            df_cc    = pd.DataFrame(datos_cc) if datos_cc else pd.DataFrame(columns=COL_CHEQ_CARTERA)
-            df_cc['Importe'] = pd.to_numeric(df_cc['Importe'], errors='coerce').fillna(0)
-        except:
-            df_cc = pd.DataFrame(columns=COL_CHEQ_CARTERA)
+        resultado = (df_c, df_v, df_p, df_t, df_prov, df_com, df_ce, df_cc, df_fac)
 
-        try:
-            ws_fac    = sh.worksheet("facturas")
-            datos_fac = ws_fac.get_all_records()
-            df_fac    = pd.DataFrame(datos_fac) if datos_fac else pd.DataFrame(columns=COL_FACTURAS)
-            for col in ["Neto", "IVA", "No Gravado", "Total"]:
-                df_fac[col] = pd.to_numeric(df_fac[col], errors='coerce').fillna(0)
-        except:
-            df_fac = pd.DataFrame(columns=COL_FACTURAS)
+        # Guardar en caché
+        st.session_state[CACHE_KEY] = resultado
+        st.session_state[CACHE_TS]  = _time.time()
 
-        return df_c, df_v, df_p, df_t, df_prov, df_com, df_ce, df_cc, df_fac
+        return resultado
     except Exception as e:
         st.error(f"❌ Error crítico al cargar datos desde Google Sheets: {e}. Verificá la conexión y los permisos de la cuenta de servicio.")
         return None, None, None, None, None, None, None, None, None
@@ -1220,7 +1209,7 @@ with st.sidebar:
     st.markdown("---")
     if st.button("🔄 Sincronizar"):
         with st.spinner("Sincronizando..."):
-            c, v, p, t, prov, com, ce, cc, fac = cargar_datos()
+            c, v, p, t, prov, com, ce, cc, fac = cargar_datos(forzar=True)
             st.session_state.clientes         = c    if c    is not None else pd.DataFrame(columns=COL_CLIENTES)
             st.session_state.viajes           = v    if v    is not None else pd.DataFrame(columns=COL_VIAJES)
             st.session_state.presupuestos     = p    if p    is not None else pd.DataFrame(columns=COL_PRESUPUESTOS)
