@@ -175,7 +175,10 @@ def cargar_datos():
         return None, None, None, None, None, None, None, None, None
 
 def guardar_datos(nombre_hoja, df, reintentos=3):
-    """Guarda un DataFrame en Google Sheets. Reintenta hasta 3 veces ante errores de red."""
+    """Guarda un DataFrame en Google Sheets de forma ATÓMICA.
+    Primero escribe los datos nuevos, luego limpia filas sobrantes.
+    Esto evita la ventana de datos vacíos que causaba pérdida de información.
+    """
     import time
     ultimo_error = None
     for intento in range(reintentos):
@@ -188,20 +191,36 @@ def guardar_datos(nombre_hoja, df, reintentos=3):
                 ws = sh.add_worksheet(title=nombre_hoja, rows=2000, cols=25)
             df_save = df.fillna("-").copy()
             datos   = [df_save.columns.values.tolist()] + df_save.astype(str).values.tolist()
-            ws.clear()
-            # Compatibilidad con gspread >= 5.x (requiere range explícito) y versiones anteriores
+            num_filas_nuevas = len(datos)
+            num_cols_nuevas  = len(datos[0]) if datos else 1
+
+            # 1) Escribir datos PRIMERO (sin borrar antes)
             try:
                 ws.update("A1", datos)
             except TypeError:
                 ws.update(datos)
+
+            # 2) Limpiar filas sobrantes si la hoja tenía más filas que las nuevas
+            total_filas_hoja = ws.row_count
+            if total_filas_hoja > num_filas_nuevas:
+                # Limpiar desde la fila siguiente a los datos hasta el final
+                rango_limpieza = f"A{num_filas_nuevas + 1}:{chr(64 + min(num_cols_nuevas, 26))}{total_filas_hoja}"
+                try:
+                    filas_vacias = [[""] * num_cols_nuevas for _ in range(total_filas_hoja - num_filas_nuevas)]
+                    if filas_vacias:
+                        try:
+                            ws.update(rango_limpieza, filas_vacias)
+                        except TypeError:
+                            ws.update(filas_vacias)
+                except Exception:
+                    pass  # Si no se pueden limpiar las filas extra, no es crítico
             return True
         except Exception as e:
             ultimo_error = e
-            # Limpiar conexión cacheada para forzar reconexión en el próximo intento
             st.session_state.gsheets_conn = None
             if intento < reintentos - 1:
                 time.sleep(1.5)
-    st.error(f"❌ Error al guardar '{nombre_hoja}' tras {reintentos} intentos: {ultimo_error}")
+    st.error(f"❌ Error al guardar \'{nombre_hoja}\' tras {reintentos} intentos: {ultimo_error}")
     return False
 
 
@@ -328,13 +347,19 @@ def guardar_tesoreria_rerun(msg_key=None, msg_texto=None, nueva_fila_df=None):
         if msg_key and msg_texto:
             st.session_state[msg_key] = msg_texto
     else:
-        # El dato ya está en session_state; avisamos pero igual refrescamos la UI
         st.session_state["_warn_sync"] = (
             "⚠️ El movimiento se registró en la sesión pero no se pudo sincronizar con Google Sheets. "
             "Verificá la conexión. El dato podría perderse si cerrás la sesión."
         )
+    st.session_state._skip_reload = True
     st.rerun()
 
+
+
+def _rerun_after_save():
+    """Helper: marca que se acaba de guardar para no recargar datos en el próximo rerun."""
+    st.session_state._skip_reload = True
+    st.rerun()
 # =========================================================
 # --- FUNCIONES PARA REPORTES HTML PROFESIONALES ---
 # =========================================================
@@ -1044,28 +1069,40 @@ CUENTAS_GASTOS_DEFAULT = [
 if 'cuentas_gastos' not in st.session_state:
     st.session_state.cuentas_gastos = list(CUENTAS_GASTOS_DEFAULT)
 
-if 'clientes' not in st.session_state or 'viajes' not in st.session_state or 'tesoreria' not in st.session_state:
+# SIEMPRE recargar datos de Google Sheets en cada ejecución del script.
+# Esto evita que un usuario sobreescriba datos de otro usuario con datos viejos de su sesión.
+# Solo se omite si se acaba de guardar (flag _skip_reload) para no perder el feedback visual.
+if not st.session_state.get("_skip_reload", False):
     c, v, p, t, prov, com, ce, cc, fac = cargar_datos()
-    # Solo sobreescribir si la carga fue exitosa (no None).
-    # Si falla, dejar el estado anterior intacto para no perder datos en sesión.
     if c    is not None: st.session_state.clientes         = c
-    elif 'clientes'        not in st.session_state: st.session_state.clientes         = pd.DataFrame(columns=COL_CLIENTES)
+    else:
+        if 'clientes' not in st.session_state: st.session_state.clientes = pd.DataFrame(columns=COL_CLIENTES)
     if v    is not None: st.session_state.viajes           = v
-    elif 'viajes'          not in st.session_state: st.session_state.viajes           = pd.DataFrame(columns=COL_VIAJES)
+    else:
+        if 'viajes' not in st.session_state: st.session_state.viajes = pd.DataFrame(columns=COL_VIAJES)
     if p    is not None: st.session_state.presupuestos     = p
-    elif 'presupuestos'    not in st.session_state: st.session_state.presupuestos     = pd.DataFrame(columns=COL_PRESUPUESTOS)
+    else:
+        if 'presupuestos' not in st.session_state: st.session_state.presupuestos = pd.DataFrame(columns=COL_PRESUPUESTOS)
     if t    is not None: st.session_state.tesoreria        = t
-    elif 'tesoreria'       not in st.session_state: st.session_state.tesoreria        = pd.DataFrame(columns=COL_TESORERIA)
+    else:
+        if 'tesoreria' not in st.session_state: st.session_state.tesoreria = pd.DataFrame(columns=COL_TESORERIA)
     if prov is not None: st.session_state.proveedores      = prov
-    elif 'proveedores'     not in st.session_state: st.session_state.proveedores      = pd.DataFrame(columns=COL_PROVEEDORES)
+    else:
+        if 'proveedores' not in st.session_state: st.session_state.proveedores = pd.DataFrame(columns=COL_PROVEEDORES)
     if com  is not None: st.session_state.compras          = com
-    elif 'compras'         not in st.session_state: st.session_state.compras          = pd.DataFrame(columns=COL_COMPRAS)
+    else:
+        if 'compras' not in st.session_state: st.session_state.compras = pd.DataFrame(columns=COL_COMPRAS)
     if ce   is not None: st.session_state.cheques_emitidos = ce
-    elif 'cheques_emitidos' not in st.session_state: st.session_state.cheques_emitidos = pd.DataFrame(columns=COL_CHEQ_EMITIDOS)
+    else:
+        if 'cheques_emitidos' not in st.session_state: st.session_state.cheques_emitidos = pd.DataFrame(columns=COL_CHEQ_EMITIDOS)
     if cc   is not None: st.session_state.cheques_cartera  = cc
-    elif 'cheques_cartera' not in st.session_state: st.session_state.cheques_cartera  = pd.DataFrame(columns=COL_CHEQ_CARTERA)
+    else:
+        if 'cheques_cartera' not in st.session_state: st.session_state.cheques_cartera = pd.DataFrame(columns=COL_CHEQ_CARTERA)
     if fac  is not None: st.session_state.facturas         = fac
-    elif 'facturas'        not in st.session_state: st.session_state.facturas         = pd.DataFrame(columns=COL_FACTURAS)
+    else:
+        if 'facturas' not in st.session_state: st.session_state.facturas = pd.DataFrame(columns=COL_FACTURAS)
+else:
+    st.session_state._skip_reload = False
 
 # --- 4. DISEÑO ---
 st.markdown("""
@@ -1558,8 +1595,8 @@ elif sel == "CLIENTES":
                     st.session_state.clientes = pd.concat([st.session_state.clientes, nueva_fila], ignore_index=True)
                     guardar_datos("clientes", st.session_state.clientes)
                     st.session_state.msg_cliente = f"✅ Cliente '{r}' registrado correctamente."
+                    st.session_state._skip_reload = True
                     st.rerun()
-                else:
                     st.warning("Completá Razón Social y CUIT para continuar.")
     st.subheader("📋 Base de Clientes")
     if not st.session_state.clientes.empty:
@@ -1575,8 +1612,8 @@ elif sel == "CLIENTES":
                     else:
                         st.session_state.clientes = st.session_state.clientes.drop(i).reset_index(drop=True)
                         guardar_datos("clientes", st.session_state.clientes)
+                        st.session_state._skip_reload = True
                         st.rerun()
-                if st.session_state.get(f"edit_mode_{i}", False):
                     with st.form(f"f_edit_{i}"):
                         ce1, ce2 = st.columns(2)
                         n_rs   = ce1.text_input("Razón Social", value=row['Razón Social'])
@@ -1590,8 +1627,8 @@ elif sel == "CLIENTES":
                             st.session_state.clientes.loc[i] = [n_rs, n_cuit, n_mail, n_tel, row['Dirección Fiscal'], n_loc, n_prov, row['Condición IVA'], row['Condición de Venta']]
                             guardar_datos("clientes", st.session_state.clientes)
                             st.session_state[f"edit_mode_{i}"] = False
+                            st.session_state._skip_reload = True
                             st.rerun()
-                        if be2.form_submit_button("❌ Cancelar"): st.session_state[f"edit_mode_{i}"] = False; st.rerun()
                 st.divider()
     else: st.info("No hay clientes registrados.")
 
@@ -1615,8 +1652,8 @@ elif sel == "CARGA VIAJE":
                 st.session_state.viajes = pd.concat([st.session_state.viajes, nv], ignore_index=True)
                 guardar_datos("viajes", st.session_state.viajes)
                 st.session_state.msg_viaje = f"✅ Viaje de '{cli}' registrado correctamente por $ {imp:,.2f}."
+                st.session_state._skip_reload = True
                 st.rerun()
-            else:
                 st.warning("Seleccioná un cliente y completá el importe.")
 
 elif sel == "PRESUPUESTOS":
@@ -1641,8 +1678,8 @@ elif sel == "PRESUPUESTOS":
                     st.session_state.presupuestos = pd.concat([st.session_state.presupuestos, nuevo_p], ignore_index=True)
                     guardar_datos("presupuestos", st.session_state.presupuestos)
                     st.session_state.msg_presupuesto = f"✅ Presupuesto para '{p_cli}' guardado por $ {p_imp:,.2f}."
+                    st.session_state._skip_reload = True
                     st.rerun()
-                else:
                     st.warning("Seleccioná cliente y completá el importe.")
     with tab_historial:
         if not st.session_state.presupuestos.empty:
@@ -1658,8 +1695,8 @@ elif sel == "PRESUPUESTOS":
                     if c_c.button("🗑️", key=f"del_presu_{i}"):
                         st.session_state.presupuestos = st.session_state.presupuestos.drop(i)
                         guardar_datos("presupuestos", st.session_state.presupuestos)
+                        st.session_state._skip_reload = True
                         st.rerun()
-                    st.divider()
         else: st.info("No hay presupuestos registrados.")
 
 elif sel == "TESORERIA":
@@ -1922,8 +1959,8 @@ elif sel == "TESORERIA":
                                     "Monto": mon, "Ref AFIP": afip
                                 })
                                 st.session_state.cli_ready = c_sel
+                                st.session_state._skip_reload = True
                                 st.rerun()
-                        else:
                             nt = pd.DataFrame([[str(date.today()), "COBRANZA", cj, forma_cob, "Cobro Viaje", c_sel, mon, afip]], columns=COL_TESORERIA)
                             nv = pd.DataFrame([[str(date.today()), c_sel, str(date.today()), "PAGO", "TESORERIA", "-", -mon, "RECIBO", afip]], columns=COL_VIAJES)
                             st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
@@ -1940,8 +1977,8 @@ elif sel == "TESORERIA":
                                 "Monto": mon, "Ref AFIP": afip
                             })
                             st.session_state.cli_ready = c_sel
+                            st.session_state._skip_reload = True
                             st.rerun()
-                    else:
                         st.warning("Completá el cliente y el monto antes de continuar.")
 
         if st.session_state.html_recibo_ready:
@@ -2518,8 +2555,8 @@ elif sel == "TESORERIA":
                     if not ok1 or not ok2:
                         st.session_state["_warn_sync"] = "⚠️ El pase se registró en sesión pero no se sincronizó completamente con Google Sheets."
                     st.session_state.msg_pase = f"✅ Pase de {forma_pase} por $ {monto_pase:,.2f} de {origen_pase} → {destino_pase} registrado."
+                    st.session_state._skip_reload = True
                     st.rerun()
-                elif origen_pase == destino_pase:
                     st.warning("La caja origen y destino no pueden ser la misma.")
                 else:
                     st.warning("Ingresá un monto mayor a cero.")
@@ -2544,8 +2581,8 @@ elif sel == "TESORERIA":
                         if not ok1 or not ok2:
                             st.session_state["_warn_sync"] = "⚠️ El traspaso se registró en sesión pero no se sincronizó con Google Sheets."
                         st.session_state.msg_traspaso = f"✅ Traspaso de $ {m:,.2f} de {o} hacia {d} ejecutado."
+                        st.session_state._skip_reload = True
                         st.rerun()
-                    else:
                         st.warning("Ingresá un monto mayor a cero.")
 
     if tab_op is not None:
@@ -2651,8 +2688,8 @@ elif sel == "TESORERIA":
                                     st.session_state["_warn_sync"] = "⚠️ La Orden de Pago se registró en sesión pero no se sincronizó con Google Sheets."
                                 st.session_state.html_op_ready = generar_html_orden_pago({"Fecha": date.today(), "Proveedor": _prov, "Concepto": f"Pago {_forma}", "Caja/Banco": cj_p, "Monto": mon_p, "Ref AFIP": _afip})
                                 st.session_state.prov_ready = _prov
+                                st.session_state._skip_reload = True
                                 st.rerun()
-                            else:
                                 st.warning("Seleccioná proveedor y completá el monto.")
 
                 # ── CHEQUE PROPIO ────────────────────────────────────────────────────
@@ -2686,8 +2723,8 @@ elif sel == "TESORERIA":
                                     st.session_state["_warn_sync"] = "⚠️ La Orden de Pago se registró en sesión pero no se sincronizó con Google Sheets."
                                 st.session_state.html_op_ready = generar_html_orden_pago({"Fecha": date.today(), "Proveedor": p_sel, "Concepto": f"Cheque {tipo_op} #{nro_op} — Vto: {f_venc_op}", "Caja/Banco": f"Cheque {banco_op}", "Monto": mon_op, "Ref AFIP": afip_p})
                                 st.session_state.prov_ready = p_sel
+                                st.session_state._skip_reload = True
                                 st.rerun()
-                            else:
                                 st.warning("Completá proveedor, número de cheque e importe.")
 
                 # ── CHEQUE DE TERCERO (de cartera) ───────────────────────────────────
@@ -2731,8 +2768,8 @@ elif sel == "TESORERIA":
                                         st.session_state["_warn_sync"] = "⚠️ La Orden de Pago se registró en sesión pero no se sincronizó con Google Sheets."
                                     st.session_state.html_op_ready = generar_html_orden_pago({"Fecha": date.today(), "Proveedor": p_sel, "Concepto": f"Cheque de {cheq_row['Librador']} #{cheq_row['Nro Cheque']} — Vto: {cheq_row['Fecha Vencimiento']}", "Caja/Banco": f"Cheque {cheq_row['Banco Librador']}", "Monto": mon_ct, "Ref AFIP": afip_p})
                                     st.session_state.prov_ready = p_sel
+                                    st.session_state._skip_reload = True
                                     st.rerun()
-                                else:
                                     st.warning("Seleccioná proveedor y cheque.")
 
 elif sel == "CTA CTE INDIVIDUAL":
@@ -2768,8 +2805,8 @@ elif sel == "CTA CTE INDIVIDUAL":
                         guardar_datos("viajes", st.session_state.viajes)
                         signo_txt = "a favor del cliente" if favor_cli else "a cobrar"
                         st.success(f"✅ Saldo inicial de $ {monto_si:,.2f} ({signo_txt}) cargado para {cl}.")
+                        st.session_state._skip_reload = True
                         st.rerun()
-                    else:
                         st.warning("Ingresá un monto mayor a cero.")
 
         st.markdown("---")
@@ -2967,8 +3004,8 @@ elif sel == "CARGA PROVEEDOR":
                     st.session_state.proveedores = pd.concat([st.session_state.proveedores, np_row], ignore_index=True)
                     guardar_datos("proveedores", st.session_state.proveedores)
                     st.session_state.msg_proveedor = f"✅ Proveedor '{rs}' registrado correctamente."
+                    st.session_state._skip_reload = True
                     st.rerun()
-                else:
                     st.warning("Completá Razón Social y CUIT/DNI para continuar.")
     st.subheader("📋 Base de Proveedores")
     if not st.session_state.proveedores.empty:
@@ -2984,8 +3021,8 @@ elif sel == "CARGA PROVEEDOR":
                     else:
                         st.session_state.proveedores = st.session_state.proveedores.drop(i).reset_index(drop=True)
                         guardar_datos("proveedores", st.session_state.proveedores)
+                        st.session_state._skip_reload = True
                         st.rerun()
-                if st.session_state.get(f"edit_p_mode_{i}", False):
                     with st.form(f"f_edit_p_{i}"):
                         ce1, ce2 = st.columns(2)
                         n_rs    = ce1.text_input("Razón Social", value=row['Razón Social'])
@@ -2996,8 +3033,8 @@ elif sel == "CARGA PROVEEDOR":
                         if st.form_submit_button("✅ Guardar"):
                             st.session_state.proveedores.loc[i] = [n_rs, n_doc, row['Cuenta de Gastos'], row['Categoría IVA'], n_cbu, n_alias]
                             guardar_datos("proveedores", st.session_state.proveedores)
+                            st.session_state._skip_reload = True
                             st.session_state[f"edit_p_mode_{i}"] = False; st.rerun()
-            st.divider()
 
 elif sel == "CARGA GASTOS":
     st.header("💸 Carga de Gastos")
@@ -3047,8 +3084,8 @@ elif sel == "CARGA GASTOS":
             st.session_state.compras = pd.concat([st.session_state.compras, ng], ignore_index=True)
             guardar_datos("compras", st.session_state.compras)
             st.session_state.msg_gasto = f"✅ Comprobante de '{prov_sel}' guardado por $ {total:,.2f}."
+            st.session_state._skip_reload = True
             st.rerun()
-        else:
             st.warning("Ingresá al menos un importe para registrar el comprobante.")
 
 elif sel == "COMPROBANTES":
@@ -3137,9 +3174,10 @@ elif sel == "COMPROBANTES":
                                     guardar_datos("viajes", st.session_state.viajes)
                                     st.session_state[f"modo_edit_viaje_{i}"] = False
                                     st.session_state.msg_viaje = f"✅ Viaje #{i} actualizado correctamente."
+                                    st.session_state._skip_reload = True
                                     st.rerun()
-                                if sb2.form_submit_button("❌ Cancelar"):
                                     st.session_state[f"modo_edit_viaje_{i}"] = False
+                                    st.session_state._skip_reload = True
                                     st.rerun()
                     st.divider()
 elif sel == "CTA CTE PROVEEDOR":
@@ -3179,8 +3217,8 @@ elif sel == "CTA CTE PROVEEDOR":
                         guardar_datos("compras", st.session_state.compras)
                         signo_txt = "a favor de la empresa" if favor_emp else "a pagar al proveedor"
                         st.success(f"✅ Saldo inicial de $ {monto_sp:,.2f} ({signo_txt}) cargado para {p_sel}.")
+                        st.session_state._skip_reload = True
                         st.rerun()
-                    else:
                         st.warning("Ingresá un monto mayor a cero.")
 
         st.markdown("---")
@@ -4061,8 +4099,8 @@ elif sel == "CHEQUES":
                         st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, mov], ignore_index=True)
                         append_fila_tesoreria(mov)
                         st.session_state.msg_cheq_emit = f"✅ Cheque #{nro_ch} emitido a {benef} por $ {imp_ch:,.2f} registrado."
+                        st.session_state._skip_reload = True
                         st.rerun()
-                    else:
                         st.warning("Completá Nro de Cheque, Beneficiario e Importe.")
 
         st.markdown("---")
@@ -4120,12 +4158,12 @@ elif sel == "CHEQUES":
                             st.session_state.cheques_emitidos.loc[i, 'Fecha Conciliación'] = str(hoy)
                             guardar_datos("cheques_emitidos", st.session_state.cheques_emitidos)
                             st.session_state.msg_cheq_emit = f"✅ Cheque #{row['Nro Cheque']} conciliado."
+                            st.session_state._skip_reload = True
                             st.rerun()
-                        if col_acc.button("❌ Rechazar", key=f"rech_{i}"):
                             st.session_state.cheques_emitidos.loc[i, 'Estado'] = 'RECHAZADO'
                             guardar_datos("cheques_emitidos", st.session_state.cheques_emitidos)
+                            st.session_state._skip_reload = True
                             st.rerun()
-                    st.divider()
 
     # ══════════════════════════════════════════════════════
     # TAB 2 — CHEQUES EN CARTERA (de terceros)
@@ -4158,8 +4196,8 @@ elif sel == "CHEQUES":
                         st.session_state.cheques_cartera = pd.concat([st.session_state.cheques_cartera, nueva_cc], ignore_index=True)
                         guardar_datos("cheques_cartera", st.session_state.cheques_cartera)
                         st.session_state.msg_cheq_cart = f"✅ Cheque #{nro_cc} de {librador} ingresado a cartera por $ {imp_cc:,.2f}."
+                        st.session_state._skip_reload = True
                         st.rerun()
-                    else:
                         st.warning("Completá Nro de Cheque, Librador e Importe.")
 
         with st.expander("📋 CARGA MASIVA DE CHEQUES (varios a la vez)", expanded=False):
@@ -4207,8 +4245,8 @@ elif sel == "CHEQUES":
                     st.session_state.cheques_cartera = pd.concat([st.session_state.cheques_cartera, df_nuevos], ignore_index=True)
                     guardar_datos("cheques_cartera", st.session_state.cheques_cartera)
                     st.session_state.msg_cheq_cart = f"✅ {len(nuevos)} cheques de {librador_uso} ingresados a cartera."
+                    st.session_state._skip_reload = True
                     st.rerun()
-
         st.markdown("---")
 
         filtro_cart = st.radio("Mostrar", ["EN CARTERA", "APLICADOS/DEPOSITADOS", "TODOS"], horizontal=True, key="filtro_cart")
@@ -4274,8 +4312,9 @@ elif sel == "CHEQUES":
                                     append_fila_tesoreria(mov_dep)
                                     st.session_state[f"accion_cart_{i}"] = None
                                     st.session_state.msg_cheq_cart = f"✅ Cheque #{row['Nro Cheque']} depositado en {banco_dep}."
+                                    st.session_state._skip_reload = True
                                     st.rerun()
-                                if st.form_submit_button("❌ Cancelar"):
+                                    st.session_state._skip_reload = True
                                     st.session_state[f"accion_cart_{i}"] = None; st.rerun()
 
                         elif accion == "editar_fecha":
@@ -4295,8 +4334,9 @@ elif sel == "CHEQUES":
                                     guardar_datos("cheques_cartera", st.session_state.cheques_cartera)
                                     st.session_state[f"accion_cart_{i}"] = None
                                     st.session_state.msg_cheq_cart = f"✅ Fecha de vencimiento del cheque #{row['Nro Cheque']} actualizada a {nueva_fecha}."
+                                    st.session_state._skip_reload = True
                                     st.rerun()
-                                if st.form_submit_button("❌ Cancelar"):
+                                    st.session_state._skip_reload = True
                                     st.session_state[f"accion_cart_{i}"] = None; st.rerun()
 
                         elif accion == "pagar":
@@ -4317,8 +4357,9 @@ elif sel == "CHEQUES":
                                     append_fila_tesoreria(mov_pag)
                                     st.session_state[f"accion_cart_{i}"] = None
                                     st.session_state.msg_cheq_cart = f"✅ Cheque #{row['Nro Cheque']} aplicado como pago a {prov_pag}."
+                                    st.session_state._skip_reload = True
                                     st.rerun()
-                                if st.form_submit_button("❌ Cancelar"):
+                                    st.session_state._skip_reload = True
                                     st.session_state[f"accion_cart_{i}"] = None; st.rerun()
                     st.divider()
 
