@@ -1913,7 +1913,6 @@ elif sel == "TESORERIA":
                             if not ch_nro or not ch_banco or not ch_librador:
                                 st.warning("Completá Nro. de Cheque, Banco Librador y Librador para continuar.")
                             else:
-                                # 1) Registrar en cheques_cartera
                                 nuevo_cheq = pd.DataFrame([[
                                     str(date.today()), ch_nro, ch_tipo, ch_banco, ch_librador,
                                     mon, str(ch_fvenc), "EN CARTERA", "-", "-",
@@ -1921,7 +1920,7 @@ elif sel == "TESORERIA":
                                 ]], columns=COL_CHEQ_CARTERA)
                                 st.session_state.cheques_cartera = pd.concat([st.session_state.cheques_cartera, nuevo_cheq], ignore_index=True)
                                 guardar_datos("cheques_cartera", st.session_state.cheques_cartera)
-                                # 2) Tesorería
+
                                 nt = pd.DataFrame([[
                                     str(date.today()), "COBRANZA", cj, "CHEQUE TERCERO",
                                     f"Cobro Viaje - Cheque #{ch_nro} de {ch_librador}",
@@ -1931,7 +1930,7 @@ elif sel == "TESORERIA":
                                 ok_tes = append_fila_tesoreria(nt)
                                 if not ok_tes:
                                     st.session_state["_warn_sync"] = "⚠️ Cobranza registrada en sesión, pero no se sincronizó la tesorería con Google Sheets."
-                                # 3) Viajes (cta cte cliente)
+
                                 nv = pd.DataFrame([[
                                     str(date.today()), c_sel, str(date.today()), "PAGO", "TESORERIA",
                                     "-", -mon, "RECIBO", afip
@@ -1940,7 +1939,7 @@ elif sel == "TESORERIA":
                                 ok_vj = append_fila_viajes(nv)
                                 if not ok_vj:
                                     st.session_state["_warn_sync"] = "⚠️ El cheque fue registrado en cartera y tesorería, pero NO se pudo actualizar la cuenta corriente del cliente en Google Sheets."
-                                # 4) Recibo (siempre generar, independiente de Google Sheets)
+
                                 st.session_state.html_recibo_ready = generar_html_recibo({
                                     "Fecha": date.today(), "Cliente/Proveedor": c_sel,
                                     "Concepto": f"Cobro de Viaje — Cheque #{ch_nro} ({ch_tipo}) | Librador: {ch_librador} | Vence: {ch_fvenc}",
@@ -1950,12 +1949,17 @@ elif sel == "TESORERIA":
                                 st.session_state.cli_ready = c_sel
                                 st.session_state._skip_reload = True
                                 st.rerun()
-                            nt = pd.DataFrame([[str(date.today()), "COBRANZA", cj, forma_cob, "Cobro Viaje", c_sel, mon, afip]], columns=COL_TESORERIA)
-                            nv = pd.DataFrame([[str(date.today()), c_sel, str(date.today()), "PAGO", "TESORERIA", "-", -mon, "RECIBO", afip]], columns=COL_VIAJES)
+                        else:
+                            nt = pd.DataFrame([[
+                                str(date.today()), "COBRANZA", cj, forma_cob, "Cobro Viaje", c_sel, mon, afip
+                            ]], columns=COL_TESORERIA)
+                            nv = pd.DataFrame([[
+                                str(date.today()), c_sel, str(date.today()), "PAGO", "TESORERIA", "-", -mon, "RECIBO", afip
+                            ]], columns=COL_VIAJES)
                             st.session_state.tesoreria = pd.concat([st.session_state.tesoreria, nt], ignore_index=True)
-                            st.session_state.viajes    = pd.concat([st.session_state.viajes, nv], ignore_index=True)
+                            st.session_state.viajes = pd.concat([st.session_state.viajes, nv], ignore_index=True)
                             ok_tes = append_fila_tesoreria(nt)
-                            ok_vj  = append_fila_viajes(nv)
+                            ok_vj = append_fila_viajes(nv)
                             if not ok_tes:
                                 st.session_state["_warn_sync"] = "⚠️ La cobranza se registró en sesión pero no se sincronizó con Google Sheets (tesorería)."
                             elif not ok_vj:
@@ -1968,6 +1972,7 @@ elif sel == "TESORERIA":
                             st.session_state.cli_ready = c_sel
                             st.session_state._skip_reload = True
                             st.rerun()
+                    else:
                         st.warning("Completá el cliente y el monto antes de continuar.")
 
         if st.session_state.html_recibo_ready:
