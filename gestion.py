@@ -66,23 +66,27 @@ def conectar_google():
         st.error(f"Error de conexión: {e}")
         return None
 
-def _leer_hoja(sh, nombre, columnas, cols_numericas=None, pausa=2):
-    """Lee una hoja de Google Sheets con pausa para evitar error 429 de cuota."""
+def _df_from_records(datos, columnas, cols_numericas=None):
+    """Convierte una lista de registros en DataFrame con columnas esperadas."""
+    df = pd.DataFrame(datos) if datos else pd.DataFrame(columns=columnas)
+    if cols_numericas:
+        for c in cols_numericas:
+            if c in df.columns:
+                df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
+    for col_esperada in columnas:
+        if col_esperada not in df.columns:
+            df[col_esperada] = '-'
+    return df
+
+def _leer_hoja(sh, nombre, columnas, cols_numericas=None, pausa=0):
+    """Lee una hoja individual (fallback). Pausa mínima."""
     import time
-    time.sleep(pausa)  # pausa entre lecturas para no exceder 60 reads/min
+    if pausa > 0:
+        time.sleep(pausa)
     try:
         ws = sh.worksheet(nombre)
         datos = ws.get_all_records()
-        df = pd.DataFrame(datos) if datos else pd.DataFrame(columns=columnas)
-        if cols_numericas:
-            for c in cols_numericas:
-                if c in df.columns:
-                    df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
-        # Asegurar que todas las columnas esperadas existan
-        for col_esperada in columnas:
-            if col_esperada not in df.columns:
-                df[col_esperada] = '-'
-        return df
+        return _df_from_records(datos, columnas, cols_numericas)
     except gspread.exceptions.WorksheetNotFound:
         return pd.DataFrame(columns=columnas)
     except Exception:
@@ -90,15 +94,14 @@ def _leer_hoja(sh, nombre, columnas, cols_numericas=None, pausa=2):
 
 
 def cargar_datos(forzar=False):
-    """Carga datos desde Google Sheets. Usa caché en session_state para evitar
-    exceder la cuota de lecturas (60 reads/min). Pasa forzar=True para recargar."""
+    """Carga datos desde Google Sheets. Usa caché en session_state y lectura
+    batch (una sola llamada API) para máxima velocidad."""
     import time as _time
 
     CACHE_KEY = "_datos_cache"
     CACHE_TS  = "_datos_cache_ts"
-    CACHE_TTL = 120  # segundos – no releer antes de 2 min
+    CACHE_TTL = 120  # segundos
 
-    # Devolver caché si es reciente y no se fuerza recarga
     if not forzar and CACHE_KEY in st.session_state and CACHE_TS in st.session_state:
         edad = _time.time() - st.session_state[CACHE_TS]
         if edad < CACHE_TTL:
@@ -109,52 +112,73 @@ def cargar_datos(forzar=False):
         if sh is None:
             return None, None, None, None, None, None, None, None, None
 
-        # Leer cada hoja con pausa de 2 s entre llamadas para respetar cuota
-        df_c   = _leer_hoja(sh, "clientes",    COL_CLIENTES, pausa=0)  # primera sin pausa
-        df_v   = _leer_hoja(sh, "viajes",      COL_VIAJES,   cols_numericas=["Importe"], pausa=2)
-        df_p   = _leer_hoja(sh, "presupuestos",COL_PRESUPUESTOS, cols_numericas=["Importe"], pausa=2)
-        df_t   = _leer_hoja(sh, "tesoreria",   COL_TESORERIA,    cols_numericas=["Monto"], pausa=2)
-        # Reordenar columnas de tesorería
+        # ── Lectura BATCH: todas las hojas en UNA sola llamada API ──
+        hojas_config = [
+            ("clientes",         COL_CLIENTES,       None),
+            ("viajes",           COL_VIAJES,          ["Importe"]),
+            ("presupuestos",     COL_PRESUPUESTOS,    ["Importe"]),
+            ("tesoreria",        COL_TESORERIA,       ["Monto"]),
+            ("proveedores",      COL_PROVEEDORES,     None),
+            ("compras",          COL_COMPRAS,         ["Neto 21","Neto 10.5","Ret IVA","Ret Ganancia","Ret IIBB","No Gravados","Total"]),
+            ("compras_externas", COL_COMPRAS,         ["Neto 21","Neto 10.5","Ret IVA","Ret Ganancia","Ret IIBB","No Gravados","Total"]),
+            ("cheques_emitidos", COL_CHEQ_EMITIDOS,   ["Importe"]),
+            ("cheques_cartera",  COL_CHEQ_CARTERA,    ["Importe"]),
+            ("facturas",         COL_FACTURAS,        ["Neto","IVA","No Gravado","Total"]),
+        ]
+
+        # Obtener nombres de hojas existentes para no pedir rangos inexistentes
+        hojas_existentes = {ws.title for ws in sh.worksheets()}
+        rangos = [f"'{nombre}'!A:ZZ" for nombre, _, _ in hojas_config if nombre in hojas_existentes]
+
+        # UNA sola llamada API para todas las hojas
+        batch_result = sh.values_batch_get(rangos, params={'valueRenderOption': 'UNFORMATTED_VALUE'})
+        batch_data = {}
+        for vr in batch_result.get('valueRanges', []):
+            rng = vr.get('range', '')
+            sheet_name = rng.split("'")[1] if "'" in rng else rng.split('!')[0]
+            rows = vr.get('values', [])
+            if len(rows) > 1:
+                headers = rows[0]
+                records = []
+                for row in rows[1:]:
+                    row_ext = row + [''] * (len(headers) - len(row))
+                    records.append(dict(zip(headers, row_ext)))
+                batch_data[sheet_name] = records
+            else:
+                batch_data[sheet_name] = []
+
+        # Construir DataFrames
+        df_c   = _df_from_records(batch_data.get("clientes", []),         COL_CLIENTES)
+        df_v   = _df_from_records(batch_data.get("viajes", []),           COL_VIAJES,        ["Importe"])
+        df_p   = _df_from_records(batch_data.get("presupuestos", []),     COL_PRESUPUESTOS,  ["Importe"])
+        df_t   = _df_from_records(batch_data.get("tesoreria", []),        COL_TESORERIA,     ["Monto"])
         cols_extra = [c for c in df_t.columns if c not in COL_TESORERIA]
         df_t = df_t[COL_TESORERIA + cols_extra]
 
-        df_prov = _leer_hoja(sh, "proveedores", COL_PROVEEDORES, pausa=2)
+        df_prov = _df_from_records(batch_data.get("proveedores", []),     COL_PROVEEDORES)
         for col in ["CBU", "Alias"]:
             if col not in df_prov.columns:
                 df_prov[col] = "-"
 
-        df_com  = _leer_hoja(sh, "compras", COL_COMPRAS,
-                             cols_numericas=["Neto 21", "Neto 10.5", "Ret IVA", "Ret Ganancia", "Ret IIBB", "No Gravados", "Total"],
-                             pausa=2)
+        df_com  = _df_from_records(batch_data.get("compras", []),         COL_COMPRAS,
+                                   ["Neto 21","Neto 10.5","Ret IVA","Ret Ganancia","Ret IIBB","No Gravados","Total"])
 
         # Gastos externos
-        try:
-            _time.sleep(2)
-            ws_com_ext  = sh.worksheet("compras_externas")
-            datos_com_ext = ws_com_ext.get_all_records()
-            if datos_com_ext:
-                df_com_ext = pd.DataFrame(datos_com_ext)
-                for c in ["Neto 21", "Neto 10.5", "Ret IVA", "Ret Ganancia", "Ret IIBB", "No Gravados", "Total"]:
-                    if c in df_com_ext.columns:
-                        df_com_ext[c] = pd.to_numeric(df_com_ext[c], errors='coerce').fillna(0)
-                    else:
-                        df_com_ext[c] = 0
-                if 'Cuenta de Gastos' not in df_com_ext.columns:
-                    df_com_ext['Cuenta de Gastos'] = 'EXTERNO SIN CATEGORÍA'
-                df_com_ext['_origen'] = 'EXTERNO'
-                df_com['_origen'] = 'CHACAGEST'
-                df_com = pd.concat([df_com, df_com_ext], ignore_index=True)
-        except Exception:
-            pass
+        if "compras_externas" in batch_data and batch_data["compras_externas"]:
+            df_com_ext = _df_from_records(batch_data["compras_externas"], COL_COMPRAS,
+                                          ["Neto 21","Neto 10.5","Ret IVA","Ret Ganancia","Ret IIBB","No Gravados","Total"])
+            if 'Cuenta de Gastos' not in df_com_ext.columns:
+                df_com_ext['Cuenta de Gastos'] = 'EXTERNO SIN CATEGORÍA'
+            df_com_ext['_origen'] = 'EXTERNO'
+            df_com['_origen'] = 'CHACAGEST'
+            df_com = pd.concat([df_com, df_com_ext], ignore_index=True)
 
-        df_ce  = _leer_hoja(sh, "cheques_emitidos", COL_CHEQ_EMITIDOS, cols_numericas=["Importe"], pausa=2)
-        df_cc  = _leer_hoja(sh, "cheques_cartera",  COL_CHEQ_CARTERA,  cols_numericas=["Importe"], pausa=2)
-        df_fac = _leer_hoja(sh, "facturas", COL_FACTURAS,
-                            cols_numericas=["Neto", "IVA", "No Gravado", "Total"], pausa=2)
+        df_ce  = _df_from_records(batch_data.get("cheques_emitidos", []), COL_CHEQ_EMITIDOS, ["Importe"])
+        df_cc  = _df_from_records(batch_data.get("cheques_cartera", []),  COL_CHEQ_CARTERA,  ["Importe"])
+        df_fac = _df_from_records(batch_data.get("facturas", []),         COL_FACTURAS,
+                                  ["Neto","IVA","No Gravado","Total"])
 
         resultado = (df_c, df_v, df_p, df_t, df_prov, df_com, df_ce, df_cc, df_fac)
-
-        # Guardar en caché
         st.session_state[CACHE_KEY] = resultado
         st.session_state[CACHE_TS]  = _time.time()
 
